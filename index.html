@@ -586,6 +586,7 @@ function openSheet(html, onOpen){
   backdrop.className = 'sheet-backdrop';
   backdrop.id = 'sheetBackdrop';
   backdrop.innerHTML = `<div class="sheet"><div class="sheet-handle"></div>${html}</div>`;
+  backdrop.addEventListener('click', e=>{ if(e.target === backdrop) closeSheet(); });
   document.body.appendChild(backdrop);
   requestAnimationFrame(()=>backdrop.classList.add('show'));
   if(onOpen) onOpen();
@@ -836,7 +837,7 @@ function openAdminMenuSheet(){
     <button class="sheet-btn primary" id="adminBroadcastBtn">📣 Send besked til alle</button>
     <button class="sheet-btn primary" id="adminSettleBtn">💶 Gør op nu (afslut runden tidligt)</button>
     <button class="sheet-btn danger" id="adminResetBtn">🧹 Nulstil alt</button>
-    <button class="sheet-btn danger" id="adminFinalCloseBtn">🔒 Luk brokkekassen for altid</button>
+    <button class="sheet-btn danger" id="adminFinalCloseBtn">🔒 Luk denne brokkekasse for altid</button>
     <button class="sheet-btn ghost" id="adminMenuCloseBtn">Luk menu</button>
   `, ()=>{
     document.getElementById('adminBroadcastBtn').onclick = ()=>{ closeSheet(); setTimeout(openBroadcastSheet, 230); };
@@ -914,8 +915,8 @@ function openResetSheet(){
 
 function openFinalCloseSheet(){
   openSheet(`
-    <h2>Luk brokkekassen for altid 🔒</h2>
-    <p class="hint">Gør evt. den sidste åbne pulje op, gemmer den i historikken og lukker helt af — ingen kan starte flere brok herefter. I kan stadig se Regnskab og Historik. Kan ikke fortrydes.</p>
+    <h2>Luk denne brokkekasse for altid 🔒</h2>
+    <p class="hint">Gør evt. den sidste åbne pulje op, gemmer den i historikken og lukker denne brokkekasse helt af — ingen kan starte flere brok herefter. I kan stadig se Regnskab og Historik. Kan ikke fortrydes.</p>
     <button class="sheet-btn danger" id="doFinalClose">Ja, luk for altid</button>
     <button class="sheet-btn ghost" id="cancelFinalClose">Annuller</button>
   `, ()=>{
