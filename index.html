@@ -25,9 +25,10 @@
   body{
     margin:0; font-family:'Work Sans', system-ui, sans-serif;
     background:
-      radial-gradient(ellipse at 20% -10%, #12666b 0%, transparent 55%),
-      radial-gradient(ellipse at 100% 0%, #0e5a5f 0%, transparent 45%),
+      radial-gradient(ellipse at 20% -10%, #12666b 0%, transparent 100%),
+      radial-gradient(ellipse at 100% 0%, #0e5a5f 0%, transparent 100%),
       linear-gradient(180deg, var(--sea) 0%, var(--sea-deep) 100%);
+    background-attachment: fixed;
     color:var(--cream); min-height:100dvh; overflow-x:hidden;
     -webkit-tap-highlight-color: transparent; user-select:none;
   }
@@ -209,6 +210,34 @@ async function doShare(){
   try{ await navigator.clipboard.writeText(url); toast('Link til Brokkekassen kopieret. Send det til deltagere.'); }
   catch(e){ prompt('Kopiér linket manuelt:', url); }
 }
+/* ============ PUSH-NOTIFIKATIONER ============ */
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g,'+').replace(/_/g,'/');
+  const raw = atob(base64);
+  const arr = new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+function pushSupported(){ return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window; }
+function pushEnabledLocally(){ return localStorage.getItem('bk_push_enabled_' + roomId) === '1'; }
+async function enablePush(){
+  if(!pushSupported()){ toast('Din browser/telefon understøtter ikke push-notifikationer'); return false; }
+  try{
+    const perm = await Notification.requestPermission();
+    if(perm !== 'granted'){ toast('Notifikationer blev ikke tilladt'); return false; }
+    const { publicKey } = await api('vapid-public-key');
+    if(!publicKey){ toast('Push er ikke sat op på serveren endnu'); return false; }
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub){ sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlBase64ToUint8Array(publicKey) }); }
+    await api('subscribe', { roomId, memberId: profile.memberId, subscription: sub.toJSON() });
+    localStorage.setItem('bk_push_enabled_' + roomId, '1');
+    toast('🔔 Du får nu besked når nogen brokker sig');
+    return true;
+  }catch(e){ toast('Kunne ikke aktivere notifikationer'); return false; }
+}
+
 function extractRoomId(input){
   input = (input||'').trim();
   if(!input) return null;
@@ -424,11 +453,17 @@ function balances(){
 function render(){
   const total = totalPool();
   const fillPct = Math.min(100, total * 4);
+  if('setAppBadge' in navigator){
+    try{ state.pending ? navigator.setAppBadge(1) : navigator.clearAppBadge(); }catch(e){}
+  }
+  checkFreeBrokReveal();
+  const showPushBell = pushSupported() && typeof Notification !== 'undefined' && Notification.permission !== 'denied' && !pushEnabledLocally();
   app.innerHTML = `
     <header>
       <div class="title">Brokke<span>kassen</span> 🏖️</div>
       <div style="display:flex; align-items:center; gap:6px;">
         <div class="day-chip">Dag ${dayCount()}</div>
+        ${showPushBell ? `<button id="btnPush" title="Få besked når nogen brokker sig" style="width:26px; height:26px; padding:0; display:flex; align-items:center; justify-content:center; font-size:12px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.55); border-radius:100px;">🔔</button>` : ''}
         <button id="btnShare" title="Del invite-link" style="width:26px; height:26px; padding:0; display:flex; align-items:center; justify-content:center; font-size:12px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.55); border-radius:100px;">🔗</button>
       </div>
     </header>
@@ -515,11 +550,16 @@ function renderFeed(main){
 function renderBalance(main){
   const bal = balances();
   const maxAmt = Math.max(0, ...Object.values(bal));
+  const streaks = state.streaks || {};
   main.innerHTML = `<div class="section-label">Hvem skylder hvad (denne runde)</div>` + [...state.members].sort((a,b)=>bal[b.id]-bal[a.id]).map(m=>{
     const amt = bal[m.id]||0;
     const crown = amt > 0 && amt === maxAmt ? ' 👑' : '';
     const freeTag = state.freeBrokMemberId === m.id ? ' 🎫' : '';
-    return `<div class="bal-row"><div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${initials(m.name)}</div><div class="feed-body"><div class="bal-name ${profile && m.id===profile.memberId?'me':''}">${escapeHtml(m.name)}${crown}${freeTag}</div><div style="font-size:11.5px; color:rgba(255,247,232,0.4);">${state.freeBrokMemberId === m.id ? 'Har et gratis brok til gode' : titleFor(amt)}</div></div><div class="bal-amt ${amt===0?'zero':''}">${amt}€</div></div>`;
+    const streak = streaks[m.id] || 0;
+    const sub = state.freeBrokMemberId === m.id
+      ? 'Har dagens gratis brok'
+      : (streak > 0 ? `🔥 ${streak} dag${streak===1?'':'e'} uden brok` : titleFor(amt));
+    return `<div class="bal-row"><div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${initials(m.name)}</div><div class="feed-body"><div class="bal-name ${profile && m.id===profile.memberId?'me':''}">${escapeHtml(m.name)}${crown}${freeTag}</div><div style="font-size:11.5px; color:rgba(255,247,232,0.4);">${sub}</div></div><div class="bal-amt ${amt===0?'zero':''}">${amt}€</div></div>`;
   }).join('');
 }
 function renderHistory(main){
@@ -669,6 +709,62 @@ function openVoteSheet(){
   });
 }
 
+/* ============ DAGENS LODTRÆKNING ============ */
+function checkFreeBrokReveal(){
+  if(!state || !state.freeBrokMemberId || !state.members.length) return;
+  const key = 'bk_lastFreeReveal_' + roomId;
+  const lastShown = localStorage.getItem(key);
+  localStorage.setItem(key, state.freeBrokMemberId);
+  if(lastShown === null) return; // undgå at vise animation ved allerførste besøg
+  if(lastShown === state.freeBrokMemberId) return; // allerede vist
+  if(document.getElementById('sheetBackdrop')) return; // ikke midt i en anden dialog
+  playFreeBrokDraw();
+}
+
+function playFreeBrokDraw(){
+  const winner = state.members.find(m=>m.id===state.freeBrokMemberId);
+  if(!winner) return;
+  const pool = state.members;
+  openSheet(`
+    <h2>🎰 Ny dag, nyt held!</h2>
+    <p class="hint">Der trækkes lod om dagens gratis brok blandt alle...</p>
+    <div id="drawName" style="text-align:center; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:30px; color:var(--sea); padding:24px 0;">🎲</div>
+    <p id="streakLine" class="hint" style="display:none;"></p>
+    <button class="sheet-btn primary" id="drawCloseBtn" style="display:none;">Fedt!</button>
+  `, ()=>{
+    const nameEl = document.getElementById('drawName');
+    const closeBtn = document.getElementById('drawCloseBtn');
+    const streakEl = document.getElementById('streakLine');
+    closeBtn.onclick = closeSheet;
+    let i = 0, delay = 70, elapsed = 0;
+    const totalSpin = 1400;
+    (function tick(){
+      nameEl.textContent = pool[i % pool.length].name;
+      i++;
+      elapsed += delay;
+      delay *= 1.15;
+      if(elapsed < totalSpin){
+        setTimeout(tick, delay);
+      }else{
+        nameEl.textContent = winner.name;
+        nameEl.style.color = 'var(--coral)';
+        nameEl.style.transform = 'scale(1.15)';
+        nameEl.style.transition = 'transform .25s cubic-bezier(.34,1.7,.64,1)';
+        setTimeout(()=>{ nameEl.style.transform = 'scale(1)'; }, 250);
+        const streaks = state.streaks || {};
+        const topStreak = Math.max(0, ...state.members.map(m=>streaks[m.id]||0));
+        if(topStreak > 0){
+          const heroes = state.members.filter(m=>(streaks[m.id]||0) === topStreak).map(m=>m.name).join(' & ');
+          streakEl.textContent = `🔥 ${heroes} har nu ${topStreak} dag${topStreak===1?'':'e'} uden brok i træk!`;
+          streakEl.style.display = 'block';
+        }
+        closeBtn.style.display = 'block';
+        toast(`🍀 ${winner.name} har dagens gratis brok!`);
+      }
+    })();
+  });
+}
+
 function launchCoinToJar(onDone){
   const jarWrap = document.querySelector('.jar-wrap');
   const rect = jarWrap ? jarWrap.getBoundingClientRect() : null;
@@ -796,6 +892,59 @@ function openFinalCloseSheet(){
     };
   });
 }
+
+/* ============ TRÆK-NED-FOR-AT-OPDATERE ============ */
+(function setupPullToRefresh(){
+  const THRESHOLD = 70;
+  let startY = null, pulling = false, indicator = null;
+
+  function ensureIndicator(){
+    if(indicator) return indicator;
+    indicator = document.createElement('div');
+    indicator.style.cssText = 'position:fixed; top:10px; left:50%; transform:translateX(-50%) scale(.6); opacity:0; z-index:90; width:34px; height:34px; border-radius:50%; background:rgba(255,247,232,0.95); display:flex; align-items:center; justify-content:center; font-size:16px; pointer-events:none; box-shadow:0 4px 12px rgba(0,0,0,.25);';
+    indicator.textContent = '🔄';
+    document.body.appendChild(indicator);
+    return indicator;
+  }
+  function reset(){
+    if(indicator){ indicator.style.opacity = '0'; indicator.style.transform = 'translateX(-50%) scale(.6)'; }
+    startY = null; pulling = false;
+  }
+
+  document.addEventListener('touchstart', e=>{
+    const main = document.getElementById('main');
+    if(!main || !roomId || main.scrollTop > 0){ startY = null; return; }
+    startY = e.touches[0].clientY;
+    pulling = false;
+  }, { passive:true });
+
+  document.addEventListener('touchmove', e=>{
+    if(startY === null) return;
+    const main = document.getElementById('main');
+    if(!main || main.scrollTop > 0) return;
+    const dy = e.touches[0].clientY - startY;
+    if(dy <= 0) return;
+    pulling = true;
+    const ind = ensureIndicator();
+    const pull = Math.min(dy, 120);
+    ind.style.transition = 'none';
+    ind.style.opacity = Math.min(1, pull / THRESHOLD);
+    ind.style.transform = `translateX(-50%) translateY(${Math.min(pull,60)}px) scale(${0.6 + Math.min(pull/THRESHOLD,1)*0.4}) rotate(${pull*2}deg)`;
+  }, { passive:true });
+
+  document.addEventListener('touchend', ()=>{
+    if(pulling && indicator){
+      indicator.style.transition = 'opacity .2s, transform .2s';
+      const pulledEnough = parseFloat(indicator.style.opacity || '0') >= 1;
+      if(pulledEnough){
+        indicator.textContent = '⏳';
+        refreshState(true).finally(()=>{ reset(); setTimeout(()=>{ if(indicator) indicator.textContent = '🔄'; }, 300); });
+        return;
+      }
+    }
+    reset();
+  }, { passive:true });
+})();
 
 /* ============ INIT ============ */
 boot();

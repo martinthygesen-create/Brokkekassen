@@ -1,4 +1,5 @@
 const { getState, setState, uid, neededVotes } = require('./_lib/store');
+const { pushToMembers } = require('./_lib/push');
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' });
@@ -11,15 +12,27 @@ module.exports = async (req, res) => {
     if (state.closed) return res.status(400).json({ error: 'brokkekassen er lukket' });
     if (state.pending) return res.status(409).json({ error: 'der er allerede en afstemning i gang' });
 
+    const cleanMessage = (message || '').toString().trim().slice(0, 80);
     state.pending = {
       id: uid(),
       memberId,
-      message: (message || '').toString().trim().slice(0, 80),
+      message: cleanMessage,
       votes: [],
       openedAt: Date.now(),
       need: neededVotes(state.members.length),
     };
     await setState(roomId, state);
+
+    const accused = state.members.find(m => m.id === memberId);
+    try {
+      await pushToMembers(state, [memberId], {
+        title: '🙄 Nogen brokker sig!',
+        body: `${accused ? accused.name : 'Nogen'} er anklaget${cleanMessage ? ` — "${cleanMessage}"` : ''}. Kom og stem!`,
+        url: '/?r=' + roomId,
+      });
+      await setState(roomId, state); // gemmer evt. oprydning af udløbne subscriptions
+    } catch (e) { /* push-fejl må ikke vælte selve anklagelsen */ }
+
     res.status(200).json({ state });
   } catch (e) {
     res.status(500).json({ error: e.message });

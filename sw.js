@@ -37,3 +37,30 @@ self.addEventListener('fetch', e => {
 
   e.respondWith(caches.match(e.request).then(cached => cached || fetch(e.request).catch(() => cached)));
 });
+
+self.addEventListener('push', e => {
+  let data = {};
+  try { data = e.data ? e.data.json() : {}; } catch (err) { /* ignore malformed payload */ }
+  const title = data.title || 'Brokkekassen';
+  const options = {
+    body: data.body || 'Nogen brokker sig!',
+    icon: 'icon.svg',
+    badge: 'icon.svg',
+    data: { url: data.url || './' },
+  };
+  e.waitUntil(Promise.all([
+    self.registration.showNotification(title, options),
+    (self.navigator && self.navigator.setAppBadge) ? self.navigator.setAppBadge(1).catch(()=>{}) : Promise.resolve(),
+  ]));
+});
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || './';
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      for (const c of list) { if ('focus' in c) return c.focus(); }
+      if (self.clients.openWindow) return self.clients.openWindow(url);
+    })
+  );
+});
