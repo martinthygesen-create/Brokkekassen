@@ -601,13 +601,18 @@ function openBrokSheet(){
         state = r.state;
         openVoteSheet();
         renderMain(); render();
-      }catch(e){ toast(e.message); }
+      }catch(e){
+        toast(e.message);
+        await refreshState(true);
+        if(state.pending) openVoteSheet(); else closeSheet();
+      }
     };
   });
 }
 
 function openVoteSheet(){
   if(!state.pending){ closeSheet(); return; }
+  const pendingId = state.pending.id;
   const complainer = state.members.find(m=>m.id===state.pending.memberId);
   const voters = state.members.filter(m=>m.id!==state.pending.memberId);
   const need = state.pending.need;
@@ -629,7 +634,7 @@ function openVoteSheet(){
         if(p.dataset.id !== profile.memberId) { p.style.opacity='.55'; p.style.pointerEvents='none'; return; }
         p.onclick = async ()=>{
           try{
-            const r = await api('vote', { roomId, voterId: profile.memberId });
+            const r = await api('vote', { roomId, voterId: profile.memberId, pendingId });
             state = r.state;
             if(r.confirmed){
               closeSheet();
@@ -642,7 +647,11 @@ function openVoteSheet(){
               openVoteSheet();
               render();
             }
-          }catch(e){ toast(e.message); }
+          }catch(e){
+            toast(e.message);
+            await refreshState(true);
+            openVoteSheet();
+          }
         };
       });
     }

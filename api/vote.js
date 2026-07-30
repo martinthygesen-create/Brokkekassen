@@ -3,11 +3,12 @@ const { getState, setState } = require('./_lib/store');
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' });
   try {
-    const { roomId, voterId } = req.body || {};
+    const { roomId, voterId, pendingId } = req.body || {};
     if (!roomId || !voterId) return res.status(400).json({ error: 'mangler data' });
     const state = await getState(roomId);
     if (!state) return res.status(404).json({ error: 'ukendt brokkekasse' });
     if (!state.pending) return res.status(400).json({ error: 'ingen aktiv afstemning' });
+    if (pendingId && state.pending.id !== pendingId) return res.status(409).json({ error: 'afstemningen er skiftet — genindlæs og prøv igen' });
     if (state.pending.memberId === voterId) return res.status(400).json({ error: 'du kan ikke stemme på dig selv' });
 
     const idx = state.pending.votes.indexOf(voterId);

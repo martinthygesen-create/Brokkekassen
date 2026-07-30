@@ -8,6 +8,7 @@ module.exports = async (req, res) => {
     const state = await getState(roomId);
     if (!state) return res.status(404).json({ error: 'ukendt brokkekasse' });
     if (!state.members.find(m => m.id === memberId)) return res.status(400).json({ error: 'ukendt medlem' });
+    if (state.pending) return res.status(409).json({ error: 'der er allerede en afstemning i gang' });
 
     state.pending = {
       id: uid(),
