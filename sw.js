@@ -1,5 +1,5 @@
-const CACHE = 'brokkekassen-v4';
-const FILES = ['./', './index.html', './manifest.json', './icon.svg'];
+const CACHE = 'brokkekassen-v5';
+const FILES = ['./', './index.html', './manifest.json', './icon.svg', './gsap.min.js'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)));
