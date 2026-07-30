@@ -51,6 +51,14 @@
   .tab{ flex:1; text-align:center; padding:9px 6px; border-radius:100px; font-size:13px; font-weight:600; background:rgba(255,247,232,0.06); border:1px solid rgba(255,247,232,0.12); color:rgba(255,247,232,0.65); cursor:pointer; transition:all .15s ease; }
   .tab.active{ background:var(--cream); color:var(--sea-deep); border-color:var(--cream); }
 
+  .segmented{ display:flex; gap:2px; background:rgba(255,247,232,0.06); border-radius:100px; padding:3px; margin-bottom:16px; }
+  .segmented .seg{ flex:1; text-align:center; padding:7px 6px; border-radius:100px; font-size:12px; font-weight:700; color:rgba(255,247,232,0.5); cursor:pointer; transition:all .15s ease; }
+  .segmented .seg.active{ background:rgba(255,247,232,0.15); color:var(--cream); }
+  .list-head{ display:flex; align-items:center; justify-content:space-between; margin:14px 4px 10px; }
+  .list-head .section-label{ margin:0; }
+  .sort-btn{ background:none; border:none; color:rgba(255,247,232,0.45); font-size:11.5px; font-weight:600; padding:2px 0; cursor:pointer; display:flex; align-items:center; gap:3px; }
+  .sort-btn:active{ opacity:.6; }
+
   main{ flex:1; padding:0 16px 130px; overflow-y:auto; }
 
   .feed-item{ background:rgba(255,247,232,0.07); border:1px solid rgba(255,247,232,0.1); border-radius:16px; padding:12px 14px; margin-bottom:10px; display:flex; gap:12px; align-items:flex-start; }
@@ -147,7 +155,7 @@ let profile = JSON.parse(localStorage.getItem('bk_profile_' + roomId) || 'null')
 
 let state = null;
 let activeTab = 'feed';
-let brokListSubTab = 'today'; // 'today' | 'alltime' — undersort inde i Broklisten-fanen
+let brokListSubTab = 'alltime'; // 'today' | 'alltime' — undersort inde i Broklisten-fanen; alltime er det vigtigste og vises først
 let brokListSortDesc = true; // true = flest brok øverst, false = mindst brok (Helgenen) øverst
 let polling = null;
 let toastTimer = null;
@@ -573,25 +581,27 @@ function allTimeTotals(){
   return totals;
 }
 
+function listHead(label){
+  return `<div class="list-head"><div class="section-label">${label}</div>
+    <button class="sort-btn" id="btnSortDir">🔀 ${brokListSortDesc ? 'Vis Helgenen øverst' : 'Vis TopBrokker øverst'}</button>
+  </div>`;
+}
+
 function renderBrokListen(main){
-  const pills = `
-    <div class="tabs" style="padding:0 0 12px;">
-      <div class="tab ${brokListSubTab==='today'?'active':''}" data-subtab="today" style="font-size:12px; padding:7px 6px;">💸 BigSpender</div>
-      <div class="tab ${brokListSubTab==='alltime'?'active':''}" data-subtab="alltime" style="font-size:12px; padding:7px 6px;">🏆 Toplister</div>
+  main.innerHTML = `
+    <div class="segmented">
+      <div class="seg ${brokListSubTab==='alltime'?'active':''}" data-subtab="alltime">🏆 Toplister</div>
+      <div class="seg ${brokListSubTab==='today'?'active':''}" data-subtab="today">💸 BigSpender</div>
     </div>
-    <button id="btnSortDir" style="display:block; margin:0 auto 12px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.6); font-size:11.5px; padding:6px 12px; border-radius:100px;">
-      🔀 ${brokListSortDesc ? 'Viser flest brok øverst' : 'Viser Helgenen øverst'}
-    </button>
   `;
-  main.innerHTML = '';
-  main.insertAdjacentHTML('beforeend', pills);
   const contentDiv = document.createElement('div');
   main.appendChild(contentDiv);
   if(brokListSubTab === 'today') renderBalanceToday(contentDiv); else renderAllTimeHistory(contentDiv);
   main.querySelectorAll('[data-subtab]').forEach(p=>{
     p.onclick = ()=>{ brokListSubTab = p.dataset.subtab; renderMain(); };
   });
-  document.getElementById('btnSortDir').onclick = ()=>{ brokListSortDesc = !brokListSortDesc; renderMain(); };
+  const btnSortDir = document.getElementById('btnSortDir');
+  if(btnSortDir) btnSortDir.onclick = ()=>{ brokListSortDesc = !brokListSortDesc; renderMain(); };
 }
 
 function renderBalanceToday(main){
@@ -616,7 +626,7 @@ function renderBalanceToday(main){
     return `<div class="bal-row"><div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${initials(m.name)}</div><div class="feed-body"><div class="bal-name ${profile && m.id===profile.memberId?'me':''}">${escapeHtml(m.name)}${crown}${freeTag}</div><div style="font-size:11.5px; color:rgba(255,247,232,0.4);">${sub}</div></div><div class="bal-amt ${amt===0?'zero':''}">${amt}€</div></div>`;
   }).join('');
 
-  main.innerHTML = `<div class="section-label">💸 Dagens BigSpender</div>${rows}`;
+  main.innerHTML = listHead('💸 Dagens BigSpender') + rows;
 }
 function renderAllTimeHistory(main){
   const totals = allTimeTotals();
@@ -625,7 +635,7 @@ function renderAllTimeHistory(main){
   const minTotal = totalValues.length ? Math.min(...totalValues) : 0;
   const anyTotal = maxTotal > 0;
   const chart = anyTotal ? (
-    `<div class="section-label">🏆 TopBrokker & 😇 Helgenen — alle tider</div>` +
+    listHead('🏆 TopBrokker & 😇 Helgenen — alle tider') +
     [...state.members].sort((a,b)=> brokListSortDesc ? totals[b.id]-totals[a.id] : totals[a.id]-totals[b.id]).map(m=>{
       const amt = totals[m.id]||0;
       const isTop = amt > 0 && amt === maxTotal;
