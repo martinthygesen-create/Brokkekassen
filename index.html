@@ -148,6 +148,7 @@ let profile = JSON.parse(localStorage.getItem('bk_profile_' + roomId) || 'null')
 let state = null;
 let activeTab = 'feed';
 let brokListSubTab = 'today'; // 'today' | 'alltime' — undersort inde i Broklisten-fanen
+let brokListSortDesc = true; // true = flest brok øverst, false = mindst brok (Helgenen) øverst
 let polling = null;
 let toastTimer = null;
 
@@ -575,9 +576,12 @@ function allTimeTotals(){
 function renderBrokListen(main){
   const pills = `
     <div class="tabs" style="padding:0 0 12px;">
-      <div class="tab ${brokListSubTab==='today'?'active':''}" data-subtab="today" style="font-size:12px; padding:7px 6px;">☀️ I dag</div>
-      <div class="tab ${brokListSubTab==='alltime'?'active':''}" data-subtab="alltime" style="font-size:12px; padding:7px 6px;">📊 Alle tider</div>
+      <div class="tab ${brokListSubTab==='today'?'active':''}" data-subtab="today" style="font-size:12px; padding:7px 6px;">💸 BigSpender</div>
+      <div class="tab ${brokListSubTab==='alltime'?'active':''}" data-subtab="alltime" style="font-size:12px; padding:7px 6px;">🏆 Toplister</div>
     </div>
+    <button id="btnSortDir" style="display:block; margin:0 auto 12px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.6); font-size:11.5px; padding:6px 12px; border-radius:100px;">
+      🔀 ${brokListSortDesc ? 'Viser flest brok øverst' : 'Viser Helgenen øverst'}
+    </button>
   `;
   main.innerHTML = '';
   main.insertAdjacentHTML('beforeend', pills);
@@ -587,6 +591,7 @@ function renderBrokListen(main){
   main.querySelectorAll('[data-subtab]').forEach(p=>{
     p.onclick = ()=>{ brokListSubTab = p.dataset.subtab; renderMain(); };
   });
+  document.getElementById('btnSortDir').onclick = ()=>{ brokListSortDesc = !brokListSortDesc; renderMain(); };
 }
 
 function renderBalanceToday(main){
@@ -595,20 +600,23 @@ function renderBalanceToday(main){
   const maxAmt = Math.max(0, ...balValues);
   const minAmt = balValues.length ? Math.min(...balValues) : 0;
   const streaks = state.streaks || {};
-  const rows = [...state.members].sort((a,b)=>bal[b.id]-bal[a.id]).map(m=>{
+  const rows = [...state.members].sort((a,b)=> brokListSortDesc ? bal[b.id]-bal[a.id] : bal[a.id]-bal[b.id]).map(m=>{
     const amt = bal[m.id]||0;
     const isTop = amt > 0 && amt === maxAmt;
     const isLeast = maxAmt > minAmt && amt === minAmt;
     const crown = isTop ? ' 👑' : (isLeast ? ' 😇' : '');
     const freeTag = state.freeBrokMemberId === m.id ? ' 🎫' : '';
     const streak = streaks[m.id] || 0;
-    const sub = state.freeBrokMemberId === m.id
-      ? 'Har dagens gratis brok'
-      : (streak > 0 ? `🔥 ${streak} dag${streak===1?'':'e'} uden brok` : titleFor(amt));
+    let sub;
+    if(state.freeBrokMemberId === m.id) sub = 'Har dagens gratis brok';
+    else if(isTop) sub = 'TopBrokker i dag';
+    else if(isLeast) sub = 'Helgenen i dag 😇';
+    else if(streak > 0) sub = `🔥 ${streak} dag${streak===1?'':'e'} uden brok`;
+    else sub = titleFor(amt);
     return `<div class="bal-row"><div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${initials(m.name)}</div><div class="feed-body"><div class="bal-name ${profile && m.id===profile.memberId?'me':''}">${escapeHtml(m.name)}${crown}${freeTag}</div><div style="font-size:11.5px; color:rgba(255,247,232,0.4);">${sub}</div></div><div class="bal-amt ${amt===0?'zero':''}">${amt}€</div></div>`;
   }).join('');
 
-  main.innerHTML = `<div class="section-label">☀️ Lige nu</div>${rows}`;
+  main.innerHTML = `<div class="section-label">💸 Dagens BigSpender</div>${rows}`;
 }
 function renderAllTimeHistory(main){
   const totals = allTimeTotals();
@@ -617,10 +625,10 @@ function renderAllTimeHistory(main){
   const minTotal = totalValues.length ? Math.min(...totalValues) : 0;
   const anyTotal = maxTotal > 0;
   const chart = anyTotal ? (
-    `<div class="section-label">📊 TopBrokker — livstidsregnskab</div>` +
-    [...state.members].sort((a,b)=>totals[b.id]-totals[a.id]).map((m,i)=>{
+    `<div class="section-label">🏆 TopBrokker & 😇 Helgenen — alle tider</div>` +
+    [...state.members].sort((a,b)=> brokListSortDesc ? totals[b.id]-totals[a.id] : totals[a.id]-totals[b.id]).map(m=>{
       const amt = totals[m.id]||0;
-      const isTop = i===0 && amt>0;
+      const isTop = amt > 0 && amt === maxTotal;
       const isLeast = maxTotal > minTotal && amt === minTotal;
       const pct = amt > 0 ? Math.max(6, Math.round(amt/maxTotal*100)) : 0;
       const badge = isTop ? ' 🏆' : (isLeast ? ' 😇' : '');
