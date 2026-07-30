@@ -76,7 +76,7 @@
   .bar-track{ flex:1; height:14px; background:rgba(255,247,232,0.1); border-radius:10px; overflow:hidden; }
   .bar-fill{ height:100%; border-radius:10px; background:linear-gradient(90deg, var(--coin-dark), var(--coin)); transition:width .7s cubic-bezier(.2,.8,.2,1); }
   .bar-fill.top{ background:linear-gradient(90deg, #e14d2e, var(--coral)); }
-  .bar-amt{ flex:0 0 auto; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:13.5px; color:var(--coin); min-width:34px; text-align:right; }
+  .bar-amt{ flex:0 0 auto; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:13.5px; color:var(--coin); min-width:34px; text-align:right; white-space:nowrap; }
 
   .history-round{ background:rgba(255,247,232,0.05); border:1px solid rgba(255,247,232,0.1); border-radius:16px; padding:14px; margin-bottom:12px; }
   .history-round .hr-title{font-weight:700; font-family:'Baloo 2',sans-serif; font-size:16px; color:var(--coin);}
@@ -575,11 +575,15 @@ function allTimeTotals(){
 
 function renderBalance(main){
   const bal = balances();
-  const maxAmt = Math.max(0, ...Object.values(bal));
+  const balValues = Object.values(bal);
+  const maxAmt = Math.max(0, ...balValues);
+  const minAmt = balValues.length ? Math.min(...balValues) : 0;
   const streaks = state.streaks || {};
   const rows = [...state.members].sort((a,b)=>bal[b.id]-bal[a.id]).map(m=>{
     const amt = bal[m.id]||0;
-    const crown = amt > 0 && amt === maxAmt ? ' 👑' : '';
+    const isTop = amt > 0 && amt === maxAmt;
+    const isLeast = maxAmt > minAmt && amt === minAmt;
+    const crown = isTop ? ' 👑' : (isLeast ? ' 😇' : '');
     const freeTag = state.freeBrokMemberId === m.id ? ' 🎫' : '';
     const streak = streaks[m.id] || 0;
     const sub = state.freeBrokMemberId === m.id
@@ -588,34 +592,23 @@ function renderBalance(main){
     return `<div class="bal-row"><div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${initials(m.name)}</div><div class="feed-body"><div class="bal-name ${profile && m.id===profile.memberId?'me':''}">${escapeHtml(m.name)}${crown}${freeTag}</div><div style="font-size:11.5px; color:rgba(255,247,232,0.4);">${sub}</div></div><div class="bal-amt ${amt===0?'zero':''}">${amt}€</div></div>`;
   }).join('');
 
-  const total = allTimeTotals();
-  const totalValues = Object.values(total);
-  const maxTotal = Math.max(0, ...totalValues);
-  const minTotal = totalValues.length ? Math.min(...totalValues) : 0;
-  const totalRows = [...state.members].sort((a,b)=>total[b.id]-total[a.id]).map(m=>{
-    const amt = total[m.id]||0;
-    const isTop = amt > 0 && amt === maxTotal;
-    const isLeast = maxTotal > minTotal && amt === minTotal;
-    const badge = isTop ? ' 🏆' : (isLeast ? ' 😇' : '');
-    const sub = isTop ? 'TopBrokker' : (isLeast ? 'Mindst brok — flot! 😇' : titleFor(amt));
-    return `<div class="bal-row"><div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${initials(m.name)}</div><div class="feed-body"><div class="bal-name ${profile && m.id===profile.memberId?'me':''}">${escapeHtml(m.name)}${badge}</div><div style="font-size:11.5px; color:rgba(255,247,232,0.4);">${sub}</div></div><div class="bal-amt ${amt===0?'zero':''}">${amt}€</div></div>`;
-  }).join('');
-
-  main.innerHTML = `
-    <div class="section-label">Dagens regnskab</div>${rows}
-    <div class="section-label" style="margin-top:22px;">🏆 TopBrokker — livstidsregnskab</div>${totalRows}
-  `;
+  main.innerHTML = `<div class="section-label">☀️ Lige nu</div>${rows}`;
 }
 function renderHistory(main){
   const totals = allTimeTotals();
-  const maxTotal = Math.max(0, ...Object.values(totals));
+  const totalValues = Object.values(totals);
+  const maxTotal = Math.max(0, ...totalValues);
+  const minTotal = totalValues.length ? Math.min(...totalValues) : 0;
   const anyTotal = maxTotal > 0;
   const chart = anyTotal ? (
     `<div class="section-label">📊 TopBrokker — livstidsregnskab</div>` +
     [...state.members].sort((a,b)=>totals[b.id]-totals[a.id]).map((m,i)=>{
       const amt = totals[m.id]||0;
+      const isTop = i===0 && amt>0;
+      const isLeast = maxTotal > minTotal && amt === minTotal;
       const pct = amt > 0 ? Math.max(6, Math.round(amt/maxTotal*100)) : 0;
-      return `<div class="bar-row"><div class="avatar" style="width:30px;height:30px;font-size:11px;">${initials(m.name)}</div><div class="bar-track"><div class="bar-fill ${i===0 && amt>0?'top':''}" style="width:${pct}%;"></div></div><div class="bar-amt">${amt}€</div></div>`;
+      const badge = isTop ? ' 🏆' : (isLeast ? ' 😇' : '');
+      return `<div class="bar-row"><div class="avatar" style="width:30px;height:30px;font-size:11px;">${initials(m.name)}</div><div class="bar-track"><div class="bar-fill ${isTop?'top':''}" style="width:${pct}%;"></div></div><div class="bar-amt">${amt}€${badge}</div></div>`;
     }).join('')
   ) : '';
 
@@ -623,7 +616,7 @@ function renderHistory(main){
     main.innerHTML = chart + `<div class="empty-state"><span class="emoji">📜</span><b>Ingen afsluttede dage endnu</b>Dage afsluttes automatisk kl. 04, eller tryk 💶 for at gøre op tidligere.</div>`;
     return;
   }
-  const days = `<div class="section-label" style="margin-top:${anyTotal?22:0}px;">Dag for dag</div>` + [...state.history].reverse().map(r=>{
+  const days = `<div class="section-label" style="margin-top:${anyTotal?22:0}px;">🗓️ Dag for dag</div>` + [...state.history].reverse().map(r=>{
     const lines = Object.entries(r.totals).map(([id,amt])=>{
       const m = state.members.find(x=>x.id===id);
       return `<div class="hr-line"><span>${escapeHtml(m?m.name:'?')}</span><span>${amt}€</span></div>`;
