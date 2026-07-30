@@ -483,6 +483,7 @@ function render(){
       ${jarSVG(fillPct)}
       <div class="jar-total"><div class="amt">${total}€</div><div class="lbl">i puljen</div>${whatToBuy(total) ? `<div class="lbl" style="margin-top:2px; opacity:.8;">${whatToBuy(total)}</div>` : ''}</div>
     </div>
+    <div style="text-align:center; font-size:12.5px; color:rgba(255,247,232,0.5); padding:2px 24px 0;">🎯 Potten går til: <span style="color:rgba(255,247,232,0.8); font-weight:600;">${escapeHtml(state.goal && state.goal.trim() ? state.goal : 'Endnu ikke besluttet')}</span></div>
     <div class="tabs">
       <div class="tab ${activeTab==='feed'?'active':''}" data-tab="feed">Brok-feed</div>
       <div class="tab ${activeTab==='balance'?'active':''}" data-tab="balance">Regnskab</div>
@@ -921,17 +922,36 @@ function openAdminMenuSheet(){
     <h2>Admin ⚙️</h2>
     <p class="hint">Du oprettede denne brokkekasse, så det er dig der styrer den. Ny dag starter automatisk kl. 04.</p>
     <p class="hint" style="font-size:11px; color:rgba(5,32,36,0.4); word-break:break-word;">🔧 Push-status: ${pushDebugInfo()}</p>
+    <button class="sheet-btn primary" id="adminGoalBtn">🎯 Sæt mål for potten</button>
     <button class="sheet-btn primary" id="adminBroadcastBtn">📣 Send besked til alle</button>
     <button class="sheet-btn primary" id="adminSettleBtn">💶 Gør op nu (afslut dagen tidligt)</button>
     <button class="sheet-btn danger" id="adminResetBtn">🧹 Nulstil alt</button>
     <button class="sheet-btn danger" id="adminFinalCloseBtn">🔒 Luk denne brokkekasse for altid</button>
     <button class="sheet-btn ghost" id="adminMenuCloseBtn">Luk menu</button>
   `, ()=>{
+    document.getElementById('adminGoalBtn').onclick = ()=>{ closeSheet(); setTimeout(openGoalSheet, 230); };
     document.getElementById('adminBroadcastBtn').onclick = ()=>{ closeSheet(); setTimeout(openBroadcastSheet, 230); };
     document.getElementById('adminSettleBtn').onclick = ()=>{ closeSheet(); setTimeout(openSettleSheet, 230); };
     document.getElementById('adminResetBtn').onclick = ()=>{ closeSheet(); setTimeout(openResetSheet, 230); };
     document.getElementById('adminFinalCloseBtn').onclick = ()=>{ closeSheet(); setTimeout(openFinalCloseSheet, 230); };
     document.getElementById('adminMenuCloseBtn').onclick = closeSheet;
+  });
+}
+
+function openGoalSheet(){
+  openSheet(`
+    <h2>Sæt mål for potten 🎯</h2>
+    <p class="hint">Kort fri tekst der vises for alle under krukken. Fx "Fælles middag sidste aften". Kan ændres når som helst.</p>
+    <input type="text" id="goalInput" maxlength="100" placeholder="Fx: Fælles middag sidste aften" value="${escapeHtml(state.goal||'')}" />
+    <button class="sheet-btn primary" id="doGoal">Gem</button>
+    <button class="sheet-btn ghost" id="cancelGoal">Annuller</button>
+  `, ()=>{
+    document.getElementById('cancelGoal').onclick = closeSheet;
+    document.getElementById('doGoal').onclick = async ()=>{
+      const goal = document.getElementById('goalInput').value.trim();
+      try{ const r = await api('goal', { roomId, actorId: profile.memberId, goal }); state = r.state; closeSheet(); toast('🎯 Mål opdateret'); render(); }
+      catch(e){ toast(e.message); }
+    };
   });
 }
 

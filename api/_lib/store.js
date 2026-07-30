@@ -24,6 +24,7 @@ function emptyState() {
     streaks: {},   // memberId -> antal sammenhængende dage uden brok
     closed: false, // hele brokkekassen er lukket permanent (ingen flere brok)
     pushSubs: {},  // memberId -> PushSubscription, til rigtige push-notifikationer
+    goal: '',      // fri tekst sat af admin: hvad potten går til, fx "Fælles middag"
   };
 }
 
@@ -108,6 +109,7 @@ async function getState(roomId) {
   if (state.closed === undefined) state.closed = false;
   if (!state.pushSubs) state.pushSubs = {};
   if (!state.streaks) state.streaks = {};
+  if (state.goal === undefined) state.goal = '';
   if (autoSettleIfDue(state)) await setState(roomId, state);
   return state;
 }
