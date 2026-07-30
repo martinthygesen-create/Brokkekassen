@@ -143,6 +143,67 @@ let activeTab = 'feed';
 let polling = null;
 let toastTimer = null;
 
+/* ============ ADMIN (til grin, ikke sikkerhed) ============ */
+const ADMIN_CODE = '1234';
+function isAdmin(){ return localStorage.getItem('bk_admin_code') === ADMIN_CODE; }
+function unlockAdmin(){
+  const code = prompt('Admin-kode:');
+  if(code === null) return;
+  if(code === ADMIN_CODE){
+    localStorage.setItem('bk_admin_code', code);
+    toast('🔓 Admin-tilstand aktiveret');
+    render();
+  }
+  // forkert kode: sig ingenting, så det ikke afslører at der findes en admin-funktion
+}
+function bindAdminUnlock(el){
+  if(!el || isAdmin()) return;
+  let timer = null;
+  const start = ()=>{ timer = setTimeout(unlockAdmin, 700); };
+  const clear = ()=>{ if(timer) clearTimeout(timer); };
+  el.addEventListener('pointerdown', start);
+  el.addEventListener('pointerup', clear);
+  el.addEventListener('pointerleave', clear);
+  el.addEventListener('pointercancel', clear);
+}
+
+/* ============ SJOV / BANTER ============ */
+const BANTER = [
+  'Endnu en for retfærdighedens sejr! ⚖️',
+  'Solen skinner, og nu gør puljen også! ☀️',
+  'Det der koster altså — velkommen til klubben. 🎟️',
+  'Brok registreret, appel afvist. 🧑‍⚖️',
+  'Ka det virkelig passe? Tjah, det gjorde det. 💸',
+  'En til krukken, en mindre brok i verden (håber vi). 🤞',
+  'Beklager, ingen refusion på den slags brok. 🙅',
+  'Krukken siger tak for donationen! 🙏',
+  'Det var dyrt sagt. Bogstaveligt talt. 💰',
+];
+function randomBanter(){ return BANTER[Math.floor(Math.random()*BANTER.length)]; }
+
+const TREATS = [
+  { cost: 40, label: 'middag ude 🍽️' },
+  { cost: 20, label: 'flaske god rom 🥃' },
+  { cost: 12, label: 'pizza 🍕' },
+  { cost: 8,  label: 'cocktail ved poolen 🍹' },
+  { cost: 3,  label: 'øl 🍺' },
+  { cost: 2,  label: 'is 🍦' },
+];
+function whatToBuy(total){
+  if(total <= 0) return null;
+  const t = TREATS.find(t => total >= t.cost);
+  if(!t) return null;
+  const n = Math.floor(total / t.cost);
+  return `= ${n}× ${t.label}`;
+}
+function titleFor(count){
+  if(count >= 10) return 'Broklegende 👑';
+  if(count >= 6) return 'Storbrokker';
+  if(count >= 3) return 'Rutineret brokkehoved';
+  if(count >= 1) return 'Brokke-nybegynder';
+  return 'Pletfri (indtil videre)';
+}
+
 function toast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -193,6 +254,15 @@ function startPolling(){
   if(polling) clearInterval(polling);
   polling = setInterval(()=>refreshState(true), 3000);
 }
+document.addEventListener('visibilitychange', ()=>{
+  if(!roomId) return;
+  if(document.hidden){
+    if(polling){ clearInterval(polling); polling = null; }
+  }else{
+    refreshState(true);
+    startPolling();
+  }
+});
 
 /* ============ APP ENTRY ============ */
 const app = document.getElementById('app');
@@ -316,7 +386,7 @@ function render(){
     </header>
     <div class="jar-wrap">
       ${jarSVG(fillPct)}
-      <div class="jar-total"><div class="amt">${total}€</div><div class="lbl">i puljen</div></div>
+      <div class="jar-total"><div class="amt">${total}€</div><div class="lbl">i puljen</div>${whatToBuy(total) ? `<div class="lbl" style="margin-top:2px; opacity:.8;">${whatToBuy(total)}</div>` : ''}</div>
     </div>
     <div class="tabs">
       <div class="tab ${activeTab==='feed'?'active':''}" data-tab="feed">Brok-feed</div>
@@ -326,13 +396,18 @@ function render(){
     <main id="main"></main>
     <div class="bottombar">
       <button class="btn-brok" id="btnBrok" ${state.pending ? 'disabled' : ''}>${state.pending ? '⏳ Afstemning i gang…' : '📢 Nogen brokker sig…'}</button>
-      <button class="btn-settle" id="btnSettle" title="Gør op">💶</button>
+      ${isAdmin() ? `<button class="btn-settle" id="btnSettle" title="Gør op">💶</button>` : ''}
+      ${isAdmin() ? `<button class="btn-settle" id="btnReset" title="Nulstil alt">🧹</button>` : ''}
       <button class="btn-share" id="btnShare" title="Del link">🔗</button>
     </div>
   `;
   document.querySelectorAll('.tab').forEach(t=>{ t.onclick = ()=>{ activeTab = t.dataset.tab; renderMain(); document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active', x===t)); }; });
   document.getElementById('btnBrok').onclick = ()=> state.pending ? openVoteSheet() : openBrokSheet();
-  document.getElementById('btnSettle').onclick = openSettleSheet;
+  bindAdminUnlock(document.querySelector('.day-chip'));
+  const btnSettle = document.getElementById('btnSettle');
+  if(btnSettle) btnSettle.onclick = openSettleSheet;
+  const btnReset = document.getElementById('btnReset');
+  if(btnReset) btnReset.onclick = openResetSheet;
   document.getElementById('btnShare').onclick = ()=>{
     navigator.clipboard.writeText(shareUrl()).then(()=>toast('Link kopieret! 🔗')).catch(()=>toast(shareUrl()));
   };
@@ -396,9 +471,11 @@ function renderFeed(main){
 }
 function renderBalance(main){
   const bal = balances();
+  const maxAmt = Math.max(0, ...Object.values(bal));
   main.innerHTML = `<div class="section-label">Hvem skylder hvad (denne runde)</div>` + [...state.members].sort((a,b)=>bal[b.id]-bal[a.id]).map(m=>{
     const amt = bal[m.id]||0;
-    return `<div class="bal-row"><div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${initials(m.name)}</div><div class="bal-name ${profile && m.id===profile.memberId?'me':''}">${escapeHtml(m.name)}</div><div class="bal-amt ${amt===0?'zero':''}">${amt}€</div></div>`;
+    const crown = amt > 0 && amt === maxAmt ? ' 👑' : '';
+    return `<div class="bal-row"><div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${initials(m.name)}</div><div class="feed-body"><div class="bal-name ${profile && m.id===profile.memberId?'me':''}">${escapeHtml(m.name)}${crown}</div><div style="font-size:11.5px; color:rgba(255,247,232,0.4);">${titleFor(amt)}</div></div><div class="bal-amt ${amt===0?'zero':''}">${amt}€</div></div>`;
   }).join('');
 }
 function renderHistory(main){
@@ -484,7 +561,7 @@ function openVoteSheet(){
     <div class="vote-progress"><span id="voteCount">${count}/${need}</span><div class="bar"><div id="voteBar" style="width:${Math.min(100,count/need*100)}%"></div></div></div>
     <div class="name-grid" id="voteGrid">${chips}</div>
     ${!canVote ? `<p class="hint">Du kan ikke stemme på dig selv — vent på de andre.</p>` : ''}
-    <button class="sheet-btn ghost" id="cancelPendingBtn">Fortryd (afblæs)</button>
+    ${isAdmin() ? `<button class="sheet-btn ghost" id="cancelPendingBtn">Fortryd (afblæs)</button>` : ''}
     <button class="sheet-btn ghost" id="closeVoteBtn">Luk (bliver ved med at køre)</button>
   `, ()=>{
     if(canVote){
@@ -496,7 +573,7 @@ function openVoteSheet(){
             state = r.state;
             if(r.confirmed){
               closeSheet();
-              toast(`💰 ${complainer ? complainer.name : 'Nogen'} skylder nu 1€ mere`);
+              toast(`💰 ${complainer ? complainer.name : 'Nogen'} skylder nu 1€ mere — ${randomBanter()}`);
               launchCoin();
               activeTab = 'feed';
               render();
@@ -509,8 +586,9 @@ function openVoteSheet(){
       });
     }
     document.getElementById('closeVoteBtn').onclick = closeSheet;
-    document.getElementById('cancelPendingBtn').onclick = async ()=>{
-      try{ const r = await api('cancel', { roomId }); state = r.state; closeSheet(); render(); }catch(e){ toast(e.message); }
+    const cancelBtn = document.getElementById('cancelPendingBtn');
+    if(cancelBtn) cancelBtn.onclick = async ()=>{
+      try{ const r = await api('cancel', { roomId, code: localStorage.getItem('bk_admin_code') }); state = r.state; closeSheet(); render(); }catch(e){ toast(e.message); }
     };
   });
 }
@@ -543,7 +621,22 @@ function openSettleSheet(){
   `, ()=>{
     document.getElementById('cancelSettle').onclick = closeSheet;
     document.getElementById('doSettle').onclick = async ()=>{
-      try{ const r = await api('settle', { roomId }); state = r.state; closeSheet(); toast('✅ Runde afregnet — ny runde startet!'); activeTab='history'; render(); }
+      try{ const r = await api('settle', { roomId, code: localStorage.getItem('bk_admin_code') }); state = r.state; closeSheet(); toast('✅ Runde afregnet — ny runde startet!'); activeTab='history'; render(); }
+      catch(e){ toast(e.message); }
+    };
+  });
+}
+
+function openResetSheet(){
+  openSheet(`
+    <h2>Nulstil alt 🧹</h2>
+    <p class="hint">Dette sletter puljen, hele feedet og hele historikken permanent for alle. Medlemmerne bliver — de skal ikke skrive navn igen. Kan ikke fortrydes.</p>
+    <button class="sheet-btn danger" id="doReset">Ja, nulstil alt</button>
+    <button class="sheet-btn ghost" id="cancelReset">Annuller</button>
+  `, ()=>{
+    document.getElementById('cancelReset').onclick = closeSheet;
+    document.getElementById('doReset').onclick = async ()=>{
+      try{ const r = await api('reset', { roomId, code: localStorage.getItem('bk_admin_code') }); state = r.state; closeSheet(); toast('🧹 Alt er nulstillet'); activeTab='feed'; render(); }
       catch(e){ toast(e.message); }
     };
   });

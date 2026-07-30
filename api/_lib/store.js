@@ -1,6 +1,8 @@
 const { redis } = require('./redis');
 
 const KEY = (roomId) => `brokkekassen:room:${roomId}`;
+const ADMIN_CODE = process.env.ADMIN_CODE || '1234';
+function isAdminCode(code) { return typeof code === 'string' && code === ADMIN_CODE; }
 
 function emptyState() {
   return {
@@ -48,4 +50,4 @@ function neededVotes(totalMembers) {
   return Math.min(others, Math.max(2, Math.ceil((others * 2) / 3)));
 }
 
-module.exports = { getState, setState, createRoom, genRoomId, uid, emptyState, neededVotes };
+module.exports = { getState, setState, createRoom, genRoomId, uid, emptyState, neededVotes, isAdminCode };
