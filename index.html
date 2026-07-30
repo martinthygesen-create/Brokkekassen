@@ -581,17 +581,17 @@ function spotlightCards(vals){
   const maxV = Math.max(0, ...Object.values(vals));
   if(maxV <= 0) return '';
   const minV = Math.min(...members.map(m=>vals[m.id]||0));
-  const top = members.find(m=>(vals[m.id]||0) === maxV);
-  const saint = minV < maxV ? members.find(m=>(vals[m.id]||0) === minV) : null;
-  const card = (title, emoji, m, amt, accent) => `
+  const topNames = members.filter(m=>(vals[m.id]||0) === maxV).map(m=>m.name).join(' & ');
+  const saintNames = minV < maxV ? members.filter(m=>(vals[m.id]||0) === minV).map(m=>m.name).join(' & ') : null;
+  const card = (title, emoji, names, amt, accent) => `
     <div style="flex:1; background:${accent ? 'rgba(255,107,74,0.14)' : 'rgba(255,247,232,0.07)'}; border:1px solid ${accent ? 'rgba(255,107,74,0.35)' : 'rgba(255,247,232,0.15)'}; border-radius:16px; padding:12px; text-align:center;">
       <div style="font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:rgba(255,247,232,0.5);">${emoji} ${title}</div>
-      <div style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:15px; color:var(--cream); margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(m.name)}</div>
+      <div style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:${names.length>14?'12.5':'15'}px; color:var(--cream); margin-top:4px; line-height:1.2;">${escapeHtml(names)}</div>
       <div style="font-size:12px; color:var(--coin);">${amt}€</div>
     </div>`;
   return `<div style="display:flex; gap:10px; margin-bottom:18px;">
-    ${card('TopBrokker', '🏆', top, maxV, true)}
-    ${saint ? card('Helgenen', '😇', saint, minV, false) : ''}
+    ${card('TopBrokker', '🏆', topNames, maxV, true)}
+    ${saintNames ? card('Helgenen', '😇', saintNames, minV, false) : ''}
   </div>`;
 }
 
