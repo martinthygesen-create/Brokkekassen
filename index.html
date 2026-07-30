@@ -147,6 +147,7 @@ let profile = JSON.parse(localStorage.getItem('bk_profile_' + roomId) || 'null')
 
 let state = null;
 let activeTab = 'feed';
+let brokListSubTab = 'today'; // 'today' | 'alltime' — undersort inde i Broklisten-fanen
 let polling = null;
 let toastTimer = null;
 
@@ -486,8 +487,7 @@ function render(){
     ${state.goal && state.goal.trim() ? `<div style="text-align:center; font-size:12.5px; color:rgba(255,247,232,0.5); padding:2px 24px 0;">🎯 Potten går til: <span style="color:rgba(255,247,232,0.8); font-weight:600;">${escapeHtml(state.goal)}</span></div>` : ''}
     <div class="tabs">
       <div class="tab ${activeTab==='feed'?'active':''}" data-tab="feed">Brok-feed</div>
-      <div class="tab ${activeTab==='balance'?'active':''}" data-tab="balance">Regnskab</div>
-      <div class="tab ${activeTab==='history'?'active':''}" data-tab="history">Historik</div>
+      <div class="tab ${activeTab==='broklisten'?'active':''}" data-tab="broklisten">Broklisten</div>
     </div>
     <main id="main"></main>
     <div class="bottombar">
@@ -545,8 +545,7 @@ function renderMain(){
   const main = document.getElementById('main');
   if(!main) return;
   if(activeTab==='feed') return renderFeed(main);
-  if(activeTab==='balance') return renderBalance(main);
-  renderHistory(main);
+  renderBrokListen(main);
 }
 function renderFeed(main){
   if(!state.events.length){
@@ -573,7 +572,24 @@ function allTimeTotals(){
   return totals;
 }
 
-function renderBalance(main){
+function renderBrokListen(main){
+  const pills = `
+    <div class="tabs" style="padding:0 0 12px;">
+      <div class="tab ${brokListSubTab==='today'?'active':''}" data-subtab="today" style="font-size:12px; padding:7px 6px;">☀️ I dag</div>
+      <div class="tab ${brokListSubTab==='alltime'?'active':''}" data-subtab="alltime" style="font-size:12px; padding:7px 6px;">📊 Alle tider</div>
+    </div>
+  `;
+  main.innerHTML = '';
+  main.insertAdjacentHTML('beforeend', pills);
+  const contentDiv = document.createElement('div');
+  main.appendChild(contentDiv);
+  if(brokListSubTab === 'today') renderBalanceToday(contentDiv); else renderAllTimeHistory(contentDiv);
+  main.querySelectorAll('[data-subtab]').forEach(p=>{
+    p.onclick = ()=>{ brokListSubTab = p.dataset.subtab; renderMain(); };
+  });
+}
+
+function renderBalanceToday(main){
   const bal = balances();
   const balValues = Object.values(bal);
   const maxAmt = Math.max(0, ...balValues);
@@ -594,7 +610,7 @@ function renderBalance(main){
 
   main.innerHTML = `<div class="section-label">☀️ Lige nu</div>${rows}`;
 }
-function renderHistory(main){
+function renderAllTimeHistory(main){
   const totals = allTimeTotals();
   const totalValues = Object.values(totals);
   const maxTotal = Math.max(0, ...totalValues);
@@ -989,7 +1005,7 @@ function openSettleSheet(){
         state = r.state;
         closeSheet();
         toast('✅ Dagen er afsluttet — ny dag startet!');
-        activeTab='history';
+        activeTab='broklisten'; brokListSubTab='alltime';
         render();
       }
       catch(e){ toast(e.message); }
@@ -1021,7 +1037,7 @@ function openFinalCloseSheet(){
   `, ()=>{
     document.getElementById('cancelFinalClose').onclick = closeSheet;
     document.getElementById('doFinalClose').onclick = async ()=>{
-      try{ const r = await api('close', { roomId, actorId: profile.memberId }); state = r.state; closeSheet(); toast('🔒 Brokkekassen er lukket — tak for turen!'); activeTab='history'; render(); }
+      try{ const r = await api('close', { roomId, actorId: profile.memberId }); state = r.state; closeSheet(); toast('🔒 Brokkekassen er lukket — tak for turen!'); activeTab='broklisten'; brokListSubTab='alltime'; render(); }
       catch(e){ toast(e.message); }
     };
   });
