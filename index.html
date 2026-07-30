@@ -820,10 +820,19 @@ function launchCoinToJar(onDone){
   setTimeout(()=>layer.remove(), 1500);
 }
 
+function pushDebugInfo(){
+  const supported = pushSupported();
+  const perm = (typeof Notification !== 'undefined') ? Notification.permission : 'n/a';
+  const enabledLocally = pushEnabledLocally();
+  const standalone = isStandalone();
+  return `understøttet: ${supported ? 'ja' : 'NEJ'} · tilladelse: ${perm} · tilmeldt (denne enhed): ${enabledLocally ? 'ja' : 'nej'} · standalone: ${standalone ? 'ja' : 'nej'}`;
+}
+
 function openAdminMenuSheet(){
   openSheet(`
     <h2>Admin ⚙️</h2>
     <p class="hint">Du oprettede denne brokkekasse, så det er dig der styrer den. Ny runde starter automatisk hver dag kl. 04.</p>
+    <p class="hint" style="font-size:11px; color:rgba(5,32,36,0.4); word-break:break-word;">🔧 Push-status: ${pushDebugInfo()}</p>
     <button class="sheet-btn primary" id="adminBroadcastBtn">📣 Send besked til alle</button>
     <button class="sheet-btn primary" id="adminSettleBtn">💶 Gør op nu (afslut runden tidligt)</button>
     <button class="sheet-btn danger" id="adminResetBtn">🧹 Nulstil alt</button>
