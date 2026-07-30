@@ -368,6 +368,8 @@ function renderWhoAmI(justCreated){
         <div class="onboard-card">
           <p style="margin:0 0 4px; font-size:13px; font-weight:600;">Send dette link til de andre:</p>
           <div class="link-box" id="linkBox" style="cursor:pointer;">${shareUrl()}</div>
+          <p style="margin:12px 0 4px; font-size:13px; font-weight:600;">...eller giv dem bare koden:</p>
+          <div class="link-box" id="codeBox" style="cursor:pointer; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:17px; text-align:center; letter-spacing:.03em;">${roomId}</div>
           <button class="sheet-btn ghost" id="copyBtn" style="margin-top:6px;">📤 Del / kopiér link</button>
         </div>
       ` : ''}
@@ -394,6 +396,9 @@ function renderWhoAmI(justCreated){
   if(justCreated){
     document.getElementById('copyBtn').onclick = doShare;
     document.getElementById('linkBox').onclick = doShare;
+    document.getElementById('codeBox').onclick = ()=>{
+      navigator.clipboard.writeText(roomId).then(()=>toast('Kode kopieret! 🔢')).catch(()=>prompt('Kopiér koden manuelt:', roomId));
+    };
   }
 }
 
@@ -434,7 +439,7 @@ function render(){
   `;
   document.querySelectorAll('.tab').forEach(t=>{ t.onclick = ()=>{ activeTab = t.dataset.tab; renderMain(); document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active', x===t)); }; });
   document.getElementById('btnBrok').onclick = ()=> state.pending ? openVoteSheet() : openBrokSheet();
-  document.getElementById('btnShare').onclick = doShare;
+  document.getElementById('btnShare').onclick = openShareSheet;
   const btnSettle = document.getElementById('btnSettle');
   if(btnSettle) btnSettle.onclick = openSettleSheet;
   const btnReset = document.getElementById('btnReset');
@@ -539,6 +544,28 @@ function closeSheet(){
   if(!b) return;
   b.classList.remove('show');
   setTimeout(()=>b.remove(), 220);
+}
+
+function openShareSheet(){
+  openSheet(`
+    <h2>Invitér flere 📤</h2>
+    <p class="hint">Send linket, eller giv dem bare koden — de skriver den ind under "Har du fået et link?" på forsiden.</p>
+    <label class="field-label">Link</label>
+    <div class="link-box" id="shareLinkBox" style="cursor:pointer;">${shareUrl()}</div>
+    <label class="field-label" style="margin-top:14px;">Kode</label>
+    <div class="link-box" id="shareCodeBox" style="cursor:pointer; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:18px; text-align:center; letter-spacing:.03em;">${roomId}</div>
+    <button class="sheet-btn primary" id="shareNativeBtn">📤 Del link</button>
+    <button class="sheet-btn ghost" id="closeShareBtn">Luk</button>
+  `, ()=>{
+    document.getElementById('shareLinkBox').onclick = ()=>{
+      navigator.clipboard.writeText(shareUrl()).then(()=>toast('Link kopieret! 🔗')).catch(()=>prompt('Kopiér linket manuelt:', shareUrl()));
+    };
+    document.getElementById('shareCodeBox').onclick = ()=>{
+      navigator.clipboard.writeText(roomId).then(()=>toast('Kode kopieret! 🔢')).catch(()=>prompt('Kopiér koden manuelt:', roomId));
+    };
+    document.getElementById('shareNativeBtn').onclick = doShare;
+    document.getElementById('closeShareBtn').onclick = closeSheet;
+  });
 }
 
 let draftMessage = '';
