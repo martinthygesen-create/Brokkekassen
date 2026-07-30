@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="da">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0B4F55" />
+<title>Brokkekassen</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="icon.svg" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Brokkekassen" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sea-deep:#073B40; --sea:#0B4F55; --sea-light:#137a7d;
+    --coin:#FFC93C; --coin-dark:#E8A317; --coral:#FF6B4A;
+    --cream:#FFF7E8; --ink:#052024; --ink-soft:#0b3a3f;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; font-family:'Work Sans', system-ui, sans-serif;
+    background:
+      radial-gradient(ellipse at 20% -10%, #12666b 0%, transparent 55%),
+      radial-gradient(ellipse at 100% 0%, #0e5a5f 0%, transparent 45%),
+      linear-gradient(180deg, var(--sea) 0%, var(--sea-deep) 100%);
+    color:var(--cream); min-height:100dvh; overflow-x:hidden;
+    -webkit-tap-highlight-color: transparent; user-select:none;
+  }
+  h1,h2,h3,.display{font-family:'Baloo 2', sans-serif;}
+  button{font-family:inherit;}
+  #app{ max-width:480px; margin:0 auto; min-height:100dvh; display:flex; flex-direction:column; position:relative; padding-bottom: env(safe-area-inset-bottom); }
+
+  header{ padding:18px 20px 6px; display:flex; align-items:baseline; justify-content:space-between; }
+  header .title{ font-size:26px; font-weight:800; letter-spacing:-0.02em; }
+  header .title span{color:var(--coin);}
+  .day-chip{ font-size:12px; font-weight:600; background:rgba(255,247,232,0.1); border:1px solid rgba(255,247,232,0.18); padding:5px 10px; border-radius:100px; white-space:nowrap; }
+
+  .jar-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; padding:6px 20px 4px; }
+  .jar-svg{ width: min(72vw, 300px); height:auto; display:block; filter: drop-shadow(0 18px 24px rgba(0,0,0,0.35)); }
+  .jar-total{ position:absolute; top:52%; left:50%; transform:translate(-50%,-50%); text-align:center; pointer-events:none; }
+  .jar-total .amt{ font-family:'Baloo 2', sans-serif; font-weight:800; font-size:38px; color:var(--ink); line-height:1; }
+  .jar-total .lbl{ font-size:11px; font-weight:600; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.06em; margin-top:2px; }
+
+  .tabs{ display:flex; gap:6px; padding:14px 20px 10px; }
+  .tab{ flex:1; text-align:center; padding:9px 6px; border-radius:100px; font-size:13px; font-weight:600; background:rgba(255,247,232,0.06); border:1px solid rgba(255,247,232,0.12); color:rgba(255,247,232,0.65); cursor:pointer; transition:all .15s ease; }
+  .tab.active{ background:var(--cream); color:var(--sea-deep); border-color:var(--cream); }
+
+  main{ flex:1; padding:0 16px 130px; overflow-y:auto; }
+
+  .feed-item{ background:rgba(255,247,232,0.07); border:1px solid rgba(255,247,232,0.1); border-radius:16px; padding:12px 14px; margin-bottom:10px; display:flex; gap:12px; align-items:flex-start; }
+  .avatar{ flex:0 0 auto; width:38px;height:38px; border-radius:50%; background:linear-gradient(160deg, var(--coral), #e14d2e); color:#fff; display:flex;align-items:center;justify-content:center; font-weight:700; font-size:14px; font-family:'Baloo 2',sans-serif; }
+  .feed-body{flex:1; min-width:0;}
+  .feed-name{font-weight:700; font-size:14.5px; color:var(--cream);}
+  .feed-name .amt{color:var(--coin); font-weight:800; margin-left:6px;}
+  .feed-msg{font-size:13.5px; color:rgba(255,247,232,0.75); margin-top:2px; word-wrap:break-word;}
+  .feed-time{font-size:11px; color:rgba(255,247,232,0.4); margin-top:4px;}
+  .empty-state{ text-align:center; padding:50px 20px; color:rgba(255,247,232,0.55); }
+  .empty-state .emoji{font-size:38px; display:block; margin-bottom:10px;}
+  .empty-state b{color:var(--cream); display:block; font-family:'Baloo 2',sans-serif; font-size:17px; margin-bottom:4px;}
+
+  .bal-row{ display:flex; align-items:center; gap:12px; background:rgba(255,247,232,0.07); border:1px solid rgba(255,247,232,0.1); border-radius:16px; padding:12px 14px; margin-bottom:10px; }
+  .bal-name{flex:1; font-weight:600; font-size:14.5px;}
+  .bal-amt{font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; color:var(--coin);}
+  .bal-amt.zero{color:rgba(255,247,232,0.35); font-weight:700;}
+  .bal-name.me::after{ content:' (dig)'; font-weight:400; opacity:.6; font-size:12px; }
+
+  .section-label{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:rgba(255,247,232,0.45); margin:14px 4px 10px; }
+
+  .history-round{ background:rgba(255,247,232,0.05); border:1px solid rgba(255,247,232,0.1); border-radius:16px; padding:14px; margin-bottom:12px; }
+  .history-round .hr-title{font-weight:700; font-family:'Baloo 2',sans-serif; font-size:16px; color:var(--coin);}
+  .history-round .hr-sub{font-size:12px; color:rgba(255,247,232,0.5); margin-bottom:8px;}
+  .hr-line{display:flex; justify-content:space-between; font-size:13.5px; padding:3px 0; color:rgba(255,247,232,0.8);}
+
+  .bottombar{ position:fixed; bottom:0; left:0; right:0; max-width:480px; margin:0 auto; padding:14px 16px calc(16px + env(safe-area-inset-bottom)); background:linear-gradient(0deg, var(--sea-deep) 60%, rgba(7,59,64,0)); display:flex; gap:10px; }
+  .btn-brok{ flex:1; background:linear-gradient(160deg, var(--coral), #e14d2e); color:#fff; border:none; border-radius:100px; padding:16px 10px; font-family:'Baloo 2',sans-serif; font-weight:700; font-size:18px; box-shadow:0 8px 18px rgba(255,107,74,0.35); display:flex; align-items:center; justify-content:center; gap:8px; }
+  .btn-brok:active{transform:scale(0.97);}
+  .btn-brok:disabled{opacity:.5;}
+  .btn-settle{ flex:0 0 auto; width:52px; background:rgba(255,247,232,0.1); border:1px solid rgba(255,247,232,0.2); color:var(--cream); border-radius:100px; font-size:20px; }
+  .btn-share{ flex:0 0 auto; width:52px; background:rgba(255,247,232,0.1); border:1px solid rgba(255,247,232,0.2); color:var(--cream); border-radius:100px; font-size:20px; }
+
+  .sheet-backdrop{ position:fixed; inset:0; background:rgba(3,20,22,0.68); backdrop-filter: blur(2px); display:flex; align-items:flex-end; z-index:50; opacity:0; pointer-events:none; transition:opacity .2s ease; }
+  .sheet-backdrop.show{opacity:1; pointer-events:auto;}
+  .sheet{ width:100%; max-width:480px; margin:0 auto; background:var(--cream); color:var(--ink); border-radius:26px 26px 0 0; padding:10px 20px calc(24px + env(safe-area-inset-bottom)); transform:translateY(100%); transition:transform .28s cubic-bezier(.2,.9,.3,1.2); max-height:88dvh; overflow-y:auto; }
+  .sheet-backdrop.show .sheet{transform:translateY(0);}
+  .sheet-handle{ width:40px;height:5px;background:rgba(5,32,36,0.18);border-radius:10px; margin:8px auto 14px; }
+  .sheet h2{font-size:20px; margin:0 0 4px; font-weight:800;}
+  .sheet p.hint{font-size:13px; color:rgba(5,32,36,0.55); margin:0 0 16px;}
+
+  .name-grid{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;}
+  .name-pill{ padding:10px 16px; border-radius:100px; border:2px solid rgba(5,32,36,0.12); background:#fff; font-weight:700; font-size:14.5px; cursor:pointer; }
+  .name-pill.selected{ background:var(--coral); border-color:var(--coral); color:#fff; }
+  .name-pill.voted{ background:var(--sea); border-color:var(--sea); color:#fff; }
+  .name-pill:disabled{opacity:.4;}
+
+  textarea, input[type=text], input[type=email]{ width:100%; border:2px solid rgba(5,32,36,0.12); border-radius:14px; padding:12px 14px; font-size:15px; font-family:inherit; background:#fff; resize:none; color:var(--ink); margin-bottom:10px; }
+  textarea:focus, input:focus{outline:none; border-color:var(--sea);}
+  label.field-label{ font-size:12px; font-weight:700; color:rgba(5,32,36,0.5); text-transform:uppercase; letter-spacing:.05em; margin:4px 0 6px; display:block; }
+
+  .sheet-btn{ width:100%; padding:15px; border-radius:100px; border:none; font-family:'Baloo 2',sans-serif; font-weight:700; font-size:16px; margin-top:14px; cursor:pointer; }
+  .sheet-btn.primary{background:var(--sea); color:#fff;}
+  .sheet-btn.primary:disabled{background:rgba(5,32,36,0.15); color:rgba(5,32,36,0.4);}
+  .sheet-btn.ghost{background:transparent; color:rgba(5,32,36,0.5); font-weight:600; font-size:14px; padding:8px;}
+  .sheet-btn.danger{background:var(--coral); color:#fff;}
+
+  .vote-progress{ display:flex; align-items:center; gap:10px; margin:6px 0 16px; font-size:13.5px; font-weight:600; color:rgba(5,32,36,0.6); }
+  .vote-progress .bar{flex:1; height:8px; background:rgba(5,32,36,0.1); border-radius:10px; overflow:hidden;}
+  .vote-progress .bar > div{height:100%; background:var(--coral); border-radius:10px; transition:width .25s;}
+
+  .onboard{ padding:60px 26px 30px; text-align:center; }
+  .onboard .emoji{font-size:52px;}
+  .onboard h1{font-size:28px; margin:10px 0 6px;}
+  .onboard p{font-size:14.5px; color:rgba(255,247,232,0.7); line-height:1.5; margin-bottom:26px;}
+  .onboard-card{ background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); border-radius:20px; padding:20px; text-align:left; }
+  .onboard-card input{ background:rgba(255,247,232,0.95); }
+  .divider{ display:flex; align-items:center; gap:10px; color:rgba(255,247,232,0.4); font-size:12px; margin:22px 0; }
+  .divider::before, .divider::after{ content:''; flex:1; height:1px; background:rgba(255,247,232,0.15); }
+  .link-box{ background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.18); border-radius:14px; padding:12px 14px; font-size:13px; word-break:break-all; margin:10px 0 4px; color:rgba(255,247,232,0.8); }
+
+  .toast{ position:fixed; top:16px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--cream); padding:10px 18px; border-radius:100px; font-size:13.5px; font-weight:600; z-index:80; box-shadow:0 8px 20px rgba(0,0,0,.3); opacity:0; transition:opacity .25s, transform .25s; pointer-events:none; white-space:nowrap; max-width:88vw; overflow:hidden; text-overflow:ellipsis; }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(6px);}
+  .confetti{ position:fixed; inset:0; pointer-events:none; z-index:70; overflow:hidden; }
+  .spinner{ width:16px;height:16px;border-radius:50%; border:2px solid rgba(255,255,255,.4); border-top-color:#fff; display:inline-block; animation:spin .7s linear infinite; }
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============ CONFIG / IDENTITY ============ */
+const params = new URLSearchParams(location.search);
+let roomId = params.get('r') || localStorage.getItem('bk_lastRoom') || null;
+let profile = JSON.parse(localStorage.getItem('bk_profile_' + roomId) || 'null'); // {memberId, name}
+
+let state = null;
+let activeTab = 'feed';
+let polling = null;
+let toastTimer = null;
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+function shareUrl(){
+  const u = new URL(location.href);
+  u.search = '?r=' + roomId;
+  return u.toString();
+}
+function initials(name){ return (name||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
+function fmtTime(ts){
+  const d = new Date(ts), now = new Date();
+  const time = d.toLocaleTimeString('da-DK',{hour:'2-digit',minute:'2-digit'});
+  if(d.toDateString() === now.toDateString()) return 'i dag ' + time;
+  return d.toLocaleDateString('da-DK',{day:'2-digit',month:'short'}) + ' ' + time;
+}
+function dayCount(){
+  if(!state || !state.createdAt) return 0;
+  return Math.max(1, Math.floor((Date.now() - state.createdAt)/86400000) + 1);
+}
+function escapeHtml(s){ const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+/* ============ API ============ */
+async function api(path, body){
+  const r = await fetch('/api/' + path, {
+    method: body ? 'POST' : 'GET',
+    headers: body ? {'Content-Type':'application/json'} : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(data.error || 'Noget gik galt');
+  return data;
+}
+
+async function refreshState(silent){
+  try{
+    const { state: s } = await api('state?room=' + encodeURIComponent(roomId));
+    state = s;
+    render();
+  }catch(e){
+    if(!silent) toast('Kunne ikke hente data: ' + e.message);
+  }
+}
+function startPolling(){
+  if(polling) clearInterval(polling);
+  polling = setInterval(()=>refreshState(true), 3000);
+}
+
+/* ============ APP ENTRY ============ */
+const app = document.getElementById('app');
+
+async function boot(){
+  if(!roomId){
+    renderCreateOrJoin();
+    return;
+  }
+  localStorage.setItem('bk_lastRoom', roomId);
+  app.innerHTML = `<div class="onboard"><div class="spinner" style="width:28px;height:28px;border-width:3px;margin-top:100px;"></div></div>`;
+  try{
+    const { state: s } = await api('state?room=' + encodeURIComponent(roomId));
+    state = s;
+  }catch(e){
+    renderCreateOrJoin('Den brokkekasse findes ikke længere. Opret en ny, eller tjek linket.');
+    return;
+  }
+  if(!profile || !state.members.find(m=>m.id===profile.memberId)){
+    renderWhoAmI();
+    return;
+  }
+  render();
+  startPolling();
+}
+
+function renderCreateOrJoin(errorMsg){
+  app.innerHTML = `
+    <div class="onboard">
+      <div class="emoji">🍯</div>
+      <h1>Brokkekassen</h1>
+      <p>Ferie-reglen: brokker du dig, koster det 1€. Opret jeres fælles brokkekasse, og del linket med resten af familien.</p>
+      ${errorMsg ? `<p style="color:var(--coral); font-weight:600; margin-top:-14px;">${errorMsg}</p>` : ''}
+      <div class="onboard-card">
+        <button class="sheet-btn primary" id="createBtn" style="margin-top:0;">Opret ny brokkekasse</button>
+      </div>
+      <div class="divider">eller</div>
+      <div class="onboard-card">
+        <label class="field-label">Har du fået et link?</label>
+        <p style="font-size:12.5px; color:rgba(255,247,232,0.55); margin:0 0 10px;">Åbn linket direkte fra beskeden — så kommer du automatisk ind i den rigtige brokkekasse.</p>
+      </div>
+    </div>
+  `;
+  document.getElementById('createBtn').onclick = async ()=>{
+    document.getElementById('createBtn').innerHTML = '<span class="spinner"></span>';
+    try{
+      const r = await api('room', {});
+      roomId = r.roomId;
+      const u = new URL(location.href); u.search = '?r=' + roomId;
+      history.replaceState(null,'',u.toString());
+      localStorage.setItem('bk_lastRoom', roomId);
+      state = r.state;
+      renderWhoAmI(true);
+    }catch(e){ toast('Kunne ikke oprette: ' + e.message); }
+  };
+}
+
+function renderWhoAmI(justCreated){
+  app.innerHTML = `
+    <div class="onboard">
+      <div class="emoji">👋</div>
+      <h1>Hvem er du?</h1>
+      <p>${justCreated ? 'Brokkekassen er oprettet! Skriv dit navn, så er du med.' : 'Skriv dit navn for at komme ind i brokkekassen.'} Ingen adgangskode nødvendig.</p>
+      <div class="onboard-card">
+        <label class="field-label">Dit navn</label>
+        <input type="text" id="nameInput" placeholder="Fx Martin" maxlength="24" />
+        <label class="field-label">E-mail (valgfri)</label>
+        <input type="email" id="emailInput" placeholder="til fx afregning" maxlength="80" />
+        <button class="sheet-btn primary" id="joinBtn">Fortsæt</button>
+      </div>
+      ${justCreated ? `
+        <div class="divider">del med familien</div>
+        <div class="onboard-card">
+          <p style="margin:0 0 4px; font-size:13px; font-weight:600;">Send dette link til de andre:</p>
+          <div class="link-box" id="linkBox">${shareUrl()}</div>
+          <button class="sheet-btn ghost" id="copyBtn" style="margin-top:6px;">Kopiér link</button>
+        </div>
+      ` : ''}
+    </div>
+  `;
+  const nameInput = document.getElementById('nameInput');
+  nameInput.focus();
+  const go = async ()=>{
+    const name = nameInput.value.trim();
+    if(!name) return;
+    const email = document.getElementById('emailInput').value.trim();
+    document.getElementById('joinBtn').innerHTML = '<span class="spinner"></span>';
+    try{
+      const r = await api('join', { roomId, name, email });
+      profile = { memberId: r.memberId, name };
+      localStorage.setItem('bk_profile_' + roomId, JSON.stringify(profile));
+      state = r.state;
+      render();
+      startPolling();
+    }catch(e){ toast('Kunne ikke fortsætte: ' + e.message); document.getElementById('joinBtn').textContent = 'Fortsæt'; }
+  };
+  document.getElementById('joinBtn').onclick = go;
+  nameInput.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); go(); }});
+  if(justCreated){
+    document.getElementById('copyBtn').onclick = ()=>{
+      navigator.clipboard.writeText(shareUrl()).then(()=>toast('Link kopieret! 🔗')).catch(()=>{});
+    };
+  }
+}
+
+/* ============ MAIN RENDER ============ */
+function totalPool(){ return state.events.length; }
+function balances(){
+  const map = {}; state.members.forEach(m=>map[m.id]=0);
+  state.events.forEach(e=>{ if(map[e.memberId]!==undefined) map[e.memberId]++; });
+  return map;
+}
+
+function render(){
+  const total = totalPool();
+  const fillPct = Math.min(100, total * 4);
+  app.innerHTML = `
+    <header>
+      <div class="title">Brokke<span>kassen</span> 🏖️</div>
+      <div class="day-chip">Dag ${dayCount()}</div>
+    </header>
+    <div class="jar-wrap">
+      ${jarSVG(fillPct)}
+      <div class="jar-total"><div class="amt">${total}€</div><div class="lbl">i puljen</div></div>
+    </div>
+    <div class="tabs">
+      <div class="tab ${activeTab==='feed'?'active':''}" data-tab="feed">Brok-feed</div>
+      <div class="tab ${activeTab==='balance'?'active':''}" data-tab="balance">Regnskab</div>
+      <div class="tab ${activeTab==='history'?'active':''}" data-tab="history">Historik</div>
+    </div>
+    <main id="main"></main>
+    <div class="bottombar">
+      <button class="btn-brok" id="btnBrok" ${state.pending ? 'disabled' : ''}>${state.pending ? '⏳ Afstemning i gang…' : '📢 Nogen brokker sig…'}</button>
+      <button class="btn-settle" id="btnSettle" title="Gør op">💶</button>
+      <button class="btn-share" id="btnShare" title="Del link">🔗</button>
+    </div>
+  `;
+  document.querySelectorAll('.tab').forEach(t=>{ t.onclick = ()=>{ activeTab = t.dataset.tab; renderMain(); document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active', x===t)); }; });
+  document.getElementById('btnBrok').onclick = ()=> state.pending ? openVoteSheet() : openBrokSheet();
+  document.getElementById('btnSettle').onclick = openSettleSheet;
+  document.getElementById('btnShare').onclick = ()=>{
+    navigator.clipboard.writeText(shareUrl()).then(()=>toast('Link kopieret! 🔗')).catch(()=>toast(shareUrl()));
+  };
+  if(state.pending && !document.getElementById('sheetBackdrop')) openVoteSheet();
+  renderMain();
+}
+
+function jarSVG(fillPct){
+  const fillY = 190 - (fillPct/100)*150;
+  return `
+  <svg class="jar-svg" viewBox="0 0 220 240" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="coinFill" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#FFE49E"/><stop offset="55%" stop-color="#FFC93C"/><stop offset="100%" stop-color="#E8A317"/>
+      </linearGradient>
+      <clipPath id="jarClip"><path d="M40 34 Q40 26 50 26 L170 26 Q180 26 180 34 L180 178 Q180 210 150 210 L70 210 Q40 210 40 178 Z"/></clipPath>
+    </defs>
+    <rect x="72" y="6" width="76" height="20" rx="6" fill="#cfd6d2"/>
+    <rect x="72" y="6" width="76" height="8" rx="4" fill="#e8ece9"/>
+    <path d="M40 34 Q40 26 50 26 L170 26 Q180 26 180 34 L180 178 Q180 210 150 210 L70 210 Q40 210 40 178 Z" fill="rgba(255,247,232,0.12)" stroke="rgba(255,247,232,0.55)" stroke-width="3"/>
+    <g clip-path="url(#jarClip)">
+      <rect x="30" y="${fillY}" width="160" height="${230-fillY}" fill="url(#coinFill)"/>
+      <path d="M30 ${fillY} Q60 ${fillY-6} 90 ${fillY} T150 ${fillY} T210 ${fillY} V230 H30 Z" fill="#FFE49E" opacity="0.5"/>
+      ${coinDots(fillY)}
+    </g>
+    <path d="M52 34 Q48 34 48 42 L48 172" stroke="rgba(255,247,232,0.5)" stroke-width="3" fill="none" stroke-linecap="round"/>
+  </svg>`;
+}
+function coinDots(fillY){
+  if(fillY >= 208) return '';
+  let dots = '';
+  const rows = Math.floor((210-fillY)/16);
+  for(let i=0;i<Math.min(rows*3, 26);i++){
+    const x = 55 + (i*37)%110 + (i%2?8:0);
+    const y = fillY + 10 + Math.floor(i/3)*15;
+    dots += `<ellipse cx="${x}" cy="${y}" rx="9" ry="4" fill="#E8A317" opacity="0.55"/>`;
+  }
+  return dots;
+}
+
+function renderMain(){
+  const main = document.getElementById('main');
+  if(!main) return;
+  if(activeTab==='feed') return renderFeed(main);
+  if(activeTab==='balance') return renderBalance(main);
+  renderHistory(main);
+}
+function renderFeed(main){
+  if(!state.events.length){
+    main.innerHTML = `<div class="empty-state"><span class="emoji">🤐</span><b>Ingen brok endnu</b>Første gang nogen brokker sig, koster det 1€. Hold øje!</div>`;
+    return;
+  }
+  main.innerHTML = `<div class="section-label">Seneste brok</div>` + [...state.events].reverse().map(e=>{
+    const m = state.members.find(x=>x.id===e.memberId);
+    const name = m ? m.name : '?';
+    return `<div class="feed-item"><div class="avatar">${initials(name)}</div><div class="feed-body">
+      <div class="feed-name">${escapeHtml(name)} <span class="amt">+1€</span></div>
+      ${e.message ? `<div class="feed-msg">"${escapeHtml(e.message)}"</div>` : ''}
+      <div class="feed-time">${fmtTime(e.ts)}</div></div></div>`;
+  }).join('');
+}
+function renderBalance(main){
+  const bal = balances();
+  main.innerHTML = `<div class="section-label">Hvem skylder hvad (denne runde)</div>` + [...state.members].sort((a,b)=>bal[b.id]-bal[a.id]).map(m=>{
+    const amt = bal[m.id]||0;
+    return `<div class="bal-row"><div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${initials(m.name)}</div><div class="bal-name ${profile && m.id===profile.memberId?'me':''}">${escapeHtml(m.name)}</div><div class="bal-amt ${amt===0?'zero':''}">${amt}€</div></div>`;
+  }).join('');
+}
+function renderHistory(main){
+  if(!state.history.length){
+    main.innerHTML = `<div class="empty-state"><span class="emoji">📜</span><b>Ingen afregnede runder endnu</b>Tryk på 💶 for at gøre op og starte en ny runde.</div>`;
+    return;
+  }
+  main.innerHTML = `<div class="section-label">Tidligere runder</div>` + [...state.history].reverse().map(r=>{
+    const lines = Object.entries(r.totals).map(([id,amt])=>{
+      const m = state.members.find(x=>x.id===id);
+      return `<div class="hr-line"><span>${escapeHtml(m?m.name:'?')}</span><span>${amt}€</span></div>`;
+    }).join('');
+    const start = new Date(r.startedAt).toLocaleDateString('da-DK',{day:'2-digit',month:'short'});
+    const end = new Date(r.closedAt).toLocaleDateString('da-DK',{day:'2-digit',month:'short'});
+    return `<div class="history-round"><div class="hr-title">${r.total}€ i alt</div><div class="hr-sub">${start} – ${end} · ${r.events.length} brok</div>${lines}</div>`;
+  }).join('');
+}
+
+/* ============ SHEETS ============ */
+function openSheet(html, onOpen){
+  let backdrop = document.getElementById('sheetBackdrop');
+  if(backdrop) backdrop.remove();
+  backdrop = document.createElement('div');
+  backdrop.className = 'sheet-backdrop';
+  backdrop.id = 'sheetBackdrop';
+  backdrop.innerHTML = `<div class="sheet"><div class="sheet-handle"></div>${html}</div>`;
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(()=>backdrop.classList.add('show'));
+  if(onOpen) onOpen();
+}
+function closeSheet(){
+  const b = document.getElementById('sheetBackdrop');
+  if(!b) return;
+  b.classList.remove('show');
+  setTimeout(()=>b.remove(), 220);
+}
+
+let draftMessage = '';
+function openBrokSheet(){
+  const chips = state.members.map(m=>`<div class="name-pill" data-id="${m.id}">${escapeHtml(m.name)}</div>`).join('');
+  let selectedId = null;
+  openSheet(`
+    <h2>Hvem brokker sig? 🙄</h2>
+    <p class="hint">Peg på synderen — så starter afstemningen for alle.</p>
+    <div class="name-grid" id="whoGrid">${chips}</div>
+    <textarea id="msgInput" rows="2" maxlength="80" placeholder='F.eks. "over prisen på jetski..."'></textarea>
+    <button class="sheet-btn primary" id="nextBtn" disabled>Start afstemning</button>
+    <button class="sheet-btn ghost" id="cancelBtn">Annuller</button>
+  `, ()=>{
+    document.querySelectorAll('#whoGrid .name-pill').forEach(p=>{
+      p.onclick = ()=>{
+        document.querySelectorAll('#whoGrid .name-pill').forEach(x=>x.classList.remove('selected'));
+        p.classList.add('selected'); selectedId = p.dataset.id;
+        document.getElementById('nextBtn').disabled = false;
+      };
+    });
+    document.getElementById('cancelBtn').onclick = closeSheet;
+    document.getElementById('nextBtn').onclick = async ()=>{
+      const message = document.getElementById('msgInput').value.trim();
+      document.getElementById('nextBtn').innerHTML = '<span class="spinner"></span>';
+      try{
+        const r = await api('brok', { roomId, memberId: selectedId, message });
+        state = r.state;
+        openVoteSheet();
+        renderMain(); render();
+      }catch(e){ toast(e.message); }
+    };
+  });
+}
+
+function openVoteSheet(){
+  if(!state.pending){ closeSheet(); return; }
+  const complainer = state.members.find(m=>m.id===state.pending.memberId);
+  const voters = state.members.filter(m=>m.id!==state.pending.memberId);
+  const need = state.pending.need;
+  const count = state.pending.votes.length;
+  const myVote = profile && state.pending.votes.includes(profile.memberId);
+  const canVote = profile && profile.memberId !== state.pending.memberId;
+  const chips = voters.map(m=>`<div class="name-pill ${state.pending.votes.includes(m.id)?'voted':''}" data-id="${m.id}">${escapeHtml(m.name)}${state.pending.votes.includes(m.id)?' ✓':''}</div>`).join('');
+  openSheet(`
+    <h2>Bevis det! 👉</h2>
+    <p class="hint">Mindst ${need} af ${voters.length} skal pege på, at <b>${escapeHtml(complainer ? complainer.name : '?')}</b> brokkede sig${state.pending.message ? ` — "${escapeHtml(state.pending.message)}"` : ''}.</p>
+    <div class="vote-progress"><span id="voteCount">${count}/${need}</span><div class="bar"><div id="voteBar" style="width:${Math.min(100,count/need*100)}%"></div></div></div>
+    <div class="name-grid" id="voteGrid">${chips}</div>
+    ${!canVote ? `<p class="hint">Du kan ikke stemme på dig selv — vent på de andre.</p>` : ''}
+    <button class="sheet-btn ghost" id="cancelPendingBtn">Fortryd (afblæs)</button>
+    <button class="sheet-btn ghost" id="closeVoteBtn">Luk (bliver ved med at køre)</button>
+  `, ()=>{
+    if(canVote){
+      document.querySelectorAll('#voteGrid .name-pill').forEach(p=>{
+        if(p.dataset.id !== profile.memberId) { p.style.opacity='.55'; p.style.pointerEvents='none'; return; }
+        p.onclick = async ()=>{
+          try{
+            const r = await api('vote', { roomId, voterId: profile.memberId });
+            state = r.state;
+            if(r.confirmed){
+              closeSheet();
+              toast(`💰 ${complainer ? complainer.name : 'Nogen'} skylder nu 1€ mere`);
+              launchCoin();
+              activeTab = 'feed';
+              render();
+            }else{
+              openVoteSheet();
+              render();
+            }
+          }catch(e){ toast(e.message); }
+        };
+      });
+    }
+    document.getElementById('closeVoteBtn').onclick = closeSheet;
+    document.getElementById('cancelPendingBtn').onclick = async ()=>{
+      try{ const r = await api('cancel', { roomId }); state = r.state; closeSheet(); render(); }catch(e){ toast(e.message); }
+    };
+  });
+}
+
+function launchCoin(){
+  const layer = document.createElement('div'); layer.className = 'confetti'; document.body.appendChild(layer);
+  for(let i=0;i<10;i++){
+    const c = document.createElement('div');
+    c.style.position='absolute'; c.style.left=(45+Math.random()*10)+'%'; c.style.top='-20px';
+    c.style.width='16px'; c.style.height='16px'; c.style.borderRadius='50%';
+    c.style.background='radial-gradient(circle at 35% 30%, #FFE49E, #FFC93C 55%, #E8A317 100%)';
+    c.style.boxShadow='0 2px 3px rgba(0,0,0,.3)';
+    c.style.transition = `transform ${900+Math.random()*500}ms cubic-bezier(.4,0,.2,1), opacity 300ms ease ${700+Math.random()*400}ms`;
+    layer.appendChild(c);
+    requestAnimationFrame(()=>{ const x=(Math.random()-0.5)*160; c.style.transform=`translate(${x}px, ${window.innerHeight*0.45}px) rotate(${Math.random()*360}deg)`; c.style.opacity='0'; });
+  }
+  setTimeout(()=>layer.remove(), 1600);
+}
+
+function openSettleSheet(){
+  if(!state.events.length){ toast('Puljen er tom — intet at gøre op endnu 🙂'); return; }
+  const bal = balances();
+  const rows = state.members.map(m=>`<div class="hr-line"><span>${escapeHtml(m.name)}</span><span>${bal[m.id]||0}€</span></div>`).join('');
+  openSheet(`
+    <h2>Gør op 💶</h2>
+    <p class="hint">Total i puljen: <b>${totalPool()}€</b>. Dette lukker runden for alle og gemmer den i historikken. Puljen starter forfra.</p>
+    ${rows}
+    <button class="sheet-btn danger" id="doSettle">Bekræft og start ny runde</button>
+    <button class="sheet-btn ghost" id="cancelSettle">Annuller</button>
+  `, ()=>{
+    document.getElementById('cancelSettle').onclick = closeSheet;
+    document.getElementById('doSettle').onclick = async ()=>{
+      try{ const r = await api('settle', { roomId }); state = r.state; closeSheet(); toast('✅ Runde afregnet — ny runde startet!'); activeTab='history'; render(); }
+      catch(e){ toast(e.message); }
+    };
+  });
+}
+
+/* ============ INIT ============ */
+boot();
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
+</script>
+</body>
+</html>
