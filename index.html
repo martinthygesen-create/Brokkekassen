@@ -121,7 +121,7 @@
   .divider::before, .divider::after{ content:''; flex:1; height:1px; background:rgba(255,247,232,0.15); }
   .link-box{ background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.18); border-radius:14px; padding:12px 14px; font-size:13px; word-break:break-all; margin:10px 0 4px; color:rgba(255,247,232,0.8); }
 
-  .toast{ position:fixed; top:16px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--cream); padding:10px 18px; border-radius:100px; font-size:13.5px; font-weight:600; z-index:80; box-shadow:0 8px 20px rgba(0,0,0,.3); opacity:0; transition:opacity .25s, transform .25s; pointer-events:none; white-space:nowrap; max-width:88vw; overflow:hidden; text-overflow:ellipsis; }
+  .toast{ position:fixed; top:16px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--cream); padding:10px 18px; border-radius:20px; font-size:13.5px; font-weight:600; z-index:80; box-shadow:0 8px 20px rgba(0,0,0,.3); opacity:0; transition:opacity .25s, transform .25s; pointer-events:none; max-width:88vw; text-align:center; line-height:1.35; }
   .toast.show{opacity:1; transform:translateX(-50%) translateY(6px);}
   .confetti{ position:fixed; inset:0; pointer-events:none; z-index:70; overflow:hidden; }
   .spinner{ width:16px;height:16px;border-radius:50%; border:2px solid rgba(255,255,255,.4); border-top-color:#fff; display:inline-block; animation:spin .7s linear infinite; }
@@ -143,29 +143,9 @@ let activeTab = 'feed';
 let polling = null;
 let toastTimer = null;
 
-/* ============ ADMIN (til grin, ikke sikkerhed) ============ */
-const ADMIN_CODE = '1234';
-function isAdmin(){ return localStorage.getItem('bk_admin_code') === ADMIN_CODE; }
-function unlockAdmin(){
-  const code = prompt('Admin-kode:');
-  if(code === null) return;
-  if(code === ADMIN_CODE){
-    localStorage.setItem('bk_admin_code', code);
-    toast('🔓 Admin-tilstand aktiveret');
-    render();
-  }
-  // forkert kode: sig ingenting, så det ikke afslører at der findes en admin-funktion
-}
-function bindAdminUnlock(el){
-  if(!el || isAdmin()) return;
-  let timer = null;
-  const start = ()=>{ timer = setTimeout(unlockAdmin, 700); };
-  const clear = ()=>{ if(timer) clearTimeout(timer); };
-  el.addEventListener('pointerdown', start);
-  el.addEventListener('pointerup', clear);
-  el.addEventListener('pointerleave', clear);
-  el.addEventListener('pointercancel', clear);
-}
+/* ============ ADMIN ============ */
+// Den der opretter en brokkekasse er dens admin (er altid members[0] i det rum).
+function isAdmin(){ return !!(state && profile && state.members[0] && state.members[0].id === profile.memberId); }
 
 /* ============ SJOV / BANTER ============ */
 const BANTER = [
@@ -209,7 +189,7 @@ function toast(msg){
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(()=>t.classList.remove('show'), 2200);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 3000);
 }
 function shareUrl(){
   const u = new URL(location.href);
@@ -222,7 +202,7 @@ async function doShare(){
     try{ await navigator.share({ title:'Brokkekassen', text:'Kom med i vores brokkekasse!', url }); return; }
     catch(e){ if(e && e.name === 'AbortError') return; }
   }
-  try{ await navigator.clipboard.writeText(url); toast('Link kopieret! 🔗'); }
+  try{ await navigator.clipboard.writeText(url); toast('Link til Brokkekassen kopieret. Send det til deltagere.'); }
   catch(e){ prompt('Kopiér linket manuelt:', url); }
 }
 function extractRoomId(input){
@@ -308,23 +288,33 @@ async function boot(){
   startPolling();
 }
 
+function isIOSDevice(){ return /iPad|iPhone|iPod/.test(navigator.userAgent); }
+
 function renderCreateOrJoin(errorMsg){
   app.innerHTML = `
     <div class="onboard">
       <div class="emoji">🍯</div>
       <h1>Brokkekassen</h1>
-      <p>Ferie-reglen: brokker du dig, koster det 1€. Indsæt linket du har fået fra familien for at være med.</p>
+      <p>Ferie-reglen: brokker du dig, koster det 1€. Opret jeres egen brokkekasse, eller gå med i en du har fået et link til.</p>
       ${errorMsg ? `<p style="color:var(--coral); font-weight:600; margin-top:-14px;">${errorMsg}</p>` : ''}
       <div class="onboard-card">
-        <label class="field-label">Link eller kode</label>
+        <button class="sheet-btn primary" id="createBtn" style="margin-top:0;">Opret ny brokkekasse</button>
+      </div>
+      <div class="divider">eller</div>
+      <div class="onboard-card">
+        <label class="field-label">Har du fået et link?</label>
         <input type="text" id="joinInput" placeholder="Indsæt link eller kode her" />
         <button class="sheet-btn primary" id="joinRoomBtn" style="margin-top:0;">Gå til brokkekassen</button>
       </div>
-      <button class="sheet-btn ghost" id="createBtn" style="margin-top:26px; color:rgba(255,247,232,0.4); font-size:12px;">Opret ny brokkekasse</button>
+      <div class="onboard-card" style="margin-top:14px; background:rgba(255,247,232,0.05); border-style:dashed;">
+        <p style="margin:0; font-size:12.5px; color:rgba(255,247,232,0.6); text-align:center; line-height:1.5;">
+          📲 <b style="color:rgba(255,247,232,0.8);">Tip:</b> Føj Brokkekassen til hjemmeskærmen for hurtig adgang —
+          ${isIOSDevice() ? 'tryk Del-ikonet i Safari nedenunder → "Føj til hjemmeskærm"' : 'åbn menuen (⋮) i Chrome → "Installér app"'}.
+        </p>
+      </div>
     </div>
   `;
   const joinInput = document.getElementById('joinInput');
-  joinInput.focus();
   const goJoin = async ()=>{
     const rid = extractRoomId(joinInput.value);
     if(!rid){ toast('Indsæt link eller kode'); return; }
@@ -346,10 +336,8 @@ function renderCreateOrJoin(errorMsg){
   document.getElementById('joinRoomBtn').onclick = goJoin;
   joinInput.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); goJoin(); }});
   document.getElementById('createBtn').onclick = async ()=>{
-    const code = prompt('Admin-kode for at oprette en ny brokkekasse:');
-    if(code === null) return;
-    if(code !== ADMIN_CODE){ toast('Forkert kode'); return; }
-    localStorage.setItem('bk_admin_code', code);
+    const btn = document.getElementById('createBtn');
+    btn.innerHTML = '<span class="spinner"></span>';
     try{
       const r = await api('room', {});
       roomId = r.roomId;
@@ -358,7 +346,7 @@ function renderCreateOrJoin(errorMsg){
       localStorage.setItem('bk_lastRoom', roomId);
       state = r.state;
       renderWhoAmI(true);
-    }catch(e){ toast('Kunne ikke oprette: ' + e.message); }
+    }catch(e){ toast('Kunne ikke oprette: ' + e.message); btn.textContent = 'Opret ny brokkekasse'; }
   };
 }
 
@@ -423,7 +411,10 @@ function render(){
   app.innerHTML = `
     <header>
       <div class="title">Brokke<span>kassen</span> 🏖️</div>
-      <div class="day-chip">Dag ${dayCount()}</div>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <div class="day-chip">Dag ${dayCount()}</div>
+        <button id="btnShare" title="Del invite-link" style="width:26px; height:26px; padding:0; display:flex; align-items:center; justify-content:center; font-size:12px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.55); border-radius:100px;">🔗</button>
+      </div>
     </header>
     <div class="jar-wrap">
       ${jarSVG(fillPct)}
@@ -439,17 +430,15 @@ function render(){
       <button class="btn-brok" id="btnBrok" ${state.pending ? 'disabled' : ''}>${state.pending ? '⏳ Afstemning i gang…' : '📢 Nogen brokker sig…'}</button>
       ${isAdmin() ? `<button class="btn-settle" id="btnSettle" title="Gør op">💶</button>` : ''}
       ${isAdmin() ? `<button class="btn-settle" id="btnReset" title="Nulstil alt">🧹</button>` : ''}
-      <button class="btn-share" id="btnShare" title="Del link">🔗</button>
     </div>
   `;
   document.querySelectorAll('.tab').forEach(t=>{ t.onclick = ()=>{ activeTab = t.dataset.tab; renderMain(); document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active', x===t)); }; });
   document.getElementById('btnBrok').onclick = ()=> state.pending ? openVoteSheet() : openBrokSheet();
-  bindAdminUnlock(document.querySelector('.day-chip'));
+  document.getElementById('btnShare').onclick = doShare;
   const btnSettle = document.getElementById('btnSettle');
   if(btnSettle) btnSettle.onclick = openSettleSheet;
   const btnReset = document.getElementById('btnReset');
   if(btnReset) btnReset.onclick = openResetSheet;
-  document.getElementById('btnShare').onclick = doShare;
   if(state.pending && !document.getElementById('sheetBackdrop')) openVoteSheet();
   renderMain();
 }
@@ -627,7 +616,7 @@ function openVoteSheet(){
     document.getElementById('closeVoteBtn').onclick = closeSheet;
     const cancelBtn = document.getElementById('cancelPendingBtn');
     if(cancelBtn) cancelBtn.onclick = async ()=>{
-      try{ const r = await api('cancel', { roomId, code: localStorage.getItem('bk_admin_code') }); state = r.state; closeSheet(); render(); }catch(e){ toast(e.message); }
+      try{ const r = await api('cancel', { roomId, actorId: profile.memberId }); state = r.state; closeSheet(); render(); }catch(e){ toast(e.message); }
     };
   });
 }
@@ -660,7 +649,7 @@ function openSettleSheet(){
   `, ()=>{
     document.getElementById('cancelSettle').onclick = closeSheet;
     document.getElementById('doSettle').onclick = async ()=>{
-      try{ const r = await api('settle', { roomId, code: localStorage.getItem('bk_admin_code') }); state = r.state; closeSheet(); toast('✅ Runde afregnet — ny runde startet!'); activeTab='history'; render(); }
+      try{ const r = await api('settle', { roomId, actorId: profile.memberId }); state = r.state; closeSheet(); toast('✅ Runde afregnet — ny runde startet!'); activeTab='history'; render(); }
       catch(e){ toast(e.message); }
     };
   });
@@ -675,7 +664,7 @@ function openResetSheet(){
   `, ()=>{
     document.getElementById('cancelReset').onclick = closeSheet;
     document.getElementById('doReset').onclick = async ()=>{
-      try{ const r = await api('reset', { roomId, code: localStorage.getItem('bk_admin_code') }); state = r.state; closeSheet(); toast('🧹 Alt er nulstillet'); activeTab='feed'; render(); }
+      try{ const r = await api('reset', { roomId, actorId: profile.memberId }); state = r.state; closeSheet(); toast('🧹 Alt er nulstillet'); activeTab='feed'; render(); }
       catch(e){ toast(e.message); }
     };
   });

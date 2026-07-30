@@ -1,8 +1,12 @@
 const { redis } = require('./redis');
 
 const KEY = (roomId) => `brokkekassen:room:${roomId}`;
-const ADMIN_CODE = process.env.ADMIN_CODE || '1234';
-function isAdminCode(code) { return typeof code === 'string' && code === ADMIN_CODE; }
+
+// Den der opretter en brokkekasse er dens admin: den første, der nogensinde
+// joiner rummet, bliver stående som members[0] og er dermed admin for altid.
+function isAdmin(state, memberId) {
+  return !!(state && state.members[0] && state.members[0].id === memberId);
+}
 
 function emptyState() {
   return {
@@ -50,4 +54,4 @@ function neededVotes(totalMembers) {
   return Math.min(others, Math.max(2, Math.ceil((others * 2) / 3)));
 }
 
-module.exports = { getState, setState, createRoom, genRoomId, uid, emptyState, neededVotes, isAdminCode };
+module.exports = { getState, setState, createRoom, genRoomId, uid, emptyState, neededVotes, isAdmin };
