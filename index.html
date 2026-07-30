@@ -293,6 +293,19 @@ async function boot(){
 }
 
 function isIOSDevice(){ return /iPad|iPhone|iPod/.test(navigator.userAgent); }
+function isStandalone(){ return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true; }
+function homeScreenTip(strong){
+  if(isStandalone()) return '';
+  const how = isIOSDevice() ? 'tryk Del-ikonet i Safari nedenunder → "Føj til hjemmeskærm"' : 'åbn menuen (⋮) i Chrome → "Installér app"';
+  return `
+    <div class="onboard-card" style="margin:14px 0; background:rgba(255,247,232,0.05); border-style:dashed;">
+      <p style="margin:0; font-size:12.5px; color:rgba(255,247,232,0.6); text-align:center; line-height:1.5;">
+        📲 <b style="color:rgba(255,247,232,0.8);">Tip:</b> ${strong ? 'Føj til hjemmeskærmen <u>før</u> du skriver dit navn herunder' : 'Føj Brokkekassen til hjemmeskærmen for hurtig adgang'} —
+        ${how}${strong ? '. Ellers skal du skrive navnet igen, næste gang du åbner appen fra hjemmeskærmen' : ''}.
+      </p>
+    </div>
+  `;
+}
 
 function renderCreateOrJoin(errorMsg){
   app.innerHTML = `
@@ -310,12 +323,7 @@ function renderCreateOrJoin(errorMsg){
         <input type="text" id="joinInput" placeholder="Indsæt link eller kode her" />
         <button class="sheet-btn primary" id="joinRoomBtn" style="margin-top:0;">Gå til brokkekassen</button>
       </div>
-      <div class="onboard-card" style="margin-top:14px; background:rgba(255,247,232,0.05); border-style:dashed;">
-        <p style="margin:0; font-size:12.5px; color:rgba(255,247,232,0.6); text-align:center; line-height:1.5;">
-          📲 <b style="color:rgba(255,247,232,0.8);">Tip:</b> Føj Brokkekassen til hjemmeskærmen for hurtig adgang —
-          ${isIOSDevice() ? 'tryk Del-ikonet i Safari nedenunder → "Føj til hjemmeskærm"' : 'åbn menuen (⋮) i Chrome → "Installér app"'}.
-        </p>
-      </div>
+      ${homeScreenTip(false)}
     </div>
   `;
   const joinInput = document.getElementById('joinInput');
@@ -360,6 +368,7 @@ function renderWhoAmI(justCreated){
       <div class="emoji">👋</div>
       <h1>Hvem er du?</h1>
       <p>${justCreated ? 'Brokkekassen er oprettet! Skriv dit navn, så er du med.' : 'Skriv dit navn for at komme ind i brokkekassen.'} Ingen adgangskode nødvendig.</p>
+      ${homeScreenTip(true)}
       <div class="onboard-card">
         <label class="field-label">Dit navn</label>
         <input type="text" id="nameInput" placeholder="Fx Martin" maxlength="24" />
