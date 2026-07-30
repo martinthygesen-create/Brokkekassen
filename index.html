@@ -414,10 +414,10 @@ function renderWhoAmI(justCreated){
 }
 
 /* ============ MAIN RENDER ============ */
-function totalPool(){ return state.events.length; }
+function totalPool(){ return state.events.filter(e=>!e.free).length; }
 function balances(){
   const map = {}; state.members.forEach(m=>map[m.id]=0);
-  state.events.forEach(e=>{ if(map[e.memberId]!==undefined) map[e.memberId]++; });
+  state.events.forEach(e=>{ if(!e.free && map[e.memberId]!==undefined) map[e.memberId]++; });
   return map;
 }
 
@@ -505,7 +505,7 @@ function renderFeed(main){
     const m = state.members.find(x=>x.id===e.memberId);
     const name = m ? m.name : '?';
     return `<div class="feed-item"><div class="avatar">${initials(name)}</div><div class="feed-body">
-      <div class="feed-name">${escapeHtml(name)} <span class="amt">+1€</span></div>
+      <div class="feed-name">${escapeHtml(name)} <span class="amt">${e.free ? '🎫 gratis' : '+1€'}</span></div>
       ${e.message ? `<div class="feed-msg">"${escapeHtml(e.message)}"</div>` : ''}
       <div class="feed-time">${fmtTime(e.ts)}</div></div></div>`;
   }).join('');
@@ -516,7 +516,8 @@ function renderBalance(main){
   main.innerHTML = `<div class="section-label">Hvem skylder hvad (denne runde)</div>` + [...state.members].sort((a,b)=>bal[b.id]-bal[a.id]).map(m=>{
     const amt = bal[m.id]||0;
     const crown = amt > 0 && amt === maxAmt ? ' 👑' : '';
-    return `<div class="bal-row"><div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${initials(m.name)}</div><div class="feed-body"><div class="bal-name ${profile && m.id===profile.memberId?'me':''}">${escapeHtml(m.name)}${crown}</div><div style="font-size:11.5px; color:rgba(255,247,232,0.4);">${titleFor(amt)}</div></div><div class="bal-amt ${amt===0?'zero':''}">${amt}€</div></div>`;
+    const freeTag = state.freeBrokMemberId === m.id ? ' 🎫' : '';
+    return `<div class="bal-row"><div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${initials(m.name)}</div><div class="feed-body"><div class="bal-name ${profile && m.id===profile.memberId?'me':''}">${escapeHtml(m.name)}${crown}${freeTag}</div><div style="font-size:11.5px; color:rgba(255,247,232,0.4);">${state.freeBrokMemberId === m.id ? 'Har et gratis brok til gode' : titleFor(amt)}</div></div><div class="bal-amt ${amt===0?'zero':''}">${amt}€</div></div>`;
   }).join('');
 }
 function renderHistory(main){
@@ -639,7 +640,11 @@ function openVoteSheet(){
             if(r.confirmed){
               closeSheet();
               launchCoinToJar(()=>{
-                toast(`💰 ${complainer ? complainer.name : 'Nogen'} skylder nu 1€ mere — ${randomBanter()}`);
+                if(r.free){
+                  toast(`🎫 ${complainer ? complainer.name : 'Nogen'} brugte sit gratis brok — denne var på husets regning!`);
+                }else{
+                  toast(`💰 ${complainer ? complainer.name : 'Nogen'} skylder nu 1€ mere — ${randomBanter()}`);
+                }
                 activeTab = 'feed';
                 render();
               });
@@ -745,7 +750,15 @@ function openSettleSheet(){
   `, ()=>{
     document.getElementById('cancelSettle').onclick = closeSheet;
     document.getElementById('doSettle').onclick = async ()=>{
-      try{ const r = await api('settle', { roomId, actorId: profile.memberId }); state = r.state; closeSheet(); toast('✅ Runde afregnet — ny runde startet!'); activeTab='history'; render(); }
+      try{
+        const r = await api('settle', { roomId, actorId: profile.memberId });
+        state = r.state;
+        closeSheet();
+        const winner = state.members.find(m=>m.id===state.freeBrokMemberId);
+        toast(winner ? `✅ Runde afregnet! ${winner.name} brokkede sig mindst og får et gratis brok 🎫` : '✅ Runde afregnet — ny runde startet!');
+        activeTab='history';
+        render();
+      }
       catch(e){ toast(e.message); }
     };
   });
@@ -768,7 +781,27 @@ function openResetSheet(){
 
 /* ============ INIT ============ */
 boot();
-if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').then(reg=>{
+    document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) reg.update().catch(()=>{}); });
+    reg.addEventListener('updatefound', ()=>{
+      const nw = reg.installing;
+      if(!nw) return;
+      nw.addEventListener('statechange', ()=>{
+        if(nw.state === 'installed' && navigator.serviceWorker.controller){
+          toast('🔄 Ny version klar — opdaterer...');
+          setTimeout(()=>location.reload(), 900);
+        }
+      });
+    });
+  }).catch(()=>{});
+  let swRefreshed = false;
+  navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+    if(swRefreshed) return;
+    swRefreshed = true;
+    location.reload();
+  });
+}
 </script>
 </body>
 </html>

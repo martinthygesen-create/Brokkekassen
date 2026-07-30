@@ -12,18 +12,28 @@ module.exports = async (req, res) => {
 
     const totals = {};
     state.members.forEach(m => (totals[m.id] = 0));
-    state.events.forEach(e => { if (totals[e.memberId] !== undefined) totals[e.memberId]++; });
+    state.events.forEach(e => { if (!e.free && totals[e.memberId] !== undefined) totals[e.memberId]++; });
 
     state.history.push({
       startedAt: state.createdAt,
       closedAt: Date.now(),
-      total: state.events.length,
+      total: state.events.filter(e => !e.free).length,
       totals,
       events: state.events,
     });
+
+    // den der brokkede sig mindst denne runde får et gratis brok i næste runde
+    let nextFree = null;
+    if (state.members.length > 1) {
+      const min = Math.min(...state.members.map(m => totals[m.id] || 0));
+      const candidates = state.members.filter(m => (totals[m.id] || 0) === min);
+      nextFree = candidates[Math.floor(Math.random() * candidates.length)].id;
+    }
+
     state.events = [];
     state.pending = null;
     state.createdAt = Date.now();
+    state.freeBrokMemberId = nextFree;
     await setState(roomId, state);
     res.status(200).json({ state });
   } catch (e) {

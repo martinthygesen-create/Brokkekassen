@@ -16,19 +16,23 @@ module.exports = async (req, res) => {
     else state.pending.votes.splice(idx, 1);
 
     let confirmed = false;
+    let free = false;
     if (state.pending.votes.length >= state.pending.need) {
+      free = !!(state.freeBrokMemberId && state.freeBrokMemberId === state.pending.memberId);
       state.events.push({
         id: state.pending.id,
         memberId: state.pending.memberId,
         message: state.pending.message,
         ts: Date.now(),
         votes: state.pending.votes,
+        free,
       });
+      if (free) state.freeBrokMemberId = null;
       state.pending = null;
       confirmed = true;
     }
     await setState(roomId, state);
-    res.status(200).json({ state, confirmed });
+    res.status(200).json({ state, confirmed, free });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

@@ -12,9 +12,10 @@ function emptyState() {
   return {
     createdAt: Date.now(),
     members: [],   // {id, name}
-    events: [],    // {id, memberId, message, ts, votes:[voterIds]}
+    events: [],    // {id, memberId, message, ts, votes:[voterIds], free}
     pending: null, // {id, memberId, message, votes:[voterIds]}
     history: [],   // {startedAt, closedAt, total, totals:{memberId:amt}, events:[...]}
+    freeBrokMemberId: null, // den der brokkede sig mindst sidste runde får ét gratis brok
   };
 }
 

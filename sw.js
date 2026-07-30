@@ -1,4 +1,4 @@
-const CACHE = 'brokkekassen-v3';
+const CACHE = 'brokkekassen-v4';
 const FILES = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', e => {
@@ -23,5 +23,17 @@ self.addEventListener('fetch', e => {
     );
     return;
   }
+  // App-skallen skal altid tjekke netværket først, så en ny deployment vises
+  // med det samme — ellers sidder installerede PWA'er (hjemmeskærm-ikon) fast
+  // på en gammel cachet version, indtil cachen tilfældigvis udløber.
+  if (e.request.mode === 'navigate' || url.pathname.endsWith('index.html') || url.pathname === '/') {
+    e.respondWith(
+      fetch(e.request)
+        .then(res => { caches.open(CACHE).then(c => c.put(e.request, res.clone())); return res; })
+        .catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
   e.respondWith(caches.match(e.request).then(cached => cached || fetch(e.request).catch(() => cached)));
 });
