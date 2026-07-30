@@ -54,10 +54,6 @@
   .segmented{ display:flex; gap:2px; background:rgba(255,247,232,0.06); border-radius:100px; padding:3px; margin-bottom:16px; }
   .segmented .seg{ flex:1; text-align:center; padding:7px 6px; border-radius:100px; font-size:12px; font-weight:700; color:rgba(255,247,232,0.5); cursor:pointer; transition:all .15s ease; }
   .segmented .seg.active{ background:rgba(255,247,232,0.15); color:var(--cream); }
-  .list-head{ display:flex; align-items:center; justify-content:space-between; margin:14px 4px 10px; }
-  .list-head .section-label{ margin:0; }
-  .sort-btn{ background:none; border:none; color:rgba(255,247,232,0.45); font-size:11.5px; font-weight:600; padding:2px 0; cursor:pointer; display:flex; align-items:center; gap:3px; }
-  .sort-btn:active{ opacity:.6; }
 
   main{ flex:1; padding:0 16px 130px; overflow-y:auto; }
 
@@ -156,7 +152,6 @@ let profile = JSON.parse(localStorage.getItem('bk_profile_' + roomId) || 'null')
 let state = null;
 let activeTab = 'feed';
 let brokListSubTab = 'alltime'; // 'today' | 'alltime' — undersort inde i Broklisten-fanen; alltime er det vigtigste og vises først
-let brokListSortDesc = true; // true = flest brok øverst, false = mindst brok (Helgenen) øverst
 let polling = null;
 let toastTimer = null;
 
@@ -581,9 +576,22 @@ function allTimeTotals(){
   return totals;
 }
 
-function listHead(label){
-  return `<div class="list-head"><div class="section-label">${label}</div>
-    <button class="sort-btn" id="btnSortDir">🔀 ${brokListSortDesc ? 'Vis Helgenen øverst' : 'Vis TopBrokker øverst'}</button>
+function spotlightCards(vals){
+  const members = state.members;
+  const maxV = Math.max(0, ...Object.values(vals));
+  if(maxV <= 0) return '';
+  const minV = Math.min(...members.map(m=>vals[m.id]||0));
+  const top = members.find(m=>(vals[m.id]||0) === maxV);
+  const saint = minV < maxV ? members.find(m=>(vals[m.id]||0) === minV) : null;
+  const card = (title, emoji, m, amt, accent) => `
+    <div style="flex:1; background:${accent ? 'rgba(255,107,74,0.14)' : 'rgba(255,247,232,0.07)'}; border:1px solid ${accent ? 'rgba(255,107,74,0.35)' : 'rgba(255,247,232,0.15)'}; border-radius:16px; padding:12px; text-align:center;">
+      <div style="font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:rgba(255,247,232,0.5);">${emoji} ${title}</div>
+      <div style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:15px; color:var(--cream); margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(m.name)}</div>
+      <div style="font-size:12px; color:var(--coin);">${amt}€</div>
+    </div>`;
+  return `<div style="display:flex; gap:10px; margin-bottom:18px;">
+    ${card('TopBrokker', '🏆', top, maxV, true)}
+    ${saint ? card('Helgenen', '😇', saint, minV, false) : ''}
   </div>`;
 }
 
@@ -600,8 +608,6 @@ function renderBrokListen(main){
   main.querySelectorAll('[data-subtab]').forEach(p=>{
     p.onclick = ()=>{ brokListSubTab = p.dataset.subtab; renderMain(); };
   });
-  const btnSortDir = document.getElementById('btnSortDir');
-  if(btnSortDir) btnSortDir.onclick = ()=>{ brokListSortDesc = !brokListSortDesc; renderMain(); };
 }
 
 function renderBalanceToday(main){
@@ -610,7 +616,7 @@ function renderBalanceToday(main){
   const maxAmt = Math.max(0, ...balValues);
   const minAmt = balValues.length ? Math.min(...balValues) : 0;
   const streaks = state.streaks || {};
-  const rows = [...state.members].sort((a,b)=> brokListSortDesc ? bal[b.id]-bal[a.id] : bal[a.id]-bal[b.id]).map(m=>{
+  const rows = [...state.members].sort((a,b)=>bal[b.id]-bal[a.id]).map(m=>{
     const amt = bal[m.id]||0;
     const isTop = amt > 0 && amt === maxAmt;
     const isLeast = maxAmt > minAmt && amt === minAmt;
@@ -626,7 +632,7 @@ function renderBalanceToday(main){
     return `<div class="bal-row"><div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${initials(m.name)}</div><div class="feed-body"><div class="bal-name ${profile && m.id===profile.memberId?'me':''}">${escapeHtml(m.name)}${crown}${freeTag}</div><div style="font-size:11.5px; color:rgba(255,247,232,0.4);">${sub}</div></div><div class="bal-amt ${amt===0?'zero':''}">${amt}€</div></div>`;
   }).join('');
 
-  main.innerHTML = listHead('💸 Dagens BigSpender') + rows;
+  main.innerHTML = spotlightCards(bal) + `<div class="section-label">💸 Dagens regnskab</div>` + rows;
 }
 function renderAllTimeHistory(main){
   const totals = allTimeTotals();
@@ -635,8 +641,9 @@ function renderAllTimeHistory(main){
   const minTotal = totalValues.length ? Math.min(...totalValues) : 0;
   const anyTotal = maxTotal > 0;
   const chart = anyTotal ? (
-    listHead('🏆 TopBrokker & 😇 Helgenen — alle tider') +
-    [...state.members].sort((a,b)=> brokListSortDesc ? totals[b.id]-totals[a.id] : totals[a.id]-totals[b.id]).map(m=>{
+    spotlightCards(totals) +
+    `<div class="section-label">Alle medlemmer — alle tider</div>` +
+    [...state.members].sort((a,b)=>totals[b.id]-totals[a.id]).map(m=>{
       const amt = totals[m.id]||0;
       const isTop = amt > 0 && amt === maxTotal;
       const isLeast = maxTotal > minTotal && amt === minTotal;
