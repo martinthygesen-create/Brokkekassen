@@ -9,7 +9,6 @@ module.exports = async (req, res) => {
     if (!state) return res.status(404).json({ error: 'ukendt brokkekasse' });
     if (!state.pending) return res.status(400).json({ error: 'ingen aktiv afstemning' });
     if (pendingId && state.pending.id !== pendingId) return res.status(409).json({ error: 'afstemningen er skiftet — genindlæs og prøv igen' });
-    if (state.pending.memberId === voterId) return res.status(400).json({ error: 'du kan ikke stemme på dig selv' });
 
     const idx = state.pending.votes.indexOf(voterId);
     if (idx === -1) state.pending.votes.push(voterId);

@@ -443,12 +443,14 @@ function render(){
     </div>
     <main id="main"></main>
     <div class="bottombar">
-      <button class="btn-brok" id="btnBrok" ${state.pending ? 'disabled' : ''}>${state.pending ? '⏳ Afstemning i gang…' : '📢 Nogen brokker sig…'}</button>
-      ${isAdmin() ? `<button class="btn-settle" id="btnAdminMenu" title="Admin">⋯</button>` : ''}
+      ${state.closed
+        ? `<button class="btn-brok" id="btnBrok" disabled style="opacity:.6;">🔒 Brokkekassen er lukket</button>`
+        : `<button class="btn-brok" id="btnBrok" ${state.pending ? 'disabled' : ''}>${state.pending ? '⏳ Afstemning i gang…' : '📢 Nogen brokker sig…'}</button>`}
+      ${isAdmin() && !state.closed ? `<button class="btn-settle" id="btnAdminMenu" title="Admin">⋯</button>` : ''}
     </div>
   `;
   document.querySelectorAll('.tab').forEach(t=>{ t.onclick = ()=>{ activeTab = t.dataset.tab; renderMain(); document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active', x===t)); }; });
-  document.getElementById('btnBrok').onclick = ()=> state.pending ? openVoteSheet() : openBrokSheet();
+  if(!state.closed) document.getElementById('btnBrok').onclick = ()=> state.pending ? openVoteSheet() : openBrokSheet();
   document.getElementById('btnShare').onclick = openShareSheet;
   const btnAdminMenu = document.getElementById('btnAdminMenu');
   if(btnAdminMenu) btnAdminMenu.onclick = openAdminMenuSheet;
@@ -615,18 +617,17 @@ function openVoteSheet(){
   if(!state.pending){ closeSheet(); return; }
   const pendingId = state.pending.id;
   const complainer = state.members.find(m=>m.id===state.pending.memberId);
-  const voters = state.members.filter(m=>m.id!==state.pending.memberId);
+  const others = state.members.filter(m=>m.id!==state.pending.memberId);
+  const voters = state.members; // alle kan stemme, også den anklagede selv (måske er de ærlige)
   const need = state.pending.need;
   const count = state.pending.votes.length;
-  const myVote = profile && state.pending.votes.includes(profile.memberId);
-  const canVote = profile && profile.memberId !== state.pending.memberId;
+  const canVote = !!profile;
   const chips = voters.map(m=>`<div class="name-pill ${state.pending.votes.includes(m.id)?'voted':''}" data-id="${m.id}">${escapeHtml(m.name)}${state.pending.votes.includes(m.id)?' ✓':''}</div>`).join('');
   openSheet(`
     <h2>Bevis det! 👉</h2>
-    <p class="hint">Mindst ${need} af ${voters.length} skal pege på, at <b>${escapeHtml(complainer ? complainer.name : '?')}</b> brokkede sig${state.pending.message ? ` — "${escapeHtml(state.pending.message)}"` : ''}.</p>
+    <p class="hint">Mindst ${need} af ${others.length} skal pege på, at <b>${escapeHtml(complainer ? complainer.name : '?')}</b> brokkede sig${state.pending.message ? ` — "${escapeHtml(state.pending.message)}"` : ''}.</p>
     <div class="vote-progress"><span id="voteCount">${count}/${need}</span><div class="bar"><div id="voteBar" style="width:${Math.min(100,count/need*100)}%"></div></div></div>
     <div class="name-grid" id="voteGrid">${chips}</div>
-    ${!canVote ? `<p class="hint">Du kan ikke stemme på dig selv — vent på de andre.</p>` : ''}
     ${isAdmin() ? `<button class="sheet-btn ghost" id="cancelPendingBtn">Fortryd (afblæs)</button>` : ''}
     <button class="sheet-btn ghost" id="closeVoteBtn">Luk (bliver ved med at køre)</button>
   `, ()=>{
@@ -726,14 +727,16 @@ function launchCoinToJar(onDone){
 function openAdminMenuSheet(){
   openSheet(`
     <h2>Admin ⚙️</h2>
-    <p class="hint">Du oprettede denne brokkekasse, så det er dig der styrer den.</p>
-    <button class="sheet-btn primary" id="adminSettleBtn">💶 Gør op</button>
+    <p class="hint">Du oprettede denne brokkekasse, så det er dig der styrer den. Runder afsluttes også automatisk hver 24 timer.</p>
+    <button class="sheet-btn primary" id="adminSettleBtn">💶 Gør op nu (afslut runden tidligt)</button>
     <button class="sheet-btn danger" id="adminResetBtn">🧹 Nulstil alt</button>
-    <button class="sheet-btn ghost" id="adminCloseBtn">Luk</button>
+    <button class="sheet-btn danger" id="adminFinalCloseBtn">🔒 Luk brokkekassen for altid</button>
+    <button class="sheet-btn ghost" id="adminMenuCloseBtn">Luk menu</button>
   `, ()=>{
     document.getElementById('adminSettleBtn').onclick = ()=>{ closeSheet(); setTimeout(openSettleSheet, 230); };
     document.getElementById('adminResetBtn').onclick = ()=>{ closeSheet(); setTimeout(openResetSheet, 230); };
-    document.getElementById('adminCloseBtn').onclick = closeSheet;
+    document.getElementById('adminFinalCloseBtn').onclick = ()=>{ closeSheet(); setTimeout(openFinalCloseSheet, 230); };
+    document.getElementById('adminMenuCloseBtn').onclick = closeSheet;
   });
 }
 
@@ -774,6 +777,21 @@ function openResetSheet(){
     document.getElementById('cancelReset').onclick = closeSheet;
     document.getElementById('doReset').onclick = async ()=>{
       try{ const r = await api('reset', { roomId, actorId: profile.memberId }); state = r.state; closeSheet(); toast('🧹 Alt er nulstillet'); activeTab='feed'; render(); }
+      catch(e){ toast(e.message); }
+    };
+  });
+}
+
+function openFinalCloseSheet(){
+  openSheet(`
+    <h2>Luk brokkekassen for altid 🔒</h2>
+    <p class="hint">Gør evt. den sidste åbne pulje op, gemmer den i historikken og lukker helt af — ingen kan starte flere brok herefter. I kan stadig se Regnskab og Historik. Kan ikke fortrydes.</p>
+    <button class="sheet-btn danger" id="doFinalClose">Ja, luk for altid</button>
+    <button class="sheet-btn ghost" id="cancelFinalClose">Annuller</button>
+  `, ()=>{
+    document.getElementById('cancelFinalClose').onclick = closeSheet;
+    document.getElementById('doFinalClose').onclick = async ()=>{
+      try{ const r = await api('close', { roomId, actorId: profile.memberId }); state = r.state; closeSheet(); toast('🔒 Brokkekassen er lukket — tak for turen!'); activeTab='history'; render(); }
       catch(e){ toast(e.message); }
     };
   });
