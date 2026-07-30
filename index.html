@@ -468,7 +468,8 @@ function balances(){
 
 function render(){
   const prevMain = document.getElementById('main');
-  const savedScroll = prevMain ? prevMain.scrollTop : 0;
+  const savedMainScroll = prevMain ? prevMain.scrollTop : 0;
+  const savedWindowScroll = window.scrollY;
   const total = totalPool();
   const fillPct = Math.min(100, total * 4);
   if('setAppBadge' in navigator){
@@ -516,7 +517,8 @@ function render(){
   if(btnAdminMenu) btnAdminMenu.onclick = openAdminMenuSheet;
   renderMain();
   const newMain = document.getElementById('main');
-  if(newMain && savedScroll) newMain.scrollTop = savedScroll;
+  if(newMain && savedMainScroll) newMain.scrollTop = savedMainScroll;
+  if(savedWindowScroll) window.scrollTo(0, savedWindowScroll);
 }
 
 function jarSVG(fillPct){
