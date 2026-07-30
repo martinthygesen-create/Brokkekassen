@@ -966,7 +966,7 @@ function openGoalSheet(){
     document.getElementById('cancelGoal').onclick = closeSheet;
     document.getElementById('doGoal').onclick = async ()=>{
       const goal = document.getElementById('goalInput').value.trim();
-      try{ const r = await api('goal', { roomId, actorId: profile.memberId, goal }); state = r.state; closeSheet(); toast('🎯 Mål opdateret'); render(); }
+      try{ const r = await api('admin', { action: 'goal', roomId, actorId: profile.memberId, goal }); state = r.state; closeSheet(); toast('🎯 Mål opdateret'); render(); }
       catch(e){ toast(e.message); }
     };
   });
@@ -987,7 +987,7 @@ function openBroadcastSheet(){
       const btn = document.getElementById('doBroadcast');
       btn.innerHTML = '<span class="spinner"></span>';
       try{
-        const r = await api('broadcast', { roomId, actorId: profile.memberId, message });
+        const r = await api('admin', { action: 'broadcast', roomId, actorId: profile.memberId, message });
         closeSheet();
         toast(r.sentTo > 0 ? `📣 Besked sendt til ${r.sentTo}${r.sentTo===1?' person':' personer'}` : 'Sendt — men ingen har slået notifikationer til endnu');
       }catch(e){ toast(e.message); btn.textContent = 'Send'; }
@@ -1009,7 +1009,7 @@ function openSettleSheet(){
     document.getElementById('cancelSettle').onclick = closeSheet;
     document.getElementById('doSettle').onclick = async ()=>{
       try{
-        const r = await api('settle', { roomId, actorId: profile.memberId });
+        const r = await api('admin', { action: 'settle', roomId, actorId: profile.memberId });
         state = r.state;
         closeSheet();
         toast('✅ Dagen er afsluttet — ny dag startet!');
@@ -1030,7 +1030,7 @@ function openResetSheet(){
   `, ()=>{
     document.getElementById('cancelReset').onclick = closeSheet;
     document.getElementById('doReset').onclick = async ()=>{
-      try{ const r = await api('reset', { roomId, actorId: profile.memberId }); state = r.state; closeSheet(); toast('🧹 Alt er nulstillet'); activeTab='feed'; render(); }
+      try{ const r = await api('admin', { action: 'reset', roomId, actorId: profile.memberId }); state = r.state; closeSheet(); toast('🧹 Alt er nulstillet'); activeTab='feed'; render(); }
       catch(e){ toast(e.message); }
     };
   });
@@ -1045,7 +1045,7 @@ function openFinalCloseSheet(){
   `, ()=>{
     document.getElementById('cancelFinalClose').onclick = closeSheet;
     document.getElementById('doFinalClose').onclick = async ()=>{
-      try{ const r = await api('close', { roomId, actorId: profile.memberId }); state = r.state; closeSheet(); toast('🔒 Brokkekassen er lukket — tak for turen!'); activeTab='broklisten'; brokListSubTab='alltime'; render(); }
+      try{ const r = await api('admin', { action: 'close', roomId, actorId: profile.memberId }); state = r.state; closeSheet(); toast('🔒 Brokkekassen er lukket — tak for turen!'); activeTab='broklisten'; brokListSubTab='alltime'; render(); }
       catch(e){ toast(e.message); }
     };
   });
