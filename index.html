@@ -36,7 +36,7 @@
   button{font-family:inherit;}
   #app{ max-width:480px; margin:0 auto; min-height:100dvh; display:flex; flex-direction:column; position:relative; padding-bottom: env(safe-area-inset-bottom); }
 
-  header{ padding:18px 20px 6px; display:flex; align-items:baseline; justify-content:space-between; }
+  header{ padding:18px 20px 6px; display:flex; align-items:flex-start; justify-content:space-between; }
   header .title{ font-size:26px; font-weight:800; letter-spacing:-0.02em; }
   header .title span{color:var(--coin);}
   .day-chip{ font-size:12px; font-weight:600; background:rgba(255,247,232,0.1); border:1px solid rgba(255,247,232,0.18); padding:5px 10px; border-radius:100px; white-space:nowrap; }
@@ -469,7 +469,10 @@ function render(){
   const showPushBell = pushSupported() && typeof Notification !== 'undefined' && Notification.permission !== 'denied' && !pushEnabledLocally();
   app.innerHTML = `
     <header>
-      <div class="title">Brokke<span>kassen</span> 🏖️</div>
+      <div>
+        <div class="title">Brokke<span>kassen</span> 🏖️</div>
+        <div class="day-chip" style="margin-top:6px;">Dag ${dayCount()}</div>
+      </div>
       <div style="display:flex; align-items:center; gap:8px;">
         ${showPushBell ? `<button id="btnPush" title="Få besked når nogen brokker sig" style="width:30px; height:30px; padding:0; display:flex; align-items:center; justify-content:center; font-size:14px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.55); border-radius:100px;">🔔</button>` : ''}
         <button id="btnShare" title="Del invite-link" style="width:30px; height:30px; padding:0; display:flex; align-items:center; justify-content:center; font-size:14px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.55); border-radius:100px;">🔗</button>
@@ -478,7 +481,6 @@ function render(){
     <div class="jar-wrap">
       ${jarSVG(fillPct)}
       <div class="jar-total"><div class="amt">${total}€</div><div class="lbl">i puljen</div>${whatToBuy(total) ? `<div class="lbl" style="margin-top:2px; opacity:.8;">${whatToBuy(total)}</div>` : ''}</div>
-      <div class="day-chip" style="margin-top:10px;">Dag ${dayCount()}</div>
     </div>
     <div class="tabs">
       <div class="tab ${activeTab==='feed'?'active':''}" data-tab="feed">Brok-feed</div>
@@ -496,6 +498,8 @@ function render(){
   document.querySelectorAll('.tab').forEach(t=>{ t.onclick = ()=>{ activeTab = t.dataset.tab; renderMain(); document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active', x===t)); }; });
   if(!state.closed) document.getElementById('btnBrok').onclick = ()=> state.pending ? openVoteSheet() : openBrokSheet();
   document.getElementById('btnShare').onclick = openShareSheet;
+  const btnPush = document.getElementById('btnPush');
+  if(btnPush) btnPush.onclick = async ()=>{ const ok = await enablePush(); if(ok) render(); };
   const btnAdminMenu = document.getElementById('btnAdminMenu');
   if(btnAdminMenu) btnAdminMenu.onclick = openAdminMenuSheet;
   if(state.pending && !document.getElementById('sheetBackdrop')) openVoteSheet();
