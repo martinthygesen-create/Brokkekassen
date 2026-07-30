@@ -18,7 +18,7 @@ function emptyState() {
     createdAt: Date.now(),
     members: [],   // {id, name}
     events: [],    // {id, memberId, message, ts, votes:[voterIds], free}
-    pending: null, // {id, memberId, message, votes:[voterIds]}
+    pendingList: [], // [{id, memberId, message, votes:[voterIds], openedAt, need}] — flere kan være i gang samtidig
     history: [],   // {startedAt, closedAt, total, totals:{memberId:amt}, events:[...]}
     freeBrokMemberId: null, // dagens heldige vinder af gratis brok, trukket tilfældigt
     streaks: {},   // memberId -> antal sammenhængende dage uden brok
@@ -86,7 +86,7 @@ function settleRound(state, { skipHistoryIfEmpty } = {}) {
   }
 
   state.events = [];
-  state.pending = null;
+  state.pendingList = [];
   state.createdAt = Date.now();
   state.freeBrokMemberId = nextFree;
   return state;
@@ -110,6 +110,11 @@ async function getState(roomId) {
   if (!state.pushSubs) state.pushSubs = {};
   if (!state.streaks) state.streaks = {};
   if (state.goal === undefined) state.goal = '';
+  if (!state.pendingList) {
+    // migrering fra det gamle enkelt-pending-felt til en liste
+    state.pendingList = state.pending ? [state.pending] : [];
+  }
+  delete state.pending;
   if (autoSettleIfDue(state)) await setState(roomId, state);
   return state;
 }

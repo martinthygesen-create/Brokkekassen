@@ -469,7 +469,7 @@ function render(){
   const total = totalPool();
   const fillPct = Math.min(100, total * 4);
   if('setAppBadge' in navigator){
-    try{ state.pending ? navigator.setAppBadge(1) : navigator.clearAppBadge(); }catch(e){}
+    try{ state.pendingList.length ? navigator.setAppBadge(state.pendingList.length) : navigator.clearAppBadge(); }catch(e){}
   }
   checkFreeBrokReveal();
   const showPushBell = pushSupported() && typeof Notification !== 'undefined' && Notification.permission !== 'denied' && !pushEnabledLocally();
@@ -484,7 +484,7 @@ function render(){
         <button id="btnShare" title="Del invite-link" style="width:30px; height:30px; padding:0; display:flex; align-items:center; justify-content:center; font-size:14px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.55); border-radius:100px;">🔗</button>
       </div>
     </header>
-    <div class="jar-wrap">
+    <div class="jar-wrap" id="jarWrap" style="cursor:pointer;">
       ${jarSVG(fillPct)}
       <div class="jar-total"><div class="amt">${total}€</div><div class="lbl">i puljen</div>${whatToBuy(total) ? `<div class="lbl" style="margin-top:2px; opacity:.8;">${whatToBuy(total)}</div>` : ''}</div>
     </div>
@@ -497,18 +497,19 @@ function render(){
     <div class="bottombar">
       ${state.closed
         ? `<button class="btn-brok" id="btnBrok" disabled style="opacity:.6;">🔒 Brokkekassen er lukket</button>`
-        : `<button class="btn-brok" id="btnBrok" ${state.pending ? 'disabled' : ''}>${state.pending ? '⏳ Afstemning i gang…' : '📢 Nogen brokker sig…'}</button>`}
+        : `<button class="btn-brok" id="btnBrok">📢 Nogen brokker sig…</button>`}
       ${isAdmin() && !state.closed ? `<button class="btn-settle" id="btnAdminMenu" title="Admin">⋯</button>` : ''}
     </div>
   `;
   document.querySelectorAll('.tab').forEach(t=>{ t.onclick = ()=>{ activeTab = t.dataset.tab; renderMain(); document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active', x===t)); }; });
-  if(!state.closed) document.getElementById('btnBrok').onclick = ()=> state.pending ? openVoteSheet() : openBrokSheet();
+  if(!state.closed) document.getElementById('btnBrok').onclick = openBrokSheet;
   document.getElementById('btnShare').onclick = openShareSheet;
+  const jarWrap = document.getElementById('jarWrap');
+  if(jarWrap) jarWrap.onclick = bounceJar;
   const btnPush = document.getElementById('btnPush');
   if(btnPush) btnPush.onclick = async ()=>{ const ok = await enablePush(); if(ok) render(); };
   const btnAdminMenu = document.getElementById('btnAdminMenu');
   if(btnAdminMenu) btnAdminMenu.onclick = openAdminMenuSheet;
-  if(state.pending && !document.getElementById('sheetBackdrop')) openVoteSheet();
   renderMain();
 }
 
@@ -551,12 +552,65 @@ function renderMain(){
   if(activeTab==='feed') return renderFeed(main);
   renderBrokListen(main);
 }
+function renderPendingCard(p){
+  const complainer = state.members.find(m=>m.id===p.memberId);
+  const chips = state.members.map(m=>{
+    const voted = p.votes.includes(m.id);
+    const mine = profile && m.id === profile.memberId;
+    return `<div class="name-pill ${voted?'voted':''}" data-pending="${p.id}" data-voter="${m.id}" style="${mine?'':'opacity:.45; pointer-events:none;'} padding:6px 12px; font-size:13px;">${escapeHtml(m.name)}${voted?' ✓':''}</div>`;
+  }).join('');
+  return `<div class="feed-item" style="border-style:dashed; border-color:rgba(255,201,60,0.4); background:rgba(255,201,60,0.06);">
+    <div class="avatar" style="background:linear-gradient(160deg,#ffc93c,#e8a317); color:var(--ink);">⏳</div>
+    <div class="feed-body">
+      <div class="feed-name">${escapeHtml(complainer?complainer.name:'?')} anklaget <span class="amt">${p.votes.length}/${p.need}</span></div>
+      ${p.message ? `<div class="feed-msg">"${escapeHtml(p.message)}"</div>` : ''}
+      <div class="name-grid" style="margin:8px 0 2px;">${chips}</div>
+      ${isAdmin() ? `<button class="sheet-btn ghost" style="margin-top:2px; padding:5px; font-size:11px;" data-cancel-pending="${p.id}">Fortryd (afblæs)</button>` : ''}
+    </div>
+  </div>`;
+}
+
+function bindPendingCardHandlers(){
+  document.querySelectorAll('[data-voter]').forEach(el=>{
+    el.onclick = async ()=>{
+      if(!profile || el.dataset.voter !== profile.memberId) return;
+      const pendingId = el.dataset.pending;
+      const p = state.pendingList.find(x=>x.id===pendingId);
+      const complainer = p && state.members.find(m=>m.id===p.memberId);
+      try{
+        const r = await api('vote', { roomId, voterId: profile.memberId, pendingId });
+        state = r.state;
+        if(r.confirmed){
+          launchCoinToJar(()=>{
+            if(r.free){
+              toast(`🎫 ${complainer ? complainer.name : 'Nogen'} brugte sit gratis brok — denne var på husets regning!`);
+            }else{
+              toast(`💰 ${complainer ? complainer.name : 'Nogen'} skylder nu 1€ mere — ${randomBanter()}`);
+            }
+            render();
+          });
+        }else{
+          render();
+        }
+      }catch(e){ toast(e.message); await refreshState(true); }
+    };
+  });
+  document.querySelectorAll('[data-cancel-pending]').forEach(el=>{
+    el.onclick = async ()=>{
+      const pendingId = el.dataset.cancelPending;
+      try{ const r = await api('cancel', { roomId, actorId: profile.memberId, pendingId }); state = r.state; render(); }
+      catch(e){ toast(e.message); }
+    };
+  });
+}
+
 function renderFeed(main){
-  if(!state.events.length){
+  const pendingCards = (state.pendingList||[]).slice().sort((a,b)=>a.openedAt-b.openedAt).map(renderPendingCard).join('');
+  if(!state.events.length && !state.pendingList.length){
     main.innerHTML = `<div class="empty-state"><span class="emoji">🤐</span><b>Ingen brok endnu</b>Første gang nogen brokker sig, koster det 1€. Hold øje!</div>`;
     return;
   }
-  main.innerHTML = `<div class="section-label">Seneste brok</div>` + [...state.events].reverse().map(e=>{
+  const feedRows = [...state.events].reverse().map(e=>{
     const m = state.members.find(x=>x.id===e.memberId);
     const name = m ? m.name : '?';
     return `<div class="feed-item"><div class="avatar">${initials(name)}</div><div class="feed-body">
@@ -564,6 +618,8 @@ function renderFeed(main){
       ${e.message ? `<div class="feed-msg">"${escapeHtml(e.message)}"</div>` : ''}
       <div class="feed-time">${fmtTime(e.ts)}</div></div></div>`;
   }).join('');
+  main.innerHTML = pendingCards + (state.events.length ? `<div class="section-label">Seneste brok</div>${feedRows}` : '');
+  bindPendingCardHandlers();
 }
 function allTimeTotals(){
   const totals = {};
@@ -765,69 +821,14 @@ function openBrokSheet(){
       try{
         const r = await api('brok', { roomId, memberId: selectedId, message });
         state = r.state;
-        openVoteSheet();
-        renderMain(); render();
+        closeSheet();
+        activeTab = 'feed';
+        render();
       }catch(e){
         toast(e.message);
+        closeSheet();
         await refreshState(true);
-        if(state.pending) openVoteSheet(); else closeSheet();
       }
-    };
-  });
-}
-
-function openVoteSheet(){
-  if(!state.pending){ closeSheet(); return; }
-  const pendingId = state.pending.id;
-  const complainer = state.members.find(m=>m.id===state.pending.memberId);
-  const others = state.members.filter(m=>m.id!==state.pending.memberId);
-  const voters = state.members; // alle kan stemme, også den anklagede selv (måske er de ærlige)
-  const need = state.pending.need;
-  const count = state.pending.votes.length;
-  const canVote = !!profile;
-  const chips = voters.map(m=>`<div class="name-pill ${state.pending.votes.includes(m.id)?'voted':''}" data-id="${m.id}">${escapeHtml(m.name)}${state.pending.votes.includes(m.id)?' ✓':''}</div>`).join('');
-  openSheet(`
-    <h2>Bevis det! 👉</h2>
-    <p class="hint">Mindst ${need} af ${others.length} skal pege på, at <b>${escapeHtml(complainer ? complainer.name : '?')}</b> brokkede sig${state.pending.message ? ` — "${escapeHtml(state.pending.message)}"` : ''}.</p>
-    <div class="vote-progress"><span id="voteCount">${count}/${need}</span><div class="bar"><div id="voteBar" style="width:${Math.min(100,count/need*100)}%"></div></div></div>
-    <div class="name-grid" id="voteGrid">${chips}</div>
-    ${isAdmin() ? `<button class="sheet-btn ghost" id="cancelPendingBtn">Fortryd (afblæs)</button>` : ''}
-    <button class="sheet-btn ghost" id="closeVoteBtn">Luk (bliver ved med at køre)</button>
-  `, ()=>{
-    if(canVote){
-      document.querySelectorAll('#voteGrid .name-pill').forEach(p=>{
-        if(p.dataset.id !== profile.memberId) { p.style.opacity='.55'; p.style.pointerEvents='none'; return; }
-        p.onclick = async ()=>{
-          try{
-            const r = await api('vote', { roomId, voterId: profile.memberId, pendingId });
-            state = r.state;
-            if(r.confirmed){
-              closeSheet();
-              launchCoinToJar(()=>{
-                if(r.free){
-                  toast(`🎫 ${complainer ? complainer.name : 'Nogen'} brugte sit gratis brok — denne var på husets regning!`);
-                }else{
-                  toast(`💰 ${complainer ? complainer.name : 'Nogen'} skylder nu 1€ mere — ${randomBanter()}`);
-                }
-                activeTab = 'feed';
-                render();
-              });
-            }else{
-              openVoteSheet();
-              render();
-            }
-          }catch(e){
-            toast(e.message);
-            await refreshState(true);
-            openVoteSheet();
-          }
-        };
-      });
-    }
-    document.getElementById('closeVoteBtn').onclick = closeSheet;
-    const cancelBtn = document.getElementById('cancelPendingBtn');
-    if(cancelBtn) cancelBtn.onclick = async ()=>{
-      try{ const r = await api('cancel', { roomId, actorId: profile.memberId }); state = r.state; closeSheet(); render(); }catch(e){ toast(e.message); }
     };
   });
 }
@@ -886,6 +887,15 @@ function playFreeBrokDraw(){
       }
     })();
   });
+}
+
+function bounceJar(){
+  const jarSvg = document.querySelector('.jar-svg');
+  if(!jarSvg) return;
+  const rot = (Math.random() * 4 - 2).toFixed(1);
+  jarSvg.style.transition = 'transform .28s cubic-bezier(.34,1.56,.64,1)';
+  jarSvg.style.transform = `scale(1.05) rotate(${rot}deg)`;
+  setTimeout(()=>{ jarSvg.style.transform = 'scale(1) rotate(0deg)'; }, 170);
 }
 
 function launchCoinToJar(onDone){

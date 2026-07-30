@@ -10,17 +10,19 @@ module.exports = async (req, res) => {
     if (!state) return res.status(404).json({ error: 'ukendt brokkekasse' });
     if (!state.members.find(m => m.id === memberId)) return res.status(400).json({ error: 'ukendt medlem' });
     if (state.closed) return res.status(400).json({ error: 'brokkekassen er lukket' });
-    if (state.pending) return res.status(409).json({ error: 'der er allerede en afstemning i gang' });
+    if (state.pendingList.some(p => p.memberId === memberId)) {
+      return res.status(409).json({ error: 'der er allerede en afstemning i gang om denne person' });
+    }
 
     const cleanMessage = (message || '').toString().trim().slice(0, 80);
-    state.pending = {
+    state.pendingList.push({
       id: uid(),
       memberId,
       message: cleanMessage,
       votes: [],
       openedAt: Date.now(),
       need: neededVotes(state.members.length),
-    };
+    });
     await setState(roomId, state);
 
     const accused = state.members.find(m => m.id === memberId);

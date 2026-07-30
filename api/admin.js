@@ -24,7 +24,7 @@ module.exports = async (req, res) => {
       if (!isAdmin(state, actorId)) return res.status(403).json({ error: 'kun den der oprettede brokkekassen kan lukke den' });
       if (state.closed) return res.status(400).json({ error: 'brokkekassen er allerede lukket' });
       if (state.events.length) settleRound(state);
-      state.pending = null;
+      state.pendingList = [];
       state.closed = true;
       await setState(roomId, state);
       return res.status(200).json({ state });

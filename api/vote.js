@@ -4,30 +4,31 @@ module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' });
   try {
     const { roomId, voterId, pendingId } = req.body || {};
-    if (!roomId || !voterId) return res.status(400).json({ error: 'mangler data' });
+    if (!roomId || !voterId || !pendingId) return res.status(400).json({ error: 'mangler data' });
     const state = await getState(roomId);
     if (!state) return res.status(404).json({ error: 'ukendt brokkekasse' });
-    if (!state.pending) return res.status(400).json({ error: 'ingen aktiv afstemning' });
-    if (pendingId && state.pending.id !== pendingId) return res.status(409).json({ error: 'afstemningen er skiftet — genindlæs og prøv igen' });
 
-    const idx = state.pending.votes.indexOf(voterId);
-    if (idx === -1) state.pending.votes.push(voterId);
-    else state.pending.votes.splice(idx, 1);
+    const pending = state.pendingList.find(p => p.id === pendingId);
+    if (!pending) return res.status(409).json({ error: 'afstemningen er ikke længere aktiv — genindlæs og prøv igen' });
+
+    const idx = pending.votes.indexOf(voterId);
+    if (idx === -1) pending.votes.push(voterId);
+    else pending.votes.splice(idx, 1);
 
     let confirmed = false;
     let free = false;
-    if (state.pending.votes.length >= state.pending.need) {
-      free = !!(state.freeBrokMemberId && state.freeBrokMemberId === state.pending.memberId);
+    if (pending.votes.length >= pending.need) {
+      free = !!(state.freeBrokMemberId && state.freeBrokMemberId === pending.memberId);
       state.events.push({
-        id: state.pending.id,
-        memberId: state.pending.memberId,
-        message: state.pending.message,
+        id: pending.id,
+        memberId: pending.memberId,
+        message: pending.message,
         ts: Date.now(),
-        votes: state.pending.votes,
+        votes: pending.votes,
         free,
       });
       if (free) state.freeBrokMemberId = null;
-      state.pending = null;
+      state.pendingList = state.pendingList.filter(p => p.id !== pendingId);
       confirmed = true;
     }
     await setState(roomId, state);
