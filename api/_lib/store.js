@@ -1,6 +1,8 @@
 const { redis } = require('./redis');
 
-const KEY = (roomId) => `brokkekassen:room:${roomId}`;
+// Normaliseret til små bogstaver, så det ikke betyder noget om telefonens
+// tastatur autokapitaliserede første bogstav i koden (fx "Skygge-ophy").
+const KEY = (roomId) => `brokkekassen:room:${(roomId || '').toString().trim().toLowerCase()}`;
 
 // Den der opretter en brokkekasse er dens admin: den første, der nogensinde
 // joiner rummet, bliver stående som members[0] og er dermed admin for altid.

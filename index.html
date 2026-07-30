@@ -141,7 +141,8 @@
 <script>
 /* ============ CONFIG / IDENTITY ============ */
 const params = new URLSearchParams(location.search);
-let roomId = params.get('r') || localStorage.getItem('bk_lastRoom') || null;
+let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
+if(roomId) roomId = roomId.toLowerCase();
 let profile = JSON.parse(localStorage.getItem('bk_profile_' + roomId) || 'null'); // {memberId, name}
 
 let state = null;
@@ -253,9 +254,9 @@ function extractRoomId(input){
   try{
     const u = new URL(input);
     const r = u.searchParams.get('r');
-    if(r) return r;
+    if(r) return r.toLowerCase();
   }catch(e){}
-  return input;
+  return input.toLowerCase();
 }
 function initials(name){ return (name||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
 function fmtTime(ts){
@@ -358,7 +359,7 @@ function renderCreateOrJoin(errorMsg){
       <div class="divider">eller</div>
       <div class="onboard-card">
         <label class="field-label">Har du fået et link?</label>
-        <input type="text" id="joinInput" placeholder="Indsæt link eller kode her" />
+        <input type="text" id="joinInput" placeholder="Indsæt link eller kode her" autocapitalize="off" autocorrect="off" spellcheck="false" />
         <button class="sheet-btn primary" id="joinRoomBtn" style="margin-top:0;">Gå til brokkekassen</button>
       </div>
       ${homeScreenTip(false)}
