@@ -72,6 +72,12 @@
 
   .section-label{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:rgba(255,247,232,0.45); margin:14px 4px 10px; }
 
+  .bar-row{ display:flex; align-items:center; gap:10px; margin-bottom:10px; padding:0 2px; }
+  .bar-track{ flex:1; height:14px; background:rgba(255,247,232,0.1); border-radius:10px; overflow:hidden; }
+  .bar-fill{ height:100%; border-radius:10px; background:linear-gradient(90deg, var(--coin-dark), var(--coin)); transition:width .7s cubic-bezier(.2,.8,.2,1); }
+  .bar-fill.top{ background:linear-gradient(90deg, #e14d2e, var(--coral)); }
+  .bar-amt{ flex:0 0 auto; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:13.5px; color:var(--coin); min-width:34px; text-align:right; }
+
   .history-round{ background:rgba(255,247,232,0.05); border:1px solid rgba(255,247,232,0.1); border-radius:16px; padding:14px; margin-bottom:12px; }
   .history-round .hr-title{font-weight:700; font-family:'Baloo 2',sans-serif; font-size:16px; color:var(--coin);}
   .history-round .hr-sub{font-size:12px; color:rgba(255,247,232,0.5); margin-bottom:8px;}
@@ -550,11 +556,22 @@ function renderFeed(main){
       <div class="feed-time">${fmtTime(e.ts)}</div></div></div>`;
   }).join('');
 }
+function allTimeTotals(){
+  const totals = {};
+  state.members.forEach(m=>totals[m.id]=0);
+  state.history.forEach(round=>{
+    Object.entries(round.totals||{}).forEach(([id,amt])=>{ if(totals[id]!==undefined) totals[id]+=amt; });
+  });
+  const live = balances();
+  Object.entries(live).forEach(([id,amt])=>{ if(totals[id]!==undefined) totals[id]+=amt; });
+  return totals;
+}
+
 function renderBalance(main){
   const bal = balances();
   const maxAmt = Math.max(0, ...Object.values(bal));
   const streaks = state.streaks || {};
-  main.innerHTML = `<div class="section-label">Hvem skylder hvad (denne runde)</div>` + [...state.members].sort((a,b)=>bal[b.id]-bal[a.id]).map(m=>{
+  const rows = [...state.members].sort((a,b)=>bal[b.id]-bal[a.id]).map(m=>{
     const amt = bal[m.id]||0;
     const crown = amt > 0 && amt === maxAmt ? ' 👑' : '';
     const freeTag = state.freeBrokMemberId === m.id ? ' 🎫' : '';
@@ -564,13 +581,38 @@ function renderBalance(main){
       : (streak > 0 ? `🔥 ${streak} dag${streak===1?'':'e'} uden brok` : titleFor(amt));
     return `<div class="bal-row"><div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${initials(m.name)}</div><div class="feed-body"><div class="bal-name ${profile && m.id===profile.memberId?'me':''}">${escapeHtml(m.name)}${crown}${freeTag}</div><div style="font-size:11.5px; color:rgba(255,247,232,0.4);">${sub}</div></div><div class="bal-amt ${amt===0?'zero':''}">${amt}€</div></div>`;
   }).join('');
+
+  const total = allTimeTotals();
+  const maxTotal = Math.max(0, ...Object.values(total));
+  const totalRows = [...state.members].sort((a,b)=>total[b.id]-total[a.id]).map((m,i)=>{
+    const amt = total[m.id]||0;
+    const medal = amt > 0 && i===0 ? ' 🏆' : (amt > 0 && amt===maxTotal ? ' 🏆' : '');
+    return `<div class="bal-row"><div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${initials(m.name)}</div><div class="feed-body"><div class="bal-name ${profile && m.id===profile.memberId?'me':''}">${escapeHtml(m.name)}${medal}</div><div style="font-size:11.5px; color:rgba(255,247,232,0.4);">${titleFor(amt)}</div></div><div class="bal-amt ${amt===0?'zero':''}">${amt}€</div></div>`;
+  }).join('');
+
+  main.innerHTML = `
+    <div class="section-label">Dagens regnskab</div>${rows}
+    <div class="section-label" style="margin-top:22px;">🏆 Topliste — i alt for hele opholdet</div>${totalRows}
+  `;
 }
 function renderHistory(main){
+  const totals = allTimeTotals();
+  const maxTotal = Math.max(0, ...Object.values(totals));
+  const anyTotal = maxTotal > 0;
+  const chart = anyTotal ? (
+    `<div class="section-label">📊 Hvem brokker sig mest? (hele opholdet)</div>` +
+    [...state.members].sort((a,b)=>totals[b.id]-totals[a.id]).map((m,i)=>{
+      const amt = totals[m.id]||0;
+      const pct = amt > 0 ? Math.max(6, Math.round(amt/maxTotal*100)) : 0;
+      return `<div class="bar-row"><div class="avatar" style="width:30px;height:30px;font-size:11px;">${initials(m.name)}</div><div class="bar-track"><div class="bar-fill ${i===0 && amt>0?'top':''}" style="width:${pct}%;"></div></div><div class="bar-amt">${amt}€</div></div>`;
+    }).join('')
+  ) : '';
+
   if(!state.history.length){
-    main.innerHTML = `<div class="empty-state"><span class="emoji">📜</span><b>Ingen afregnede runder endnu</b>Tryk på 💶 for at gøre op og starte en ny runde.</div>`;
+    main.innerHTML = chart + `<div class="empty-state"><span class="emoji">📜</span><b>Ingen afsluttede dage endnu</b>Dage afsluttes automatisk kl. 04, eller tryk 💶 for at gøre op tidligere.</div>`;
     return;
   }
-  main.innerHTML = `<div class="section-label">Tidligere runder</div>` + [...state.history].reverse().map(r=>{
+  const days = `<div class="section-label" style="margin-top:${anyTotal?22:0}px;">Dag for dag</div>` + [...state.history].reverse().map(r=>{
     const lines = Object.entries(r.totals).map(([id,amt])=>{
       const m = state.members.find(x=>x.id===id);
       return `<div class="hr-line"><span>${escapeHtml(m?m.name:'?')}</span><span>${amt}€</span></div>`;
@@ -579,6 +621,7 @@ function renderHistory(main){
     const end = new Date(r.closedAt).toLocaleDateString('da-DK',{day:'2-digit',month:'short'});
     return `<div class="history-round"><div class="hr-title">${r.total}€ i alt</div><div class="hr-sub">${start} – ${end} · ${r.events.length} brok</div>${lines}</div>`;
   }).join('');
+  main.innerHTML = chart + days;
 }
 
 /* ============ SHEETS ============ */
@@ -866,10 +909,10 @@ function pushDebugInfo(){
 function openAdminMenuSheet(){
   openSheet(`
     <h2>Admin ⚙️</h2>
-    <p class="hint">Du oprettede denne brokkekasse, så det er dig der styrer den. Ny runde starter automatisk hver dag kl. 04.</p>
+    <p class="hint">Du oprettede denne brokkekasse, så det er dig der styrer den. Ny dag starter automatisk kl. 04.</p>
     <p class="hint" style="font-size:11px; color:rgba(5,32,36,0.4); word-break:break-word;">🔧 Push-status: ${pushDebugInfo()}</p>
     <button class="sheet-btn primary" id="adminBroadcastBtn">📣 Send besked til alle</button>
-    <button class="sheet-btn primary" id="adminSettleBtn">💶 Gør op nu (afslut runden tidligt)</button>
+    <button class="sheet-btn primary" id="adminSettleBtn">💶 Gør op nu (afslut dagen tidligt)</button>
     <button class="sheet-btn danger" id="adminResetBtn">🧹 Nulstil alt</button>
     <button class="sheet-btn danger" id="adminFinalCloseBtn">🔒 Luk denne brokkekasse for altid</button>
     <button class="sheet-btn ghost" id="adminMenuCloseBtn">Luk menu</button>
@@ -911,9 +954,9 @@ function openSettleSheet(){
   const rows = state.members.map(m=>`<div class="hr-line"><span>${escapeHtml(m.name)}</span><span>${bal[m.id]||0}€</span></div>`).join('');
   openSheet(`
     <h2>Gør op 💶</h2>
-    <p class="hint">Total i puljen: <b>${totalPool()}€</b>. Dette lukker runden for alle og gemmer den i historikken. Puljen starter forfra.</p>
+    <p class="hint">Total i puljen: <b>${totalPool()}€</b>. Dette afslutter dagen for alle og gemmer den i historikken. Puljen starter forfra, og der trækkes lod om et nyt gratis brok.</p>
     ${rows}
-    <button class="sheet-btn danger" id="doSettle">Bekræft og start ny runde</button>
+    <button class="sheet-btn danger" id="doSettle">Bekræft og afslut dagen</button>
     <button class="sheet-btn ghost" id="cancelSettle">Annuller</button>
   `, ()=>{
     document.getElementById('cancelSettle').onclick = closeSheet;
@@ -922,8 +965,7 @@ function openSettleSheet(){
         const r = await api('settle', { roomId, actorId: profile.memberId });
         state = r.state;
         closeSheet();
-        const winner = state.members.find(m=>m.id===state.freeBrokMemberId);
-        toast(winner ? `✅ Runde afregnet! ${winner.name} brokkede sig mindst og får et gratis brok 🎫` : '✅ Runde afregnet — ny runde startet!');
+        toast('✅ Dagen er afsluttet — ny dag startet!');
         activeTab='history';
         render();
       }
