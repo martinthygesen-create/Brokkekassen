@@ -131,7 +131,7 @@
   .divider{ display:flex; align-items:center; gap:10px; color:rgba(255,247,232,0.4); font-size:12px; margin:22px 0; }
   .divider::before, .divider::after{ content:''; flex:1; height:1px; background:rgba(255,247,232,0.15); }
 
-  .toast{ position:fixed; top:16px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--cream); padding:10px 18px; border-radius:20px; font-size:13.5px; font-weight:600; z-index:80; box-shadow:0 8px 20px rgba(0,0,0,.3); opacity:0; transition:opacity .25s, transform .25s; pointer-events:none; max-width:88vw; text-align:center; line-height:1.35; }
+  .toast{ position:fixed; top:16px; left:50%; transform:translateX(-50%) translateY(-6px); background:linear-gradient(160deg, #0d4b52, var(--ink)); color:var(--cream); padding:13px 20px; border-radius:18px; font-size:14px; font-weight:600; z-index:80; box-shadow:0 10px 28px rgba(0,0,0,.35), 0 0 0 1px rgba(255,247,232,0.08) inset; opacity:0; transition:opacity .3s ease, transform .3s cubic-bezier(.2,.9,.3,1.2); pointer-events:none; max-width:88vw; text-align:center; line-height:1.4; }
   .toast.show{opacity:1; transform:translateX(-50%) translateY(6px);}
   .confetti{ position:fixed; inset:0; pointer-events:none; z-index:70; overflow:hidden; }
   .spinner{ width:16px;height:16px;border-radius:50%; border:2px solid rgba(255,255,255,.4); border-top-color:#fff; display:inline-block; animation:spin .7s linear infinite; }
@@ -206,7 +206,7 @@ function toast(msg){
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(toastTimer);
-  const duration = Math.min(6000, Math.max(2200, msg.length * 65));
+  const duration = Math.min(7500, Math.max(2800, msg.length * 75));
   toastTimer = setTimeout(()=>t.classList.remove('show'), duration);
 }
 function shareUrl(){
@@ -467,6 +467,8 @@ function balances(){
 }
 
 function render(){
+  const prevMain = document.getElementById('main');
+  const savedScroll = prevMain ? prevMain.scrollTop : 0;
   const total = totalPool();
   const fillPct = Math.min(100, total * 4);
   if('setAppBadge' in navigator){
@@ -487,7 +489,7 @@ function render(){
     </header>
     <div class="jar-wrap" id="jarWrap" style="cursor:pointer;">
       ${jarSVG(fillPct)}
-      <div class="jar-total"><div class="amt">${total}€</div><div class="lbl">i puljen</div>${whatToBuy(total) ? `<div class="lbl" style="margin-top:2px; opacity:.8;">${whatToBuy(total)}</div>` : ''}</div>
+      <div class="jar-total"><div class="amt">${total}€</div><div class="lbl">i puljen</div>${whatToBuy(total) ? `<div style="margin-top:4px; font-size:13.5px; font-weight:700; color:var(--ink); text-transform:none; letter-spacing:normal;">${whatToBuy(total)}</div>` : ''}</div>
     </div>
     ${state.goal && state.goal.trim() ? `<div style="text-align:center; font-size:12.5px; color:rgba(255,247,232,0.5); padding:2px 24px 0;">🎯 Potten går til: <span style="color:rgba(255,247,232,0.8); font-weight:600;">${escapeHtml(state.goal)}</span></div>` : ''}
     <div class="tabs">
@@ -513,6 +515,8 @@ function render(){
   const btnAdminMenu = document.getElementById('btnAdminMenu');
   if(btnAdminMenu) btnAdminMenu.onclick = openAdminMenuSheet;
   renderMain();
+  const newMain = document.getElementById('main');
+  if(newMain && savedScroll) newMain.scrollTop = savedScroll;
 }
 
 function jarSVG(fillPct){
