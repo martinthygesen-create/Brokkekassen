@@ -216,6 +216,25 @@ function shareUrl(){
   u.search = '?r=' + roomId;
   return u.toString();
 }
+async function doShare(){
+  const url = shareUrl();
+  if(navigator.share){
+    try{ await navigator.share({ title:'Brokkekassen', text:'Kom med i vores brokkekasse!', url }); return; }
+    catch(e){ if(e && e.name === 'AbortError') return; }
+  }
+  try{ await navigator.clipboard.writeText(url); toast('Link kopieret! 🔗'); }
+  catch(e){ prompt('Kopiér linket manuelt:', url); }
+}
+function extractRoomId(input){
+  input = (input||'').trim();
+  if(!input) return null;
+  try{
+    const u = new URL(input);
+    const r = u.searchParams.get('r');
+    if(r) return r;
+  }catch(e){}
+  return input;
+}
 function initials(name){ return (name||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
 function fmtTime(ts){
   const d = new Date(ts), now = new Date();
@@ -294,20 +313,43 @@ function renderCreateOrJoin(errorMsg){
     <div class="onboard">
       <div class="emoji">🍯</div>
       <h1>Brokkekassen</h1>
-      <p>Ferie-reglen: brokker du dig, koster det 1€. Opret jeres fælles brokkekasse, og del linket med resten af familien.</p>
+      <p>Ferie-reglen: brokker du dig, koster det 1€. Indsæt linket du har fået fra familien for at være med.</p>
       ${errorMsg ? `<p style="color:var(--coral); font-weight:600; margin-top:-14px;">${errorMsg}</p>` : ''}
       <div class="onboard-card">
-        <button class="sheet-btn primary" id="createBtn" style="margin-top:0;">Opret ny brokkekasse</button>
+        <label class="field-label">Link eller kode</label>
+        <input type="text" id="joinInput" placeholder="Indsæt link eller kode her" />
+        <button class="sheet-btn primary" id="joinRoomBtn" style="margin-top:0;">Gå til brokkekassen</button>
       </div>
-      <div class="divider">eller</div>
-      <div class="onboard-card">
-        <label class="field-label">Har du fået et link?</label>
-        <p style="font-size:12.5px; color:rgba(255,247,232,0.55); margin:0 0 10px;">Åbn linket direkte fra beskeden — så kommer du automatisk ind i den rigtige brokkekasse.</p>
-      </div>
+      <button class="sheet-btn ghost" id="createBtn" style="margin-top:26px; color:rgba(255,247,232,0.4); font-size:12px;">Opret ny brokkekasse</button>
     </div>
   `;
+  const joinInput = document.getElementById('joinInput');
+  joinInput.focus();
+  const goJoin = async ()=>{
+    const rid = extractRoomId(joinInput.value);
+    if(!rid){ toast('Indsæt link eller kode'); return; }
+    const btn = document.getElementById('joinRoomBtn');
+    btn.innerHTML = '<span class="spinner"></span>';
+    try{
+      const { state: s } = await api('state?room=' + encodeURIComponent(rid));
+      roomId = rid;
+      state = s;
+      const u = new URL(location.href); u.search = '?r=' + roomId;
+      history.replaceState(null,'',u.toString());
+      localStorage.setItem('bk_lastRoom', roomId);
+      renderWhoAmI();
+    }catch(e){
+      toast('Ukendt brokkekasse — tjek linket');
+      btn.textContent = 'Gå til brokkekassen';
+    }
+  };
+  document.getElementById('joinRoomBtn').onclick = goJoin;
+  joinInput.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); goJoin(); }});
   document.getElementById('createBtn').onclick = async ()=>{
-    document.getElementById('createBtn').innerHTML = '<span class="spinner"></span>';
+    const code = prompt('Admin-kode for at oprette en ny brokkekasse:');
+    if(code === null) return;
+    if(code !== ADMIN_CODE){ toast('Forkert kode'); return; }
+    localStorage.setItem('bk_admin_code', code);
     try{
       const r = await api('room', {});
       roomId = r.roomId;
@@ -337,8 +379,8 @@ function renderWhoAmI(justCreated){
         <div class="divider">del med familien</div>
         <div class="onboard-card">
           <p style="margin:0 0 4px; font-size:13px; font-weight:600;">Send dette link til de andre:</p>
-          <div class="link-box" id="linkBox">${shareUrl()}</div>
-          <button class="sheet-btn ghost" id="copyBtn" style="margin-top:6px;">Kopiér link</button>
+          <div class="link-box" id="linkBox" style="cursor:pointer;">${shareUrl()}</div>
+          <button class="sheet-btn ghost" id="copyBtn" style="margin-top:6px;">📤 Del / kopiér link</button>
         </div>
       ` : ''}
     </div>
@@ -362,9 +404,8 @@ function renderWhoAmI(justCreated){
   document.getElementById('joinBtn').onclick = go;
   nameInput.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); go(); }});
   if(justCreated){
-    document.getElementById('copyBtn').onclick = ()=>{
-      navigator.clipboard.writeText(shareUrl()).then(()=>toast('Link kopieret! 🔗')).catch(()=>{});
-    };
+    document.getElementById('copyBtn').onclick = doShare;
+    document.getElementById('linkBox').onclick = doShare;
   }
 }
 
@@ -408,9 +449,7 @@ function render(){
   if(btnSettle) btnSettle.onclick = openSettleSheet;
   const btnReset = document.getElementById('btnReset');
   if(btnReset) btnReset.onclick = openResetSheet;
-  document.getElementById('btnShare').onclick = ()=>{
-    navigator.clipboard.writeText(shareUrl()).then(()=>toast('Link kopieret! 🔗')).catch(()=>toast(shareUrl()));
-  };
+  document.getElementById('btnShare').onclick = doShare;
   if(state.pending && !document.getElementById('sheetBackdrop')) openVoteSheet();
   renderMain();
 }
