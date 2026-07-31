@@ -29,12 +29,13 @@
       radial-gradient(ellipse at 100% 0%, #0e5a5f 0%, transparent 100%),
       linear-gradient(180deg, var(--sea) 0%, var(--sea-deep) 100%);
     background-attachment: fixed;
-    color:var(--cream); height:100dvh; overflow:hidden;
+    color:var(--cream); min-height:100dvh; overflow-x:hidden;
     -webkit-tap-highlight-color: transparent; user-select:none;
+    -webkit-overflow-scrolling: touch;
   }
   h1,h2,h3,.display{font-family:'Baloo 2', sans-serif;}
   button{font-family:inherit;}
-  #app{ max-width:480px; margin:0 auto; height:100dvh; overflow:hidden; display:flex; flex-direction:column; position:relative; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+  #app{ max-width:480px; margin:0 auto; min-height:100dvh; display:flex; flex-direction:column; position:relative; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
 
   header{ padding:30px 20px 6px; display:flex; align-items:flex-start; justify-content:space-between; }
   header .title{ font-size:26px; font-weight:800; letter-spacing:-0.02em; }
@@ -71,7 +72,7 @@
   .slot-lever:disabled{ opacity:.5; }
   .slot-winner-name{ text-align:center; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; color:var(--coral); margin-top:14px; opacity:0; }
 
-  main{ flex:1; min-height:0; padding:0 16px 20px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+  main{ flex:1; padding:0 16px 130px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
 
   .feed-item{ background:rgba(255,247,232,0.07); border:1px solid rgba(255,247,232,0.1); border-radius:16px; padding:12px 14px; margin-bottom:10px; display:flex; gap:12px; align-items:flex-start; }
   .avatar{ flex:0 0 auto; width:38px;height:38px; border-radius:50%; background:linear-gradient(160deg, var(--coral), #e14d2e); color:#fff; display:flex;align-items:center;justify-content:center; font-weight:700; font-size:14px; font-family:'Baloo 2',sans-serif; }
@@ -103,7 +104,7 @@
   .history-round .hr-sub{font-size:12px; color:rgba(255,247,232,0.65); margin-bottom:8px;}
   .hr-line{display:flex; justify-content:space-between; font-size:13.5px; padding:3px 0; color:rgba(255,247,232,0.8);}
 
-  .bottombar{ flex:0 0 auto; padding:14px 16px; background:var(--sea-deep); display:flex; gap:10px; }
+  .bottombar{ position:fixed; bottom:0; left:0; right:0; max-width:480px; margin:0 auto; padding:14px 16px calc(16px + env(safe-area-inset-bottom)); background:linear-gradient(0deg, var(--sea-deep) 60%, rgba(7,59,64,0)); display:flex; gap:10px; }
   .btn-brok{ flex:1; background:linear-gradient(160deg, var(--coral), #e14d2e); color:#fff; border:none; border-radius:100px; padding:16px 10px; font-family:'Baloo 2',sans-serif; font-weight:700; font-size:18px; box-shadow:0 8px 18px rgba(255,107,74,0.35); display:flex; align-items:center; justify-content:center; gap:8px; }
   .btn-brok:active{transform:scale(0.97);}
   .btn-brok:disabled{opacity:.5;}
@@ -496,6 +497,7 @@ function todayBalances(){
 function render(){
   const prevMain = document.getElementById('main');
   const savedMainScroll = prevMain ? prevMain.scrollTop : 0;
+  const savedWindowScroll = window.scrollY;
   const total = totalPool();
   const fillPct = Math.min(100, total * 4);
   if('setAppBadge' in navigator){
@@ -544,6 +546,7 @@ function render(){
   renderMain();
   const newMain = document.getElementById('main');
   if(newMain && savedMainScroll) newMain.scrollTop = savedMainScroll;
+  if(savedWindowScroll) window.scrollTo(0, savedWindowScroll);
 }
 
 function jarSVG(fillPct){
