@@ -1074,6 +1074,7 @@ function openAdminMenuSheet(){
     <button class="sheet-btn primary" id="adminGoalBtn">🎯 Sæt mål for potten</button>
     <button class="sheet-btn primary" id="adminBroadcastBtn">📣 Send besked til alle</button>
     <button class="sheet-btn primary" id="adminSettleBtn">💶 Gør op (tøm puljen)</button>
+    <button class="sheet-btn ghost" id="adminTestDrawBtn">🎰 Test spillemaskinen</button>
     ${state.history.length ? `<button class="sheet-btn ghost" id="adminUndoBtn">↩️ Fortryd seneste opgørelse</button>` : ''}
     <button class="sheet-btn danger" id="adminResetBtn">🧹 Nulstil alt</button>
     <button class="sheet-btn danger" id="adminFinalCloseBtn">🔒 Luk denne brokkekasse for altid</button>
@@ -1082,6 +1083,14 @@ function openAdminMenuSheet(){
     document.getElementById('adminGoalBtn').onclick = ()=>{ closeSheet(); setTimeout(openGoalSheet, 230); };
     document.getElementById('adminBroadcastBtn').onclick = ()=>{ closeSheet(); setTimeout(openBroadcastSheet, 230); };
     document.getElementById('adminSettleBtn').onclick = ()=>{ closeSheet(); setTimeout(openSettleSheet, 230); };
+    document.getElementById('adminTestDrawBtn').onclick = async ()=>{
+      try{
+        const r = await api('admin', { action: 'testDraw', roomId, actorId: profile.memberId });
+        state = r.state;
+        closeSheet();
+        setTimeout(playFreeBrokDraw, 230);
+      }catch(e){ toast(e.message); }
+    };
     const undoBtn = document.getElementById('adminUndoBtn');
     if(undoBtn) undoBtn.onclick = ()=>{ closeSheet(); setTimeout(openUndoArchiveSheet, 230); };
     document.getElementById('adminResetBtn').onclick = ()=>{ closeSheet(); setTimeout(openResetSheet, 230); };
