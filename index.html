@@ -91,7 +91,7 @@
   .bal-amt.zero{color:rgba(255,247,232,0.35); font-weight:700;}
   .bal-name.me::after{ content:' (dig)'; font-weight:400; opacity:.6; font-size:12px; }
 
-  .section-label{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:rgba(255,247,232,0.45); margin:14px 4px 10px; }
+  .section-label{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:rgba(255,247,232,0.65); margin:14px 4px 10px; }
 
   .bar-row{ display:flex; align-items:center; gap:10px; margin-bottom:10px; padding:0 2px; }
   .bar-track{ flex:1; height:14px; background:rgba(255,247,232,0.1); border-radius:10px; overflow:hidden; }
@@ -150,7 +150,7 @@
 
   .toast{ position:fixed; top:16px; left:50%; transform:translateX(-50%) translateY(-6px); background:linear-gradient(160deg, #0d4b52, var(--ink)); color:var(--cream); padding:13px 20px; border-radius:18px; font-size:14px; font-weight:600; z-index:80; box-shadow:0 10px 28px rgba(0,0,0,.35), 0 0 0 1px rgba(255,247,232,0.08) inset; opacity:0; transition:opacity .3s ease, transform .3s cubic-bezier(.2,.9,.3,1.2); pointer-events:none; max-width:88vw; text-align:center; line-height:1.4; }
   .toast.show{opacity:1; transform:translateX(-50%) translateY(6px);}
-  .confetti{ position:fixed; inset:0; pointer-events:none; z-index:70; overflow:hidden; }
+  .confetti{ position:fixed; inset:0; pointer-events:none; z-index:95; }
   .spinner{ width:16px;height:16px;border-radius:50%; border:2px solid rgba(255,255,255,.4); border-top-color:#fff; display:inline-block; animation:spin .7s linear infinite; }
   @keyframes spin{to{transform:rotate(360deg);}}
 </style>
@@ -694,7 +694,7 @@ function spotlightCards(vals){
   const saintNames = minV < maxV ? members.filter(m=>(vals[m.id]||0) === minV).map(m=>m.name).join(' & ') : null;
   const card = (title, emoji, names, amt, accent) => `
     <div style="flex:1; background:${accent ? 'rgba(255,107,74,0.14)' : 'rgba(255,247,232,0.07)'}; border:1px solid ${accent ? 'rgba(255,107,74,0.35)' : 'rgba(255,247,232,0.15)'}; border-radius:16px; padding:12px; text-align:center;">
-      <div style="font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:rgba(255,247,232,0.5);">${emoji} ${title}</div>
+      <div style="font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:rgba(255,247,232,0.68);">${emoji} ${title}</div>
       <div style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:${names.length>14?'12.5':'15'}px; color:var(--cream); margin-top:4px; line-height:1.2;">${escapeHtml(names)}</div>
       <div style="font-size:12px; color:var(--coin);">${amt}€</div>
     </div>`;
