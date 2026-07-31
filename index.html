@@ -1108,6 +1108,7 @@ function openAdminMenuSheet(){
     <button class="sheet-btn primary" id="adminSettleBtn">💶 Gør op (tøm puljen)</button>
     <button class="sheet-btn ghost" id="adminTestDrawBtn">🎰 Test spillemaskinen</button>
     ${state.history.length ? `<button class="sheet-btn ghost" id="adminUndoBtn">↩️ Fortryd seneste opgørelse</button>` : ''}
+    <button class="sheet-btn ghost" id="adminBackdateBtn">⏪ Ryk dagstæller én dag tilbage</button>
     <button class="sheet-btn danger" id="adminResetBtn">🧹 Nulstil alt</button>
     <button class="sheet-btn danger" id="adminFinalCloseBtn">🔒 Luk denne brokkekasse for altid</button>
     <button class="sheet-btn ghost" id="adminMenuCloseBtn">Luk menu</button>
@@ -1123,6 +1124,14 @@ function openAdminMenuSheet(){
     };
     const undoBtn = document.getElementById('adminUndoBtn');
     if(undoBtn) undoBtn.onclick = ()=>{ closeSheet(); setTimeout(openUndoArchiveSheet, 230); };
+    document.getElementById('adminBackdateBtn').onclick = async ()=>{
+      try{
+        const r = await api('admin', { action: 'backdate', roomId, actorId: profile.memberId });
+        state = r.state;
+        closeSheet();
+        toast(`☀️ Dagstæller rykket — nu dag ${dayCount()}`);
+      }catch(e){ toast(e.message); }
+    };
     document.getElementById('adminResetBtn').onclick = ()=>{ closeSheet(); setTimeout(openResetSheet, 230); };
     document.getElementById('adminFinalCloseBtn').onclick = ()=>{ closeSheet(); setTimeout(openFinalCloseSheet, 230); };
     document.getElementById('adminMenuCloseBtn').onclick = closeSheet;

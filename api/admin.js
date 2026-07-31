@@ -40,6 +40,15 @@ module.exports = async (req, res) => {
       return res.status(200).json({ state });
     }
 
+    if (action === 'backdate') {
+      // Midlertidig admin-genvej: rykker krukkens fødselsdag en dag tilbage,
+      // så dag-tælleren matcher virkeligheden efter det tidligere auto-reset-bug.
+      if (!isAdmin(state, actorId)) return res.status(403).json({ error: 'kun den der oprettede brokkekassen kan gøre dette' });
+      state.createdAt -= 86400000;
+      await setState(roomId, state);
+      return res.status(200).json({ state });
+    }
+
     if (action === 'reset') {
       if (!isAdmin(state, actorId)) return res.status(403).json({ error: 'kun den der oprettede brokkekassen kan nulstille' });
       const fresh = emptyState();
