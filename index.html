@@ -1111,6 +1111,7 @@ function openAdminMenuSheet(){
     <button class="sheet-btn primary" id="adminGoalBtn">🎯 Sæt mål for potten</button>
     <button class="sheet-btn primary" id="adminBroadcastBtn">📣 Send besked til alle</button>
     <button class="sheet-btn primary" id="adminSettleBtn">💶 Gør op (tøm puljen)</button>
+    ${state.events.length ? `<button class="sheet-btn ghost" id="adminRemoveEventBtn">🗑️ Fjern et brok (fx ved snyd)</button>` : ''}
     <button class="sheet-btn ghost" id="adminTestDrawBtn">🎰 Test spillemaskinen</button>
     ${state.history.length ? `<button class="sheet-btn ghost" id="adminUndoBtn">↩️ Fortryd seneste opgørelse</button>` : ''}
     <button class="sheet-btn ghost" id="adminBackdateBtn">⏪ Ryk dagstæller én dag tilbage</button>
@@ -1121,6 +1122,8 @@ function openAdminMenuSheet(){
     document.getElementById('adminGoalBtn').onclick = ()=>{ closeSheet(); setTimeout(openGoalSheet, 230); };
     document.getElementById('adminBroadcastBtn').onclick = ()=>{ closeSheet(); setTimeout(openBroadcastSheet, 230); };
     document.getElementById('adminSettleBtn').onclick = ()=>{ closeSheet(); setTimeout(openSettleSheet, 230); };
+    const removeBtn = document.getElementById('adminRemoveEventBtn');
+    if(removeBtn) removeBtn.onclick = ()=>{ closeSheet(); setTimeout(openRemoveEventSheet, 230); };
     document.getElementById('adminTestDrawBtn').onclick = ()=>{
       if(state.members.length < 2){ toast('kræver mindst 2 medlemmer for at vise dette'); return; }
       const previewWinner = state.members[Math.floor(Math.random()*state.members.length)];
@@ -1140,6 +1143,39 @@ function openAdminMenuSheet(){
     document.getElementById('adminResetBtn').onclick = ()=>{ closeSheet(); setTimeout(openResetSheet, 230); };
     document.getElementById('adminFinalCloseBtn').onclick = ()=>{ closeSheet(); setTimeout(openFinalCloseSheet, 230); };
     document.getElementById('adminMenuCloseBtn').onclick = closeSheet;
+  });
+}
+
+function openRemoveEventSheet(){
+  const rows = state.events.slice().sort((a,b)=>b.ts-a.ts).map(e=>{
+    const m = state.members.find(x=>x.id===e.memberId);
+    const time = new Date(e.ts).toLocaleString('da-DK',{day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
+    return `<div class="bal-row">
+      <div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${initials(m?m.name:'?')}</div>
+      <div class="feed-body">
+        <div class="bal-name">${escapeHtml(m?m.name:'?')}${e.free?' 🎫':''}</div>
+        <div style="font-size:12px; color:rgba(5,32,36,0.55);">${time}${e.message?' · "'+escapeHtml(e.message)+'"':''}</div>
+      </div>
+      <button class="sheet-btn ghost" style="width:auto; margin:0; padding:6px 10px; font-size:12px;" data-remove-event="${e.id}">Fjern</button>
+    </div>`;
+  }).join('');
+  openSheet(`
+    <h2>Fjern et brok 🗑️</h2>
+    <p class="hint">Bruges kun stille i baggrunden, fx hvis I opdager at nogen har rottet sig sammen om en uretfærdig anklage. Det fjernede brok forsvinder bare fra listen — ingen ser at det var dig der gjorde det.</p>
+    ${rows || '<p class="hint">Ingen brok i den aktive pulje lige nu.</p>'}
+    <button class="sheet-btn ghost" id="cancelRemoveEvent">Luk</button>
+  `, ()=>{
+    document.getElementById('cancelRemoveEvent').onclick = closeSheet;
+    document.querySelectorAll('[data-remove-event]').forEach(btn=>{
+      btn.onclick = async ()=>{
+        try{
+          const r = await api('admin', { action: 'removeEvent', roomId, actorId: profile.memberId, eventId: btn.dataset.removeEvent });
+          state = r.state;
+          closeSheet();
+          toast('🗑️ Fjernet');
+        }catch(e){ toast(e.message); }
+      };
+    });
   });
 }
 
