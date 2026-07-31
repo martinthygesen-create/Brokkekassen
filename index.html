@@ -56,6 +56,7 @@
   .segmented .seg{ flex:1; text-align:center; padding:7px 6px; border-radius:100px; font-size:12px; font-weight:700; color:rgba(255,247,232,0.5); cursor:pointer; transition:all .15s ease; }
   .segmented .seg.active{ background:rgba(255,247,232,0.15); color:var(--cream); }
 
+  .slot-banner{ display:inline-block; background:linear-gradient(135deg, var(--coral), #e14d2e); color:#fff; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:15px; letter-spacing:.02em; padding:9px 20px; border-radius:8px; margin-bottom:16px; box-shadow:0 8px 18px rgba(255,107,74,.4); clip-path:polygon(4% 0%, 96% 0%, 100% 50%, 96% 100%, 4% 100%, 0% 50%); }
   .slot-cabinet{ background:linear-gradient(160deg,#2e2a24,#141414); border-radius:24px; padding:16px 12px 14px; box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #8a6b1f; position:relative; }
   .slot-cabinet::before, .slot-cabinet::after{ content:''; position:absolute; top:10px; width:8px; height:8px; border-radius:50%; background:radial-gradient(circle at 35% 30%, #ffe9a8, #b8860b); box-shadow:0 0 6px rgba(255,201,60,.6); }
   .slot-cabinet::before{ left:12px; } .slot-cabinet::after{ right:12px; }
@@ -925,8 +926,8 @@ function playFreeBrokDraw(){
   `).join('');
 
   openSheet(`
-    <div style="text-align:center; padding:4px 0 2px;">
-      <div style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:rgba(5,32,36,0.4); margin-bottom:10px;">🎰 Dagens gratis brok</div>
+    <div style="text-align:center; padding:4px 0 6px;">
+      <div id="slotBanner" class="slot-banner">🎰 DAGENS GRATIS BROK</div>
       <div class="slot-cabinet" id="slotCabinet">
         <div class="slot-window">${reelsHtml}</div>
         <button class="slot-lever" id="pullLever">🎰 Træk i håndtaget!</button>
@@ -936,13 +937,41 @@ function playFreeBrokDraw(){
     <button class="sheet-btn ghost" id="drawCloseBtn" style="display:none; margin-top:10px;">Luk</button>
   `, ()=>{
     const cabinet = document.getElementById('slotCabinet');
+    const banner = document.getElementById('slotBanner');
     const lever = document.getElementById('pullLever');
     const winnerNameEl = document.getElementById('slotWinnerName');
     const closeBtn = document.getElementById('drawCloseBtn');
     closeBtn.onclick = closeSheet;
 
+    if(typeof gsap !== 'undefined'){
+      gsap.to(banner, { rotate: 2.5, duration: 1.1, ease: 'sine.inOut', yoyo: true, repeat: -1 });
+    }
+
+    function winConfetti(){
+      const rect = cabinet.getBoundingClientRect();
+      const cx = rect.left + rect.width/2, cy = rect.top + 24;
+      const layer = document.createElement('div');
+      layer.className = 'confetti';
+      document.body.appendChild(layer);
+      for(let i=0;i<24;i++){
+        const c = document.createElement('div');
+        c.textContent = ['🎉','✨','🪙','🎊'][Math.floor(Math.random()*4)];
+        c.style.cssText = `position:absolute; left:${cx}px; top:${cy}px; font-size:${14+Math.random()*12}px;`;
+        layer.appendChild(c);
+        const ang = Math.random()*Math.PI - Math.PI/2 - Math.PI/2; // opad-fan
+        const dist = 60 + Math.random()*120;
+        if(typeof gsap !== 'undefined'){
+          gsap.set(c, { xPercent:-50, yPercent:-50, opacity:1 });
+          gsap.to(c, { x: Math.cos(ang)*dist, y: Math.sin(ang)*dist + 40, rotate: Math.random()*360, duration: 0.9+Math.random()*0.4, ease:'power1.out' });
+          gsap.to(c, { opacity:0, duration:0.6, delay:0.5 });
+        }
+      }
+      setTimeout(()=>layer.remove(), 1600);
+    }
+
     function onAllStopped(){
       cabinet.classList.add('win');
+      winConfetti();
       if(typeof gsap !== 'undefined'){
         gsap.fromTo(winnerNameEl, {opacity:0, y:6}, {opacity:1, y:0, duration:.4, ease:'power2.out'});
       }else{
