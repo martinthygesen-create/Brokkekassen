@@ -863,23 +863,28 @@ function openBrokSheet(){
   let selectedId = null;
   openSheet(`
     <h2>Hvem brokker sig? 🙄</h2>
-    <p class="hint">Peg på synderen — så starter afstemningen for alle.</p>
+    <p class="hint">Peg på synderen, og skriv præcis hvad de brokkede sig over — ellers ved ingen hvad de stemmer om.</p>
     <div class="name-grid" id="whoGrid">${chips}</div>
-    <textarea id="msgInput" rows="2" maxlength="80" placeholder='F.eks. "over prisen på jetski..."'></textarea>
+    <textarea id="msgInput" rows="2" maxlength="80" placeholder='F.eks. "over prisen på jetski..." (påkrævet)'></textarea>
     <button class="sheet-btn primary" id="nextBtn" disabled>Start afstemning</button>
     <button class="sheet-btn ghost" id="cancelBtn">Annuller</button>
   `, ()=>{
+    const nextBtn = document.getElementById('nextBtn');
+    const msgInput = document.getElementById('msgInput');
+    function updateNextEnabled(){ nextBtn.disabled = !selectedId || !msgInput.value.trim(); }
+    msgInput.addEventListener('input', updateNextEnabled);
     document.querySelectorAll('#whoGrid .name-pill').forEach(p=>{
       p.onclick = ()=>{
         document.querySelectorAll('#whoGrid .name-pill').forEach(x=>x.classList.remove('selected'));
         p.classList.add('selected'); selectedId = p.dataset.id;
-        document.getElementById('nextBtn').disabled = false;
+        updateNextEnabled();
       };
     });
     document.getElementById('cancelBtn').onclick = closeSheet;
-    document.getElementById('nextBtn').onclick = async ()=>{
-      const message = document.getElementById('msgInput').value.trim();
-      document.getElementById('nextBtn').innerHTML = '<span class="spinner"></span>';
+    nextBtn.onclick = async ()=>{
+      const message = msgInput.value.trim();
+      if(!message){ toast('Skriv hvad de brokkede sig over først'); return; }
+      nextBtn.innerHTML = '<span class="spinner"></span>';
       try{
         const r = await api('brok', { roomId, memberId: selectedId, message });
         state = r.state;
