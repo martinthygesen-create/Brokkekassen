@@ -635,11 +635,17 @@ function feedItemHtml(e, old){
 
 function renderFeed(main){
   const pendingCards = (state.pendingList||[]).slice().sort((a,b)=>a.openedAt-b.openedAt).map(renderPendingCard).join('');
-  if(!state.events.length && !state.pendingList.length){
+  // Gammelt brok kan enten stadig ligge i state.events (bare ældre end i dag)
+  // eller allerede være arkiveret i historikken (fx fra en tidligere "Gør op",
+  // eller fra tiden inden krukken holdt op med at tømme sig selv hver nat).
+  const historyEvents = [];
+  state.history.forEach(round => (round.events||[]).forEach(e => historyEvents.push(e)));
+  const allEvents = [...historyEvents, ...state.events];
+  if(!allEvents.length && !state.pendingList.length){
     main.innerHTML = `<div class="empty-state"><span class="emoji">🤐</span><b>Ingen brok endnu</b>Første gang nogen brokker sig, koster det 1€. Hold øje!</div>`;
     return;
   }
-  const sorted = [...state.events].reverse();
+  const sorted = allEvents.slice().sort((a,b)=>b.ts-a.ts);
   const fresh = sorted.filter(e=>e.ts >= state.dayBoundary);
   const stale = sorted.filter(e=>e.ts < state.dayBoundary);
   const freshRows = fresh.map(e=>feedItemHtml(e, false)).join('');
