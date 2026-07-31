@@ -56,6 +56,21 @@
   .segmented .seg{ flex:1; text-align:center; padding:7px 6px; border-radius:100px; font-size:12px; font-weight:700; color:rgba(255,247,232,0.5); cursor:pointer; transition:all .15s ease; }
   .segmented .seg.active{ background:rgba(255,247,232,0.15); color:var(--cream); }
 
+  .slot-cabinet{ background:linear-gradient(160deg,#2e2a24,#141414); border-radius:24px; padding:16px 12px 14px; box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #8a6b1f; position:relative; }
+  .slot-cabinet::before, .slot-cabinet::after{ content:''; position:absolute; top:10px; width:8px; height:8px; border-radius:50%; background:radial-gradient(circle at 35% 30%, #ffe9a8, #b8860b); box-shadow:0 0 6px rgba(255,201,60,.6); }
+  .slot-cabinet::before{ left:12px; } .slot-cabinet::after{ right:12px; }
+  .slot-cabinet.win{ box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #FFC93C, 0 0 24px rgba(255,201,60,.5); }
+  .slot-window{ display:flex; gap:6px; background:#0a0a0a; border-radius:14px; padding:8px; box-shadow:inset 0 3px 14px rgba(0,0,0,.9); }
+  .reel{ flex:1; height:58px; overflow:hidden; border-radius:9px; background:rgba(255,255,255,0.03); position:relative; }
+  .reel::before{ content:''; position:absolute; inset:0; background:linear-gradient(180deg, rgba(0,0,0,.6), transparent 30%, transparent 70%, rgba(0,0,0,.6)); pointer-events:none; z-index:2; }
+  .reel-strip{ position:absolute; top:0; left:0; right:0; }
+  .reel-symbol{ height:58px; display:flex; align-items:center; justify-content:center; }
+  .reel-symbol .avatar{ width:40px; height:40px; font-size:14px; }
+  .slot-lever{ display:block; margin:18px auto 0; background:linear-gradient(160deg, var(--coral), #e14d2e); color:#fff; border:none; border-radius:100px; padding:13px 26px; font-family:'Baloo 2',sans-serif; font-weight:700; font-size:15px; box-shadow:0 8px 18px rgba(255,107,74,.4); cursor:pointer; }
+  .slot-lever:active{ transform:scale(.97); }
+  .slot-lever:disabled{ opacity:.5; }
+  .slot-winner-name{ text-align:center; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; color:var(--coral); margin-top:14px; opacity:0; }
+
   main{ flex:1; padding:0 16px 130px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
 
   .feed-item{ background:rgba(255,247,232,0.07); border:1px solid rgba(255,247,232,0.1); border-radius:16px; padding:12px 14px; margin-bottom:10px; display:flex; gap:12px; align-items:flex-start; }
@@ -891,39 +906,69 @@ function checkFreeBrokReveal(){
 function playFreeBrokDraw(){
   const winner = state.members.find(m=>m.id===state.freeBrokMemberId);
   if(!winner) return;
-  const pool = state.members;
+  const members = state.members;
+  const REEL_H = 58;
+
+  function buildStrip(){
+    const n = 14 + Math.floor(Math.random()*4);
+    const syms = [];
+    for(let i=0;i<n;i++) syms.push(members[Math.floor(Math.random()*members.length)]);
+    syms.push(winner); // sidste symbol i strimlen — det reel'en lander på
+    return syms;
+  }
+
+  const reels = [buildStrip(), buildStrip(), buildStrip()];
+  const reelsHtml = reels.map((syms,ri)=>`
+    <div class="reel"><div class="reel-strip" id="reelStrip${ri}">
+      ${syms.map(m=>`<div class="reel-symbol"><div class="avatar">${initials(m.name)}</div></div>`).join('')}
+    </div></div>
+  `).join('');
+
   openSheet(`
     <div style="text-align:center; padding:4px 0 2px;">
       <div style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:rgba(5,32,36,0.4); margin-bottom:10px;">🎰 Dagens gratis brok</div>
-      <div style="background:linear-gradient(160deg, #2a2a2a, #141414); border-radius:22px; padding:8px; box-shadow:0 10px 24px rgba(0,0,0,.35), inset 0 0 0 3px #8a6b1f;">
-        <div style="background:#0a0a0a; border-radius:14px; padding:22px 10px; box-shadow:inset 0 3px 12px rgba(0,0,0,.9);">
-          <div id="drawName" style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:26px; color:#FFC93C; text-shadow:0 0 10px rgba(255,201,60,.55); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">🎲</div>
-        </div>
+      <div class="slot-cabinet" id="slotCabinet">
+        <div class="slot-window">${reelsHtml}</div>
+        <button class="slot-lever" id="pullLever">🎰 Træk i håndtaget!</button>
+        <div class="slot-winner-name" id="slotWinnerName">${escapeHtml(winner.name)} vandt! 🍀</div>
       </div>
     </div>
-    <button class="sheet-btn primary" id="drawCloseBtn" style="display:none;">Fedt!</button>
+    <button class="sheet-btn ghost" id="drawCloseBtn" style="display:none; margin-top:10px;">Luk</button>
   `, ()=>{
-    const nameEl = document.getElementById('drawName');
+    const cabinet = document.getElementById('slotCabinet');
+    const lever = document.getElementById('pullLever');
+    const winnerNameEl = document.getElementById('slotWinnerName');
     const closeBtn = document.getElementById('drawCloseBtn');
     closeBtn.onclick = closeSheet;
-    let i = 0, delay = 70, elapsed = 0;
-    const totalSpin = 1400;
-    (function tick(){
-      nameEl.textContent = pool[i % pool.length].name;
-      i++;
-      elapsed += delay;
-      delay *= 1.15;
-      if(elapsed < totalSpin){
-        setTimeout(tick, delay);
+
+    function onAllStopped(){
+      cabinet.classList.add('win');
+      if(typeof gsap !== 'undefined'){
+        gsap.fromTo(winnerNameEl, {opacity:0, y:6}, {opacity:1, y:0, duration:.4, ease:'power2.out'});
       }else{
-        nameEl.textContent = winner.name;
-        nameEl.style.transform = 'scale(1.12)';
-        nameEl.style.transition = 'transform .25s cubic-bezier(.34,1.7,.64,1)';
-        setTimeout(()=>{ nameEl.style.transform = 'scale(1)'; }, 250);
-        closeBtn.style.display = 'block';
-        toast(`🍀 ${winner.name} har dagens gratis brok!`);
+        winnerNameEl.style.opacity = '1';
       }
-    })();
+      closeBtn.style.display = 'block';
+      toast(`🍀 ${winner.name} har dagens gratis brok!`);
+    }
+
+    lever.onclick = ()=>{
+      lever.disabled = true;
+      const durations = [1.0, 1.5, 2.1];
+      let doneCount = 0;
+      reels.forEach((syms, ri)=>{
+        const strip = document.getElementById('reelStrip'+ri);
+        const distance = (syms.length-1) * REEL_H;
+        const finish = ()=>{ doneCount++; if(doneCount === reels.length) onAllStopped(); };
+        if(typeof gsap !== 'undefined'){
+          gsap.fromTo(strip, { y: 0 }, { y: -distance, duration: durations[ri], ease: 'power3.out', onComplete: finish });
+        }else{
+          strip.style.transition = `transform ${durations[ri]}s ease-out`;
+          strip.style.transform = `translateY(-${distance}px)`;
+          setTimeout(finish, durations[ri]*1000);
+        }
+      });
+    };
   });
 }
 
