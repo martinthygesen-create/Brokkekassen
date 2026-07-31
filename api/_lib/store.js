@@ -97,12 +97,12 @@ function settleRound(state) {
 
   const totals = {};
   state.members.forEach(m => (totals[m.id] = 0));
-  state.events.forEach(e => { if (!e.free && totals[e.memberId] !== undefined) totals[e.memberId]++; });
+  state.events.forEach(e => { if (!e.free && !e.voided && totals[e.memberId] !== undefined) totals[e.memberId]++; });
 
   state.history.push({
     startedAt: state.createdAt,
     closedAt: Date.now(),
-    total: state.events.filter(e => !e.free).length,
+    total: state.events.filter(e => !e.free && !e.voided).length,
     totals,
     events: state.events,
   });

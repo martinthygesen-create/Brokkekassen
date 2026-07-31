@@ -480,17 +480,17 @@ function renderWhoAmI(justCreated){
 }
 
 /* ============ MAIN RENDER ============ */
-function totalPool(){ return state.events.filter(e=>!e.free).length; }
+function totalPool(){ return state.events.filter(e=>!e.free && !e.voided).length; }
 // Alle nuværende (endnu ikke afregnede) brok — kan sagtens strække sig over flere dage.
 function balances(){
   const map = {}; state.members.forEach(m=>map[m.id]=0);
-  state.events.forEach(e=>{ if(!e.free && map[e.memberId]!==undefined) map[e.memberId]++; });
+  state.events.forEach(e=>{ if(!e.free && !e.voided && map[e.memberId]!==undefined) map[e.memberId]++; });
   return map;
 }
 // Kun dagens brok (siden kl. 04), til "Dagens BigSpender".
 function todayBalances(){
   const map = {}; state.members.forEach(m=>map[m.id]=0);
-  state.events.forEach(e=>{ if(!e.free && e.ts >= state.dayBoundary && map[e.memberId]!==undefined) map[e.memberId]++; });
+  state.events.forEach(e=>{ if(!e.free && !e.voided && e.ts >= state.dayBoundary && map[e.memberId]!==undefined) map[e.memberId]++; });
   return map;
 }
 
@@ -643,9 +643,13 @@ function bindPendingCardHandlers(){
 function feedItemHtml(e, old){
   const m = state.members.find(x=>x.id===e.memberId);
   const name = m ? m.name : '?';
-  return `<div class="feed-item" ${old ? 'style="opacity:.72;"' : ''}><div class="avatar">${initials(name)}</div><div class="feed-body">
-    <div class="feed-name">${escapeHtml(name)} <span class="amt">${e.free ? '🎫 gratis' : '+1€'}</span></div>
-    ${e.message ? `<div class="feed-msg">"${escapeHtml(e.message)}"</div>` : ''}
+  const opacity = e.voided ? .55 : (old ? .72 : 1);
+  return `<div class="feed-item" style="opacity:${opacity};">
+    <div class="avatar" style="${e.voided?'filter:grayscale(1);':''}">${initials(name)}</div>
+    <div class="feed-body">
+    <div class="feed-name">${escapeHtml(name)} <span class="amt">${e.voided ? '🫤 talt fra' : (e.free ? '🎫 gratis' : '+1€')}</span></div>
+    ${e.message ? `<div class="feed-msg" style="${e.voided?'text-decoration:line-through;':''}">"${escapeHtml(e.message)}"</div>` : ''}
+    ${e.voided ? `<div class="feed-msg" style="color:rgba(255,201,60,0.85); font-weight:600;">🫤 Mistanke om snyd — tæller ikke med</div>` : ''}
     <div class="feed-time">${fmtTime(e.ts)}</div></div></div>`;
 }
 
@@ -1111,7 +1115,7 @@ function openAdminMenuSheet(){
     <button class="sheet-btn primary" id="adminGoalBtn">🎯 Sæt mål for potten</button>
     <button class="sheet-btn primary" id="adminBroadcastBtn">📣 Send besked til alle</button>
     <button class="sheet-btn primary" id="adminSettleBtn">💶 Gør op (tøm puljen)</button>
-    ${state.events.length ? `<button class="sheet-btn ghost" id="adminRemoveEventBtn">🗑️ Fjern et brok (fx ved snyd)</button>` : ''}
+    ${state.events.filter(e=>!e.voided).length ? `<button class="sheet-btn ghost" id="adminRemoveEventBtn">🫤 Markér mistænkt snyd</button>` : ''}
     <button class="sheet-btn ghost" id="adminTestDrawBtn">🎰 Test spillemaskinen</button>
     ${state.history.length ? `<button class="sheet-btn ghost" id="adminUndoBtn">↩️ Fortryd seneste opgørelse</button>` : ''}
     <button class="sheet-btn ghost" id="adminBackdateBtn">⏪ Ryk dagstæller én dag tilbage</button>
@@ -1147,7 +1151,7 @@ function openAdminMenuSheet(){
 }
 
 function openRemoveEventSheet(){
-  const rows = state.events.slice().sort((a,b)=>b.ts-a.ts).map(e=>{
+  const rows = state.events.filter(e=>!e.voided).slice().sort((a,b)=>b.ts-a.ts).map(e=>{
     const m = state.members.find(x=>x.id===e.memberId);
     const time = new Date(e.ts).toLocaleString('da-DK',{day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
     return `<div class="bal-row">
@@ -1156,23 +1160,23 @@ function openRemoveEventSheet(){
         <div class="bal-name">${escapeHtml(m?m.name:'?')}${e.free?' 🎫':''}</div>
         <div style="font-size:12px; color:rgba(5,32,36,0.55);">${time}${e.message?' · "'+escapeHtml(e.message)+'"':''}</div>
       </div>
-      <button class="sheet-btn ghost" style="width:auto; margin:0; padding:6px 10px; font-size:12px;" data-remove-event="${e.id}">Fjern</button>
+      <button class="sheet-btn ghost" style="width:auto; margin:0; padding:6px 10px; font-size:12px;" data-flag-event="${e.id}">Markér</button>
     </div>`;
   }).join('');
   openSheet(`
-    <h2>Fjern et brok 🗑️</h2>
-    <p class="hint">Bruges kun stille i baggrunden, fx hvis I opdager at nogen har rottet sig sammen om en uretfærdig anklage. Det fjernede brok forsvinder bare fra listen — ingen ser at det var dig der gjorde det.</p>
+    <h2>Markér mistænkt snyd 🫤</h2>
+    <p class="hint">Bliver stående i feedet, men gråtonet og streget over — og tæller ikke længere med i puljen. Ingen anklage, bare en synlig mistanke, så folk selv regulerer det.</p>
     ${rows || '<p class="hint">Ingen brok i den aktive pulje lige nu.</p>'}
     <button class="sheet-btn ghost" id="cancelRemoveEvent">Luk</button>
   `, ()=>{
     document.getElementById('cancelRemoveEvent').onclick = closeSheet;
-    document.querySelectorAll('[data-remove-event]').forEach(btn=>{
+    document.querySelectorAll('[data-flag-event]').forEach(btn=>{
       btn.onclick = async ()=>{
         try{
-          const r = await api('admin', { action: 'removeEvent', roomId, actorId: profile.memberId, eventId: btn.dataset.removeEvent });
+          const r = await api('admin', { action: 'flagEvent', roomId, actorId: profile.memberId, eventId: btn.dataset.flagEvent });
           state = r.state;
           closeSheet();
-          toast('🗑️ Fjernet');
+          toast('🫤 Markeret som mistænkt');
         }catch(e){ toast(e.message); }
       };
     });

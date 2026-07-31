@@ -49,17 +49,17 @@ module.exports = async (req, res) => {
       return res.status(200).json({ state });
     }
 
-    if (action === 'removeEvent') {
-      // Stille admin-fjernelse af et allerede godkendt brok (fx ved mistanke
-      // om at nogen har rottet sig sammen om en uretfærdig anklage). Ingen
-      // synlig markering i feedet — brokket forsvinder bare, uden varsel om
-      // at admin var involveret, så admin kan bruge det uden at skille sig ud.
+    if (action === 'flagEvent') {
+      // Admin markerer et allerede godkendt brok som mistænkt snyd (fx
+      // sammenrotning om en uretfærdig anklage). Det bliver stående i feedet
+      // så det regulerer sig selv via social skam, men tæller ikke længere
+      // med i puljen/regnskabet.
       const { eventId } = req.body || {};
       if (!isAdmin(state, actorId)) return res.status(403).json({ error: 'kun den der oprettede brokkekassen kan gøre dette' });
       if (!eventId) return res.status(400).json({ error: 'mangler data' });
-      const before = state.events.length;
-      state.events = state.events.filter(e => e.id !== eventId);
-      if (state.events.length === before) return res.status(404).json({ error: 'brok findes ikke længere' });
+      const ev = state.events.find(e => e.id === eventId);
+      if (!ev) return res.status(404).json({ error: 'brok findes ikke længere' });
+      ev.voided = true;
       await setState(roomId, state);
       return res.status(200).json({ state });
     }
