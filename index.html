@@ -465,9 +465,16 @@ function renderWhoAmI(justCreated){
 
 /* ============ MAIN RENDER ============ */
 function totalPool(){ return state.events.filter(e=>!e.free).length; }
+// Alle nuværende (endnu ikke afregnede) brok — kan sagtens strække sig over flere dage.
 function balances(){
   const map = {}; state.members.forEach(m=>map[m.id]=0);
   state.events.forEach(e=>{ if(!e.free && map[e.memberId]!==undefined) map[e.memberId]++; });
+  return map;
+}
+// Kun dagens brok (siden kl. 04), til "Dagens BigSpender".
+function todayBalances(){
+  const map = {}; state.members.forEach(m=>map[m.id]=0);
+  state.events.forEach(e=>{ if(!e.free && e.ts >= state.dayBoundary && map[e.memberId]!==undefined) map[e.memberId]++; });
   return map;
 }
 
@@ -617,21 +624,32 @@ function bindPendingCardHandlers(){
   });
 }
 
+function feedItemHtml(e, old){
+  const m = state.members.find(x=>x.id===e.memberId);
+  const name = m ? m.name : '?';
+  return `<div class="feed-item" ${old ? 'style="opacity:.55;"' : ''}><div class="avatar">${initials(name)}</div><div class="feed-body">
+    <div class="feed-name">${escapeHtml(name)} <span class="amt">${e.free ? '🎫 gratis' : '+1€'}</span></div>
+    ${e.message ? `<div class="feed-msg">"${escapeHtml(e.message)}"</div>` : ''}
+    <div class="feed-time">${fmtTime(e.ts)}</div></div></div>`;
+}
+
 function renderFeed(main){
   const pendingCards = (state.pendingList||[]).slice().sort((a,b)=>a.openedAt-b.openedAt).map(renderPendingCard).join('');
   if(!state.events.length && !state.pendingList.length){
     main.innerHTML = `<div class="empty-state"><span class="emoji">🤐</span><b>Ingen brok endnu</b>Første gang nogen brokker sig, koster det 1€. Hold øje!</div>`;
     return;
   }
-  const feedRows = [...state.events].reverse().map(e=>{
-    const m = state.members.find(x=>x.id===e.memberId);
-    const name = m ? m.name : '?';
-    return `<div class="feed-item"><div class="avatar">${initials(name)}</div><div class="feed-body">
-      <div class="feed-name">${escapeHtml(name)} <span class="amt">${e.free ? '🎫 gratis' : '+1€'}</span></div>
-      ${e.message ? `<div class="feed-msg">"${escapeHtml(e.message)}"</div>` : ''}
-      <div class="feed-time">${fmtTime(e.ts)}</div></div></div>`;
-  }).join('');
-  main.innerHTML = pendingCards + (state.events.length ? `<div class="section-label">Seneste brok</div>${feedRows}` : '');
+  const sorted = [...state.events].reverse();
+  const fresh = sorted.filter(e=>e.ts >= state.dayBoundary);
+  const stale = sorted.filter(e=>e.ts < state.dayBoundary);
+  const freshRows = fresh.map(e=>feedItemHtml(e, false)).join('');
+  const staleRows = stale.map(e=>feedItemHtml(e, true)).join('');
+  const quietToday = !fresh.length && !!stale.length
+    ? `<div class="empty-state" style="padding:24px 20px 10px;"><span class="emoji">🤐</span><b>Stille indtil videre i dag</b>Rul ned og nyd gårsdagens elendighed.</div>`
+    : '';
+  main.innerHTML = pendingCards + quietToday
+    + (fresh.length ? `<div class="section-label">Seneste brok</div>${freshRows}` : '')
+    + (stale.length ? `<div class="section-label" style="margin-top:${fresh.length?22:10}px;">📜 Gammelt brok</div>${staleRows}` : '');
   bindPendingCardHandlers();
 }
 function allTimeTotals(){
@@ -680,7 +698,7 @@ function renderBrokListen(main){
 }
 
 function renderBalanceToday(main){
-  const bal = balances();
+  const bal = todayBalances();
   const balValues = Object.values(bal);
   const maxAmt = Math.max(0, ...balValues);
   const minAmt = balValues.length ? Math.min(...balValues) : 0;
@@ -849,11 +867,13 @@ function openBrokSheet(){
 /* ============ DAGENS LODTRÆKNING ============ */
 function checkFreeBrokReveal(){
   if(!state || !state.freeBrokMemberId || !state.members.length) return;
+  // Brug tidsstemplet for selve trækningen, ikke hvem der vandt — ellers
+  // springes animationen forkert over hvis samme person vinder to dage i træk.
+  const marker = String(state.freeBrokDrawnAt || state.freeBrokMemberId);
   const key = 'bk_lastFreeReveal_' + roomId;
   const lastShown = localStorage.getItem(key);
-  localStorage.setItem(key, state.freeBrokMemberId);
-  if(lastShown === null) return; // undgå at vise animation ved allerførste besøg
-  if(lastShown === state.freeBrokMemberId) return; // allerede vist
+  if(lastShown === marker) return; // denne trækning er allerede vist
+  localStorage.setItem(key, marker);
   if(document.getElementById('sheetBackdrop')) return; // ikke midt i en anden dialog
   playFreeBrokDraw();
 }
@@ -999,11 +1019,11 @@ function pushDebugInfo(){
 function openAdminMenuSheet(){
   openSheet(`
     <h2>Admin ⚙️</h2>
-    <p class="hint">Du oprettede denne brokkekasse, så det er dig der styrer den. Ny dag starter automatisk kl. 04.</p>
+    <p class="hint">Du oprettede denne brokkekasse, så det er dig der styrer den. Streaks og gratis brok opdateres automatisk hver dag kl. 04 — men puljen tømmer sig kun når du selv gør op.</p>
     <p class="hint" style="font-size:11px; color:rgba(5,32,36,0.4); word-break:break-word;">🔧 Push-status: ${pushDebugInfo()}</p>
     <button class="sheet-btn primary" id="adminGoalBtn">🎯 Sæt mål for potten</button>
     <button class="sheet-btn primary" id="adminBroadcastBtn">📣 Send besked til alle</button>
-    <button class="sheet-btn primary" id="adminSettleBtn">💶 Gør op nu (afslut dagen tidligt)</button>
+    <button class="sheet-btn primary" id="adminSettleBtn">💶 Gør op (tøm puljen)</button>
     <button class="sheet-btn danger" id="adminResetBtn">🧹 Nulstil alt</button>
     <button class="sheet-btn danger" id="adminFinalCloseBtn">🔒 Luk denne brokkekasse for altid</button>
     <button class="sheet-btn ghost" id="adminMenuCloseBtn">Luk menu</button>
@@ -1063,9 +1083,9 @@ function openSettleSheet(){
   const rows = state.members.map(m=>`<div class="hr-line"><span>${escapeHtml(m.name)}</span><span>${bal[m.id]||0}€</span></div>`).join('');
   openSheet(`
     <h2>Gør op 💶</h2>
-    <p class="hint">Total i puljen: <b>${totalPool()}€</b>. Dette afslutter dagen for alle og gemmer den i historikken. Puljen starter forfra, og der trækkes lod om et nyt gratis brok.</p>
+    <p class="hint">Total i puljen: <b>${totalPool()}€</b>. Dette arkiverer hele puljen i historikken og starter helt forfra. Streaks og gratis brok opdateres som normalt.</p>
     ${rows}
-    <button class="sheet-btn danger" id="doSettle">Bekræft og afslut dagen</button>
+    <button class="sheet-btn danger" id="doSettle">Bekræft og gør op</button>
     <button class="sheet-btn ghost" id="cancelSettle">Annuller</button>
   `, ()=>{
     document.getElementById('cancelSettle').onclick = closeSheet;
@@ -1074,7 +1094,7 @@ function openSettleSheet(){
         const r = await api('admin', { action: 'settle', roomId, actorId: profile.memberId });
         state = r.state;
         closeSheet();
-        toast('✅ Dagen er afsluttet — ny dag startet!');
+        toast('✅ Puljen er gjort op — helt tømt igen!');
         activeTab='broklisten'; brokListSubTab='alltime';
         render();
       }

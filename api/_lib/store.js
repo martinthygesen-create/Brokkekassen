@@ -15,12 +15,14 @@ const RESET_TZ = 'Europe/Copenhagen';
 
 function emptyState() {
   return {
-    createdAt: Date.now(),
+    createdAt: Date.now(), // brokkekassens fødselsdag — rykkes ALDRIG efter oprettelse
+    dayBoundary: Date.now(), // starten af "i dag", til streaks/lodtrækning og "Dagens BigSpender"
     members: [],   // {id, name}
-    events: [],    // {id, memberId, message, ts, votes:[voterIds], free}
+    events: [],    // {id, memberId, message, ts, votes:[voterIds], free} — vokser bare, tømmes kun ved manuel "Gør op"
     pendingList: [], // [{id, memberId, message, votes:[voterIds], openedAt, need}] — flere kan være i gang samtidig
-    history: [],   // {startedAt, closedAt, total, totals:{memberId:amt}, events:[...]}
+    history: [],   // {startedAt, closedAt, total, totals:{memberId:amt}, events:[...]} — kun fra manuel "Gør op"/lukning
     freeBrokMemberId: null, // dagens heldige vinder af gratis brok, trukket tilfældigt
+    freeBrokDrawnAt: null,  // tidsstempel for seneste lodtrækning, til at vise animationen præcis én gang pr. trækning
     streaks: {},   // memberId -> antal sammenhængende dage uden brok
     closed: false, // hele brokkekassen er lukket permanent (ingen flere brok)
     pushSubs: {},  // memberId -> PushSubscription, til rigtige push-notifikationer
@@ -50,28 +52,16 @@ function nextDailyReset(ts) {
   return resetLocal - offsetMin * 60000;
 }
 
-// Arkiverer den igangværende runde i historikken (hvis der var nogen brok),
-// tømmer puljen, opdaterer alles "dage uden brok"-streak, og trækker
-// tilfældigt lod om dagens gratis brok blandt alle medlemmer. Bruges både af
-// manuel "Gør op", den endelige lukning og den automatiske daglige afregning.
-function settleRound(state, { skipHistoryIfEmpty } = {}) {
-  const totals = {};    // betalende brok (til regnskab/historik)
-  const anyCount = {};  // alle brok inkl. gratis (til streak-beregning)
-  state.members.forEach(m => { totals[m.id] = 0; anyCount[m.id] = 0; });
+// Opdaterer alles "dage uden brok"-streak (kun ud fra brok siden dayBoundary)
+// og trækker tilfældigt lod om dagens gratis brok blandt alle medlemmer.
+// Bruges både af den automatiske daglige afregning og af manuel "Gør op" —
+// men rører ALDRIG selve puljen (events). Krukken tømmer ikke sig selv.
+function updateStreaksAndDrawLottery(state) {
+  const anyCount = {};
+  state.members.forEach(m => (anyCount[m.id] = 0));
   state.events.forEach(e => {
-    if (anyCount[e.memberId] !== undefined) anyCount[e.memberId]++;
-    if (!e.free && totals[e.memberId] !== undefined) totals[e.memberId]++;
+    if (e.ts >= state.dayBoundary && anyCount[e.memberId] !== undefined) anyCount[e.memberId]++;
   });
-
-  if (state.events.length || !skipHistoryIfEmpty) {
-    state.history.push({
-      startedAt: state.createdAt,
-      closedAt: Date.now(),
-      total: state.events.filter(e => !e.free).length,
-      totals,
-      events: state.events,
-    });
-  }
 
   if (!state.streaks) state.streaks = {};
   state.members.forEach(m => {
@@ -84,21 +74,42 @@ function settleRound(state, { skipHistoryIfEmpty } = {}) {
   if (state.members.length > 1) {
     nextFree = state.members[Math.floor(Math.random() * state.members.length)].id;
   }
+  state.freeBrokMemberId = nextFree;
+  state.freeBrokDrawnAt = Date.now();
+  state.dayBoundary = Date.now();
+}
+
+// Ny dag starter automatisk kl. 04 lokal tid: streaks og lodtrækning
+// opdateres, men puljen (events) er urørt — den tømmes kun ved en bevidst
+// "Gør op". Så det ikke kræver at nogen husker noget manuelt hver dag.
+function autoSettleIfDue(state) {
+  if (state.closed) return false;
+  if (Date.now() < nextDailyReset(state.dayBoundary)) return false;
+  updateStreaksAndDrawLottery(state);
+  return true;
+}
+
+// Manuel "Gør op"/endelig lukning: arkiverer HELE den akkumulerede pulje i
+// historikken og tømmer den — den eneste måde krukken reelt tømmes på.
+// Opdaterer også streaks/lodtrækning for det stykke tid der lige er gået.
+function settleRound(state) {
+  updateStreaksAndDrawLottery(state);
+
+  const totals = {};
+  state.members.forEach(m => (totals[m.id] = 0));
+  state.events.forEach(e => { if (!e.free && totals[e.memberId] !== undefined) totals[e.memberId]++; });
+
+  state.history.push({
+    startedAt: state.createdAt,
+    closedAt: Date.now(),
+    total: state.events.filter(e => !e.free).length,
+    totals,
+    events: state.events,
+  });
 
   state.events = [];
   state.pendingList = [];
-  state.createdAt = Date.now();
-  state.freeBrokMemberId = nextFree;
   return state;
-}
-
-// Ny runde starter automatisk hver dag kl. 04 lokal tid, så det ikke kræver
-// at nogen husker at trykke "Gør op" manuelt.
-function autoSettleIfDue(state) {
-  if (state.closed) return false;
-  if (Date.now() < nextDailyReset(state.createdAt)) return false;
-  settleRound(state, { skipHistoryIfEmpty: true });
-  return true;
 }
 
 async function getState(roomId) {
@@ -110,6 +121,8 @@ async function getState(roomId) {
   if (!state.pushSubs) state.pushSubs = {};
   if (!state.streaks) state.streaks = {};
   if (state.goal === undefined) state.goal = '';
+  if (!state.dayBoundary) state.dayBoundary = Date.now();
+  if (state.freeBrokDrawnAt === undefined) state.freeBrokDrawnAt = null;
   if (!state.pendingList) {
     // migrering fra det gamle enkelt-pending-felt til en liste
     state.pendingList = state.pending ? [state.pending] : [];
