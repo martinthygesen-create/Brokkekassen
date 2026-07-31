@@ -642,7 +642,7 @@ function bindPendingCardHandlers(){
 function feedItemHtml(e, old){
   const m = state.members.find(x=>x.id===e.memberId);
   const name = m ? m.name : '?';
-  return `<div class="feed-item" ${old ? 'style="opacity:.55;"' : ''}><div class="avatar">${initials(name)}</div><div class="feed-body">
+  return `<div class="feed-item" ${old ? 'style="opacity:.72;"' : ''}><div class="avatar">${initials(name)}</div><div class="feed-body">
     <div class="feed-name">${escapeHtml(name)} <span class="amt">${e.free ? '🎫 gratis' : '+1€'}</span></div>
     ${e.message ? `<div class="feed-msg">"${escapeHtml(e.message)}"</div>` : ''}
     <div class="feed-time">${fmtTime(e.ts)}</div></div></div>`;
