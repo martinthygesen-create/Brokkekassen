@@ -120,7 +120,7 @@
   .sheet p.hint{font-size:13px; color:rgba(5,32,36,0.55); margin:0 0 16px;}
 
   .name-grid{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;}
-  .name-pill{ padding:10px 16px; border-radius:100px; border:2px solid rgba(5,32,36,0.12); background:#fff; font-weight:700; font-size:14.5px; cursor:pointer; }
+  .name-pill{ padding:10px 16px; border-radius:100px; border:2px solid rgba(5,32,36,0.12); background:#fff; color:var(--ink); font-weight:700; font-size:14.5px; cursor:pointer; }
   .name-pill.selected{ background:var(--coral); border-color:var(--coral); color:#fff; }
   .name-pill.voted{ background:var(--sea); border-color:var(--sea); color:#fff; }
   .name-pill:disabled{opacity:.4;}
@@ -601,7 +601,7 @@ function renderPendingCard(p){
       <div class="feed-name">${escapeHtml(complainer?complainer.name:'?')} anklaget <span class="amt">${p.votes.length}/${p.need}</span></div>
       ${p.message ? `<div class="feed-msg">"${escapeHtml(p.message)}"</div>` : ''}
       <div class="name-grid" style="margin:8px 0 2px;">${chips}</div>
-      ${isAdmin() ? `<button class="sheet-btn ghost" style="margin-top:2px; padding:5px; font-size:11px;" data-cancel-pending="${p.id}">Fortryd (afblæs)</button>` : ''}
+      ${isAdmin() ? `<button style="margin-top:6px; padding:6px 12px; border-radius:100px; border:1px solid rgba(255,247,232,0.25); background:rgba(255,247,232,0.08); color:rgba(255,247,232,0.85); font-weight:600; font-size:11.5px; cursor:pointer;" data-cancel-pending="${p.id}">Fortryd (afblæs)</button>` : ''}
     </div>
   </div>`;
 }
