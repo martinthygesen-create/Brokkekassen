@@ -879,43 +879,32 @@ const NEW_DAY_LINES = [
 ];
 
 function checkFreeBrokReveal(){
-  if(!state || !state.dayBoundary || !state.members.length) return;
-  // Brug selve dags-grænsen som markør — den skifter altid ved en ny dag,
-  // uanset om der er en gratis-brok-vinder (fx ved kun ét medlem).
-  const marker = String(state.dayBoundary);
-  const key = 'bk_lastDayWelcome_' + roomId;
-  const lastShown = localStorage.getItem(key);
-  if(lastShown === marker) return; // denne dag er allerede budt velkommen
-  localStorage.setItem(key, marker);
-  if(document.getElementById('sheetBackdrop')) return; // ikke midt i en anden dialog
+  if(!state || !state.freeBrokMemberId || !state.members.length) return;
+  const marker = String(state.freeBrokDrawnAt || state.dayBoundary);
+  const key = 'bk_lastFreeReveal_' + roomId;
+  if(localStorage.getItem(key) === marker) return; // denne trækning er allerede vist
+  if(document.getElementById('sheetBackdrop')) return; // vent — prøves igen næste render, når dialogen er lukket
+  localStorage.setItem(key, marker); // marker først NU, når vi rent faktisk viser den (undgår at "spise" den uset)
   playFreeBrokDraw();
 }
 
 function playFreeBrokDraw(){
-  const dayNum = dayCount();
   const winner = state.members.find(m=>m.id===state.freeBrokMemberId);
-  const line = NEW_DAY_LINES[Math.floor(Math.random()*NEW_DAY_LINES.length)];
-
-  if(!winner){
-    openSheet(`
-      <h2>☀️ Dag ${dayNum}!</h2>
-      <p class="hint">${line}</p>
-      <button class="sheet-btn primary" id="drawCloseBtn">Lad os gå i gang</button>
-    `, ()=>{ document.getElementById('drawCloseBtn').onclick = closeSheet; });
-    return;
-  }
-
+  if(!winner) return;
   const pool = state.members;
   openSheet(`
-    <h2>☀️ Dag ${dayNum}! 🎰 Nyt held!</h2>
-    <p class="hint">${line} Men først: der trækkes lod om dagens gratis brok blandt alle...</p>
-    <div id="drawName" style="text-align:center; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:30px; color:var(--sea); padding:24px 0;">🎲</div>
-    <p id="streakLine" class="hint" style="display:none;"></p>
+    <div style="text-align:center; padding:4px 0 2px;">
+      <div style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:rgba(5,32,36,0.4); margin-bottom:10px;">🎰 Dagens gratis brok</div>
+      <div style="background:linear-gradient(160deg, #2a2a2a, #141414); border-radius:22px; padding:8px; box-shadow:0 10px 24px rgba(0,0,0,.35), inset 0 0 0 3px #8a6b1f;">
+        <div style="background:#0a0a0a; border-radius:14px; padding:22px 10px; box-shadow:inset 0 3px 12px rgba(0,0,0,.9);">
+          <div id="drawName" style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:26px; color:#FFC93C; text-shadow:0 0 10px rgba(255,201,60,.55); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">🎲</div>
+        </div>
+      </div>
+    </div>
     <button class="sheet-btn primary" id="drawCloseBtn" style="display:none;">Fedt!</button>
   `, ()=>{
     const nameEl = document.getElementById('drawName');
     const closeBtn = document.getElementById('drawCloseBtn');
-    const streakEl = document.getElementById('streakLine');
     closeBtn.onclick = closeSheet;
     let i = 0, delay = 70, elapsed = 0;
     const totalSpin = 1400;
@@ -928,17 +917,9 @@ function playFreeBrokDraw(){
         setTimeout(tick, delay);
       }else{
         nameEl.textContent = winner.name;
-        nameEl.style.color = 'var(--coral)';
-        nameEl.style.transform = 'scale(1.15)';
+        nameEl.style.transform = 'scale(1.12)';
         nameEl.style.transition = 'transform .25s cubic-bezier(.34,1.7,.64,1)';
         setTimeout(()=>{ nameEl.style.transform = 'scale(1)'; }, 250);
-        const streaks = state.streaks || {};
-        const topStreak = Math.max(0, ...state.members.map(m=>streaks[m.id]||0));
-        if(topStreak > 0){
-          const heroes = state.members.filter(m=>(streaks[m.id]||0) === topStreak).map(m=>m.name).join(' & ');
-          streakEl.textContent = `🔥 ${heroes} har nu ${topStreak} dag${topStreak===1?'':'e'} uden brok i træk!`;
-          streakEl.style.display = 'block';
-        }
         closeBtn.style.display = 'block';
         toast(`🍀 ${winner.name} har dagens gratis brok!`);
       }
