@@ -1,4 +1,4 @@
-const { getState, setState, emptyState, isAdmin, settleRound, updateStreaksAndDrawLottery } = require('./_lib/store');
+const { getState, setState, emptyState, isAdmin, settleRound } = require('./_lib/store');
 const { pushToMembers } = require('./_lib/push');
 
 // Samler admin-handlingerne (gør op, luk, nulstil, besked, mål) i én
@@ -36,17 +36,6 @@ module.exports = async (req, res) => {
       const last = state.history.pop();
       state.events = [...last.events, ...state.events];
       state.createdAt = last.startedAt;
-      await setState(roomId, state);
-      return res.status(200).json({ state });
-    }
-
-    if (action === 'testDraw') {
-      // Kun til at forhåndsvise spillemaskinen uden at vente på et rigtigt
-      // dagsskifte — trækker en ny lodtrækning og opdaterer streaks med det
-      // samme, ellers samme logik som den automatiske daglige proces.
-      if (!isAdmin(state, actorId)) return res.status(403).json({ error: 'kun den der oprettede brokkekassen kan teste dette' });
-      if (state.members.length < 2) return res.status(400).json({ error: 'kræver mindst 2 medlemmer for at trække lod' });
-      updateStreaksAndDrawLottery(state);
       await setState(roomId, state);
       return res.status(200).json({ state });
     }

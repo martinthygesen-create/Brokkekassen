@@ -904,8 +904,8 @@ function checkFreeBrokReveal(){
   playFreeBrokDraw();
 }
 
-function playFreeBrokDraw(){
-  const winner = state.members.find(m=>m.id===state.freeBrokMemberId);
+function playFreeBrokDraw(previewWinnerId, isPreview){
+  const winner = state.members.find(m=>m.id===(previewWinnerId || state.freeBrokMemberId));
   if(!winner) return;
   const members = state.members;
   const REEL_H = 58;
@@ -927,7 +927,7 @@ function playFreeBrokDraw(){
 
   openSheet(`
     <div style="text-align:center; padding:4px 0 6px;">
-      <div id="slotBanner" class="slot-banner">🎰 DAGENS GRATIS BROK</div>
+      <div id="slotBanner" class="slot-banner">🎰 DAGENS GRATIS BROK${isPreview ? ' (test)' : ''}</div>
       <div class="slot-cabinet" id="slotCabinet">
         <div class="slot-window">${reelsHtml}</div>
         <button class="slot-lever" id="pullLever">🎰 Træk i håndtaget!</button>
@@ -941,7 +941,10 @@ function playFreeBrokDraw(){
     const lever = document.getElementById('pullLever');
     const winnerNameEl = document.getElementById('slotWinnerName');
     const closeBtn = document.getElementById('drawCloseBtn');
-    closeBtn.onclick = closeSheet;
+    closeBtn.onclick = ()=>{
+      closeSheet();
+      if(!isPreview) setTimeout(()=>toast(`☀️ Dag ${dayCount()} er skudt i gang — af sted!`), 260);
+    };
 
     if(typeof gsap !== 'undefined'){
       gsap.to(banner, { rotate: 2.5, duration: 1.1, ease: 'sine.inOut', yoyo: true, repeat: -1 });
@@ -1112,13 +1115,11 @@ function openAdminMenuSheet(){
     document.getElementById('adminGoalBtn').onclick = ()=>{ closeSheet(); setTimeout(openGoalSheet, 230); };
     document.getElementById('adminBroadcastBtn').onclick = ()=>{ closeSheet(); setTimeout(openBroadcastSheet, 230); };
     document.getElementById('adminSettleBtn').onclick = ()=>{ closeSheet(); setTimeout(openSettleSheet, 230); };
-    document.getElementById('adminTestDrawBtn').onclick = async ()=>{
-      try{
-        const r = await api('admin', { action: 'testDraw', roomId, actorId: profile.memberId });
-        state = r.state;
-        closeSheet();
-        setTimeout(playFreeBrokDraw, 230);
-      }catch(e){ toast(e.message); }
+    document.getElementById('adminTestDrawBtn').onclick = ()=>{
+      if(state.members.length < 2){ toast('kræver mindst 2 medlemmer for at vise dette'); return; }
+      const previewWinner = state.members[Math.floor(Math.random()*state.members.length)];
+      closeSheet();
+      setTimeout(()=>playFreeBrokDraw(previewWinner.id, true), 230);
     };
     const undoBtn = document.getElementById('adminUndoBtn');
     if(undoBtn) undoBtn.onclick = ()=>{ closeSheet(); setTimeout(openUndoArchiveSheet, 230); };
