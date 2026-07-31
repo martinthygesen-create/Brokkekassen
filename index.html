@@ -871,26 +871,44 @@ function openBrokSheet(){
 }
 
 /* ============ DAGENS LODTRÆKNING ============ */
+const NEW_DAY_LINES = [
+  'Mere brok at udrydde i dag! 🧹',
+  'Frisk dag, frisk chance for at holde kæft. 😇',
+  'Nulstillet håb om et brokfrit døgn. Sandsynligvis forgæves.',
+  'Endnu 24 timer hvor alt kan gå galt (det gør det nok).',
+];
+
 function checkFreeBrokReveal(){
-  if(!state || !state.freeBrokMemberId || !state.members.length) return;
-  // Brug tidsstemplet for selve trækningen, ikke hvem der vandt — ellers
-  // springes animationen forkert over hvis samme person vinder to dage i træk.
-  const marker = String(state.freeBrokDrawnAt || state.freeBrokMemberId);
-  const key = 'bk_lastFreeReveal_' + roomId;
+  if(!state || !state.dayBoundary || !state.members.length) return;
+  // Brug selve dags-grænsen som markør — den skifter altid ved en ny dag,
+  // uanset om der er en gratis-brok-vinder (fx ved kun ét medlem).
+  const marker = String(state.dayBoundary);
+  const key = 'bk_lastDayWelcome_' + roomId;
   const lastShown = localStorage.getItem(key);
-  if(lastShown === marker) return; // denne trækning er allerede vist
+  if(lastShown === marker) return; // denne dag er allerede budt velkommen
   localStorage.setItem(key, marker);
   if(document.getElementById('sheetBackdrop')) return; // ikke midt i en anden dialog
   playFreeBrokDraw();
 }
 
 function playFreeBrokDraw(){
+  const dayNum = dayCount();
   const winner = state.members.find(m=>m.id===state.freeBrokMemberId);
-  if(!winner) return;
+  const line = NEW_DAY_LINES[Math.floor(Math.random()*NEW_DAY_LINES.length)];
+
+  if(!winner){
+    openSheet(`
+      <h2>☀️ Dag ${dayNum}!</h2>
+      <p class="hint">${line}</p>
+      <button class="sheet-btn primary" id="drawCloseBtn">Lad os gå i gang</button>
+    `, ()=>{ document.getElementById('drawCloseBtn').onclick = closeSheet; });
+    return;
+  }
+
   const pool = state.members;
   openSheet(`
-    <h2>🎰 Ny dag, nyt held!</h2>
-    <p class="hint">Der trækkes lod om dagens gratis brok blandt alle...</p>
+    <h2>☀️ Dag ${dayNum}! 🎰 Nyt held!</h2>
+    <p class="hint">${line} Men først: der trækkes lod om dagens gratis brok blandt alle...</p>
     <div id="drawName" style="text-align:center; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:30px; color:var(--sea); padding:24px 0;">🎲</div>
     <p id="streakLine" class="hint" style="display:none;"></p>
     <button class="sheet-btn primary" id="drawCloseBtn" style="display:none;">Fedt!</button>
@@ -1030,6 +1048,7 @@ function openAdminMenuSheet(){
     <button class="sheet-btn primary" id="adminGoalBtn">🎯 Sæt mål for potten</button>
     <button class="sheet-btn primary" id="adminBroadcastBtn">📣 Send besked til alle</button>
     <button class="sheet-btn primary" id="adminSettleBtn">💶 Gør op (tøm puljen)</button>
+    ${state.history.length ? `<button class="sheet-btn ghost" id="adminUndoBtn">↩️ Fortryd seneste opgørelse</button>` : ''}
     <button class="sheet-btn danger" id="adminResetBtn">🧹 Nulstil alt</button>
     <button class="sheet-btn danger" id="adminFinalCloseBtn">🔒 Luk denne brokkekasse for altid</button>
     <button class="sheet-btn ghost" id="adminMenuCloseBtn">Luk menu</button>
@@ -1037,9 +1056,34 @@ function openAdminMenuSheet(){
     document.getElementById('adminGoalBtn').onclick = ()=>{ closeSheet(); setTimeout(openGoalSheet, 230); };
     document.getElementById('adminBroadcastBtn').onclick = ()=>{ closeSheet(); setTimeout(openBroadcastSheet, 230); };
     document.getElementById('adminSettleBtn').onclick = ()=>{ closeSheet(); setTimeout(openSettleSheet, 230); };
+    const undoBtn = document.getElementById('adminUndoBtn');
+    if(undoBtn) undoBtn.onclick = ()=>{ closeSheet(); setTimeout(openUndoArchiveSheet, 230); };
     document.getElementById('adminResetBtn').onclick = ()=>{ closeSheet(); setTimeout(openResetSheet, 230); };
     document.getElementById('adminFinalCloseBtn').onclick = ()=>{ closeSheet(); setTimeout(openFinalCloseSheet, 230); };
     document.getElementById('adminMenuCloseBtn').onclick = closeSheet;
+  });
+}
+
+function openUndoArchiveSheet(){
+  const last = state.history[state.history.length-1];
+  if(!last) return;
+  openSheet(`
+    <h2>Fortryd seneste opgørelse ↩️</h2>
+    <p class="hint">Lægger de seneste ${last.total}€ (fra ${new Date(last.startedAt).toLocaleDateString('da-DK',{day:'2-digit',month:'short'})}–${new Date(last.closedAt).toLocaleDateString('da-DK',{day:'2-digit',month:'short'})}) tilbage i den aktive pulje, som om opgørelsen aldrig skete. Kun til at rette fejl — brug det ikke bare fordi nogen fortrød en betaling.</p>
+    <button class="sheet-btn danger" id="doUndo">Ja, læg det tilbage</button>
+    <button class="sheet-btn ghost" id="cancelUndo">Annuller</button>
+  `, ()=>{
+    document.getElementById('cancelUndo').onclick = closeSheet;
+    document.getElementById('doUndo').onclick = async ()=>{
+      try{
+        const r = await api('admin', { action: 'undoArchive', roomId, actorId: profile.memberId });
+        state = r.state;
+        closeSheet();
+        toast('↩️ Opgørelsen er fortrudt — puljen er tilbage');
+        activeTab = 'feed';
+        render();
+      }catch(e){ toast(e.message); }
+    };
   });
 }
 

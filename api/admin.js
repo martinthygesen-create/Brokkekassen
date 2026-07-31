@@ -30,6 +30,16 @@ module.exports = async (req, res) => {
       return res.status(200).json({ state });
     }
 
+    if (action === 'undoArchive') {
+      if (!isAdmin(state, actorId)) return res.status(403).json({ error: 'kun den der oprettede brokkekassen kan gøre dette' });
+      if (!state.history.length) return res.status(400).json({ error: 'ingen tidligere opgørelse at fortryde' });
+      const last = state.history.pop();
+      state.events = [...last.events, ...state.events];
+      state.createdAt = last.startedAt;
+      await setState(roomId, state);
+      return res.status(200).json({ state });
+    }
+
     if (action === 'reset') {
       if (!isAdmin(state, actorId)) return res.status(403).json({ error: 'kun den der oprettede brokkekassen kan nulstille' });
       const fresh = emptyState();
