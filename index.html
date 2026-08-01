@@ -341,6 +341,10 @@ async function boot(){
     renderCreateOrJoin();
     return;
   }
+  await enterRoom();
+}
+
+async function enterRoom(){
   localStorage.setItem('bk_lastRoom', roomId);
   app.innerHTML = `<div class="onboard"><div class="spinner" style="width:28px;height:28px;border-width:3px;margin-top:100px;"></div></div>`;
   try{
@@ -354,8 +358,47 @@ async function boot(){
     renderWhoAmI();
     return;
   }
+  rememberRoom();
   render();
   startPolling();
+}
+
+/* ============ FLERE KASSER (gemt lokalt, ikke i skyen) ============ */
+function getMyRooms(){
+  try{ return JSON.parse(localStorage.getItem('bk_myRooms') || '{}'); }catch(e){ return {}; }
+}
+function rememberRoom(){
+  if(!roomId || !profile) return;
+  const rooms = getMyRooms();
+  rooms[roomId] = { name: profile.name, ts: Date.now() };
+  localStorage.setItem('bk_myRooms', JSON.stringify(rooms));
+}
+async function switchToRoom(rid){
+  roomId = rid.toLowerCase();
+  profile = JSON.parse(localStorage.getItem('bk_profile_' + roomId) || 'null');
+  const u = new URL(location.href); u.search = '?r=' + roomId;
+  history.replaceState(null,'',u.toString());
+  await enterRoom();
+}
+function leaveRoom(){
+  if(polling){ clearInterval(polling); polling = null; }
+  localStorage.removeItem('bk_lastRoom');
+  roomId = null; profile = null; state = null;
+  const u = new URL(location.href); u.search = '';
+  history.replaceState(null,'',u.toString());
+  closeSheet();
+  renderCreateOrJoin();
+}
+function openLeaveRoomSheet(){
+  openSheet(`
+    <h2>Forlad dette rum 🚪</h2>
+    <p class="hint">Du er stadig medlem — kom tilbage når som helst med koden <b>${roomId}</b>, eller vælg det fra "Dine kasser" næste gang. Denne enhed åbner det bare ikke automatisk mere.</p>
+    <button class="sheet-btn danger" id="doLeave">Ja, forlad rummet</button>
+    <button class="sheet-btn ghost" id="cancelLeave">Annuller</button>
+  `, ()=>{
+    document.getElementById('cancelLeave').onclick = closeSheet;
+    document.getElementById('doLeave').onclick = leaveRoom;
+  });
 }
 
 function isIOSDevice(){ return /iPad|iPhone|iPod/.test(navigator.userAgent); }
@@ -374,6 +417,19 @@ function homeScreenTip(strong){
 }
 
 function renderCreateOrJoin(errorMsg){
+  const myRooms = getMyRooms();
+  const roomIds = Object.keys(myRooms).filter(rid => rid !== roomId).sort((a,b)=>myRooms[b].ts - myRooms[a].ts);
+  const myRoomsList = roomIds.length ? `
+    <div class="divider">dine kasser</div>
+    <div class="onboard-card" style="padding:8px;">
+      ${roomIds.map(rid => `
+        <div class="bal-row" style="margin-bottom:6px; cursor:pointer;" data-goto-room="${rid}">
+          <div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${initials(myRooms[rid].name)}</div>
+          <div class="feed-body"><div class="bal-name">${escapeHtml(rid)}</div><div style="font-size:12px; color:rgba(5,32,36,0.55);">som ${escapeHtml(myRooms[rid].name)}</div></div>
+        </div>
+      `).join('')}
+    </div>
+  ` : '';
   app.innerHTML = `
     <div class="onboard">
       <div class="emoji">🍯</div>
@@ -389,9 +445,13 @@ function renderCreateOrJoin(errorMsg){
         <input type="text" id="joinInput" placeholder="Indsæt link eller kode her" autocapitalize="off" autocorrect="off" spellcheck="false" />
         <button class="sheet-btn primary" id="joinRoomBtn" style="margin-top:0;">Gå til brokkekassen</button>
       </div>
+      ${myRoomsList}
       ${homeScreenTip(false)}
     </div>
   `;
+  document.querySelectorAll('[data-goto-room]').forEach(el=>{
+    el.onclick = ()=>switchToRoom(el.dataset.gotoRoom);
+  });
   const joinInput = document.getElementById('joinInput');
   const goJoin = async ()=>{
     const rid = extractRoomId(joinInput.value);
@@ -464,6 +524,8 @@ function renderWhoAmI(justCreated){
       const r = await api('join', { roomId, name, email });
       profile = { memberId: r.memberId, name };
       localStorage.setItem('bk_profile_' + roomId, JSON.stringify(profile));
+      localStorage.setItem('bk_lastRoom', roomId);
+      rememberRoom();
       state = r.state;
       render();
       startPolling();
@@ -514,6 +576,7 @@ function render(){
       <div style="display:flex; align-items:center; gap:8px;">
         ${showPushBell ? `<button id="btnPush" title="Få besked når nogen brokker sig" style="width:30px; height:30px; padding:0; display:flex; align-items:center; justify-content:center; font-size:14px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.55); border-radius:100px;">🔔</button>` : ''}
         <button id="btnShare" title="Del invite-link" style="width:30px; height:30px; padding:0; display:flex; align-items:center; justify-content:center; font-size:14px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.55); border-radius:100px;">🔗</button>
+        <button id="btnLeave" title="Skift eller forlad rum" style="width:30px; height:30px; padding:0; display:flex; align-items:center; justify-content:center; font-size:14px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.55); border-radius:100px;">🚪</button>
       </div>
     </header>
     <div class="jar-wrap" id="jarWrap" style="cursor:pointer;">
@@ -536,6 +599,7 @@ function render(){
   document.querySelectorAll('.tab').forEach(t=>{ t.onclick = ()=>{ activeTab = t.dataset.tab; renderMain(); document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active', x===t)); }; });
   if(!state.closed) document.getElementById('btnBrok').onclick = openBrokSheet;
   document.getElementById('btnShare').onclick = openShareSheet;
+  document.getElementById('btnLeave').onclick = openLeaveRoomSheet;
   const jarWrap = document.getElementById('jarWrap');
   if(jarWrap) jarWrap.onclick = bounceJar;
   startJarIdleWave();
