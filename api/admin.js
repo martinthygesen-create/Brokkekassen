@@ -51,15 +51,15 @@ module.exports = async (req, res) => {
 
     if (action === 'flagEvent') {
       // Admin markerer et allerede godkendt brok som mistænkt snyd (fx
-      // sammenrotning om en uretfærdig anklage). Det bliver stående i feedet
-      // så det regulerer sig selv via social skam, men tæller ikke længere
-      // med i puljen/regnskabet.
-      const { eventId } = req.body || {};
+      // sammenrotning om en uretfærdig anklage), eller fortryder markeringen.
+      // Det bliver stående i feedet så det regulerer sig selv via social
+      // skam, men tæller ikke med i puljen/regnskabet mens det er markeret.
+      const { eventId, voided } = req.body || {};
       if (!isAdmin(state, actorId)) return res.status(403).json({ error: 'kun den der oprettede brokkekassen kan gøre dette' });
       if (!eventId) return res.status(400).json({ error: 'mangler data' });
       const ev = state.events.find(e => e.id === eventId);
       if (!ev) return res.status(404).json({ error: 'brok findes ikke længere' });
-      ev.voided = true;
+      ev.voided = !!voided;
       await setState(roomId, state);
       return res.status(200).json({ state });
     }
