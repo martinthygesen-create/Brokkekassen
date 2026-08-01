@@ -564,7 +564,8 @@ function render(){
   const total = totalPool();
   const fillPct = Math.min(100, total * 4);
   if('setAppBadge' in navigator){
-    try{ state.pendingList.length ? navigator.setAppBadge(state.pendingList.length) : navigator.clearAppBadge(); }catch(e){}
+    const unvoted = state.pendingList.filter(p => !profile || !p.votes.includes(profile.memberId)).length;
+    try{ unvoted ? navigator.setAppBadge(unvoted) : navigator.clearAppBadge(); }catch(e){}
   }
   checkFreeBrokReveal();
   const showPushBell = pushSupported() && typeof Notification !== 'undefined' && Notification.permission !== 'denied' && !pushEnabledLocally();
