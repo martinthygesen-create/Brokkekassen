@@ -709,6 +709,15 @@ function bindPendingCardHandlers(){
 function feedItemHtml(e, old){
   const m = state.members.find(x=>x.id===e.memberId);
   const name = m ? m.name : '?';
+  if(e.acquitted){
+    return `<div class="feed-item" style="opacity:${old ? .6 : .78};">
+      <div class="avatar">${initials(name)}</div>
+      <div class="feed-body">
+      <div class="feed-name">${escapeHtml(name)} <span class="amt" style="color:rgba(255,201,60,0.9);">⚖️ frikendt</span></div>
+      ${e.message ? `<div class="feed-msg">"${escapeHtml(e.message)}"</div>` : ''}
+      <div class="feed-msg" style="color:rgba(255,201,60,0.85); font-weight:600;">Ikke nok stemmer nåede rettidigt</div>
+      <div class="feed-time">${fmtTime(e.ts)}</div></div></div>`;
+  }
   const opacity = e.voided ? .55 : (old ? .72 : 1);
   return `<div class="feed-item" style="opacity:${opacity};">
     <div class="avatar" style="${e.voided?'filter:grayscale(1);':''}">${initials(name)}</div>
@@ -731,7 +740,8 @@ function renderFeed(main){
   // eller fra tiden inden krukken holdt op med at tømme sig selv hver nat).
   const historyEvents = [];
   state.history.forEach(round => (round.events||[]).forEach(e => historyEvents.push(e)));
-  const allEvents = [...historyEvents, ...state.events];
+  const acquittalEvents = (state.acquittals||[]).map(a => ({ ...a, ts: a.expiredAt, acquitted: true }));
+  const allEvents = [...historyEvents, ...state.events, ...acquittalEvents];
   if(!allEvents.length && !state.pendingList.length){
     main.innerHTML = winnerBanner + `<div class="empty-state"><span class="emoji">🤐</span><b>Ingen brok endnu</b>Første gang nogen brokker sig, koster det 1€. Hold øje!</div>`;
     return;

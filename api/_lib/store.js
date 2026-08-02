@@ -27,7 +27,35 @@ function emptyState() {
     closed: false, // hele brokkekassen er lukket permanent (ingen flere brok)
     pushSubs: {},  // memberId -> PushSubscription, til rigtige push-notifikationer
     goal: '',      // fri tekst sat af admin: hvad potten går til, fx "Fælles middag"
+    acquittals: [], // {id, memberId, message, openedAt, expiredAt} — anklager der udløb uden nok stemmer
   };
+}
+
+const PENDING_REMINDER_AFTER = 12 * 3600000; // push-reminder til dem der mangler at stemme
+const PENDING_EXPIRE_AFTER = 24 * 3600000;   // herefter frikendes anklagen automatisk
+
+// Tjekker ventende anklager for påmindelse/udløb. Kaldes fra state.js (som
+// alle klienter poller hvert 3. sek, mens appen er åben) — ingen rigtig cron
+// nødvendig. Returnerer hvem der skal have en reminder-push nu; selve
+// push-afsendelsen sker udenfor store.js, som ikke kender til push.js.
+function processPendingExpiry(state) {
+  const now = Date.now();
+  const dueReminders = [];
+  if (!state.acquittals) state.acquittals = [];
+  state.pendingList = state.pendingList.filter(p => {
+    const age = now - p.openedAt;
+    if (age >= PENDING_EXPIRE_AFTER) {
+      state.acquittals.push({ id: p.id, memberId: p.memberId, message: p.message, openedAt: p.openedAt, expiredAt: now });
+      return false;
+    }
+    if (age >= PENDING_REMINDER_AFTER && !p.reminded) {
+      p.reminded = true;
+      const memberIds = state.members.map(m => m.id).filter(id => id !== p.memberId && !p.votes.includes(id));
+      if (memberIds.length) dueReminders.push({ pending: p, memberIds });
+    }
+    return true;
+  });
+  return dueReminders;
 }
 
 // Finder Copenhagen-tidszonens offset (minutter) for et givent tidspunkt.
@@ -123,6 +151,7 @@ async function getState(roomId) {
   if (state.goal === undefined) state.goal = '';
   if (!state.dayBoundary) state.dayBoundary = Date.now();
   if (state.freeBrokDrawnAt === undefined) state.freeBrokDrawnAt = null;
+  if (!state.acquittals) state.acquittals = [];
   if (!state.pendingList) {
     // migrering fra det gamle enkelt-pending-felt til en liste
     state.pendingList = state.pending ? [state.pending] : [];
@@ -161,4 +190,4 @@ function neededVotes(totalMembers) {
   return Math.min(others, Math.max(2, Math.ceil((others * 2) / 3)));
 }
 
-module.exports = { getState, setState, createRoom, genRoomId, uid, emptyState, neededVotes, isAdmin, settleRound, updateStreaksAndDrawLottery };
+module.exports = { getState, setState, createRoom, genRoomId, uid, emptyState, neededVotes, isAdmin, settleRound, updateStreaksAndDrawLottery, processPendingExpiry };
