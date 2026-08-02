@@ -12,8 +12,8 @@ module.exports = async (req, res) => {
     if (!state) return res.status(404).json({ error: 'ukendt brokkekasse' });
     if (!state.members.find(m => m.id === memberId)) return res.status(400).json({ error: 'ukendt medlem' });
     if (state.closed) return res.status(400).json({ error: 'brokkekassen er lukket' });
-    if (state.pendingList.some(p => p.memberId === memberId)) {
-      return res.status(409).json({ error: 'der er allerede en afstemning i gang om denne person' });
+    if (state.pendingList.filter(p => p.memberId === memberId).length >= 2) {
+      return res.status(409).json({ error: 'der er allerede 2 afstemninger i gang om denne person — vent til en af dem er afgjort' });
     }
 
     state.pendingList.push({
