@@ -962,7 +962,7 @@ function openBrokSheet(){
       if(!message){ toast('Skriv hvad de brokkede sig over først'); return; }
       nextBtn.innerHTML = '<span class="spinner"></span>';
       try{
-        const r = await api('brok', { roomId, memberId: selectedId, message });
+        const r = await api('brok', { roomId, memberId: selectedId, message, actorId: profile.memberId });
         state = r.state;
         closeSheet();
         activeTab = 'feed';
