@@ -723,11 +723,9 @@ function openAppMenuSheet(){
         <div class="app-pick-label">MrBrok</div>
       </div>` : ''}
     </div>
-    <div class="divider">rum</div>
-    ${showPushBell ? `<button class="sheet-btn ghost" id="menuPushBtn">🔔 Slå push-beskeder til</button>` : ''}
-    <button class="sheet-btn ghost" id="menuShareBtn">📤 Del invite-link</button>
-    <button class="sheet-btn ghost" id="menuLeaveBtn">🚪 Skift eller forlad rum</button>
-    <button class="sheet-btn ghost" id="menuCloseBtn">Luk menu</button>
+    ${showPushBell ? `<button class="sheet-btn ghost" id="menuPushBtn">🔔 Slå push til</button>` : ''}
+    <button class="sheet-btn ghost" id="menuShareBtn">📤 Del link</button>
+    <button class="sheet-btn ghost" id="menuLeaveBtn">🚪 Skift/forlad rum</button>
   `, ()=>{
     document.querySelectorAll('[data-goto-app]').forEach(el=>{
       el.onclick = ()=>{ activeApp = el.dataset.gotoApp; closeSheet(); render(); };
@@ -736,7 +734,6 @@ function openAppMenuSheet(){
     if(pushBtn) pushBtn.onclick = async ()=>{ const ok = await enablePush(); if(ok){ closeSheet(); render(); } };
     document.getElementById('menuShareBtn').onclick = ()=>{ closeSheet(); setTimeout(openShareSheet, 230); };
     document.getElementById('menuLeaveBtn').onclick = ()=>{ closeSheet(); setTimeout(openLeaveRoomSheet, 230); };
-    document.getElementById('menuCloseBtn').onclick = closeSheet;
   });
 }
 
@@ -1400,11 +1397,26 @@ function mrbrokLobbyHtml(){
     return `<div class="name-pill ${on?'selected':''}" data-mrbrok-player="${mm.id}" style="${on?'':'opacity:.5;'}">${on?'✅':'➖'} ${escapeHtml(mm.name)}</div>`;
   }).join('');
   const enough = mrbrokSelectedPlayers.length >= 3;
+  const steps = [
+    ['🤫', 'Alle undtagen én kender det samme brok-emne'],
+    ['❓', 'I spørger og svarer på skift, uden at afsløre for meget'],
+    ['🤔', 'Alle gætter hvem der bluffer — ingen facit før til sidst'],
+    ['🎭', 'Afsløring — og MrBrok får ét sidste gæt for at stjæle sejren'],
+  ];
   return `
-    <div class="empty-state" style="padding-top:26px;">
+    <div class="empty-state" style="padding-top:22px;">
       <span class="emoji">🕵️</span>
       <b>MrBrok</b>
-      Alle undtagen én kender det samme brok-emne. Find ud af hvem der bluffer — inden de gennemskuer jer.
+      Find ud af hvem der bluffer — inden de gennemskuer jer.
+    </div>
+    <div class="game-card" style="margin:10px 0 10px;">
+      <label class="field-label" style="color:rgba(255,247,232,0.7); margin-bottom:8px; display:block;">Sådan foregår det</label>
+      ${steps.map(([icon,text])=>`
+        <div style="display:flex; gap:10px; align-items:flex-start; margin-bottom:9px;">
+          <span style="font-size:16px; line-height:1.4;">${icon}</span>
+          <p style="margin:0; font-size:13px; line-height:1.4; color:rgba(255,247,232,0.8);">${text}</p>
+        </div>
+      `).join('')}
     </div>
     <div class="game-card" style="margin:10px 0;">
       <label class="field-label" style="color:rgba(255,247,232,0.7);">Hvem er med? (mindst 3)</label>
@@ -1414,7 +1426,7 @@ function mrbrokLobbyHtml(){
         <div class="seg ${mrbrokWager!=='euro'?'active':''}" data-mrbrok-wager="fun">😄 For sjov</div>
         <div class="seg ${mrbrokWager==='euro'?'active':''}" data-mrbrok-wager="euro">💶 1 euro i kassen</div>
       </div>
-      <label class="field-label" style="color:rgba(255,247,232,0.7);">Antal omgange</label>
+      <label class="field-label" style="color:rgba(255,247,232,0.7); display:flex; align-items:center; justify-content:space-between;"><span>Antal omgange</span><span style="opacity:.7; font-weight:400; text-transform:none; letter-spacing:normal;">~15 min for 4</span></label>
       <div class="segmented" style="margin-bottom:0;">
         <div class="seg ${mrbrokRounds===3?'active':''}" data-mrbrok-rounds="3">3</div>
         <div class="seg ${mrbrokRounds===4?'active':''}" data-mrbrok-rounds="4">4</div>
