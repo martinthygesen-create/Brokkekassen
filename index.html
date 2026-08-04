@@ -184,7 +184,7 @@ let profile = JSON.parse(localStorage.getItem('bk_profile_' + roomId) || 'null')
 
 let state = null;
 let activeTab = 'feed';
-let activeApp = 'kasse'; // 'kasse' | 'spil' — hvilken af de to "apps" i samme rum der vises
+let activeApp = 'kasse'; // 'kasse' | 'spil' | 'mrbrok' — hvilken af de tre "apps" i samme rum der vises
 let gameWager = 'fun'; // 'fun' | 'euro' — valgt i Brokspillets lobby, før spillet startes
 let gameRounds = 8; // 5 | 8 | 12 — valgt i lobbyen, før spillet startes
 let gameSelectedPlayers = null; // memberId[] valgt i lobbyen — sættes til alle medlemmer første gang lobbyen vises
@@ -193,6 +193,13 @@ let gameTimerInterval = null;
 let gameTimerDeadline = null;
 let lastCelebratedKey = null; // undgår at fyre konfetti/hån-toast flere gange for samme rundes resultat
 let lastCountdownRound = null; // undgår at afspille 3-2-1-nedtællingen flere gange for samme runde
+
+let mrbrokWager = 'fun';
+let mrbrokRounds = 4; // 3 | 4 | 5
+let mrbrokSelectedPlayers = null;
+let mrbrokKnownMemberIds = null;
+let mrbrokTimerInterval = null;
+let mrbrokTimerDeadline = null;
 let brokListSubTab = 'alltime'; // 'today' | 'alltime' — undersort inde i Broklisten-fanen; alltime er det vigtigste og vises først
 let polling = null;
 let toastTimer = null;
@@ -283,12 +290,12 @@ async function enablePush(){
     const perm = await Notification.requestPermission();
     if(perm !== 'granted'){ toast('Notifikationer blev ikke tilladt (' + perm + ')'); return false; }
     toast('Tilladt! Henter nøgle...');
-    const { publicKey } = await api('vapid-public-key');
+    const { publicKey } = await api('push');
     if(!publicKey){ toast('Push er ikke sat op på serveren endnu (mangler VAPID-nøgle)'); return false; }
     const reg = await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
     if(!sub){ sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlBase64ToUint8Array(publicKey) }); }
-    await api('subscribe', { roomId, memberId: profile.memberId, subscription: sub.toJSON() });
+    await api('push', { roomId, memberId: profile.memberId, subscription: sub.toJSON() });
     localStorage.setItem('bk_push_enabled_' + roomId, '1');
     toast('🔔 Du får nu besked når nogen brokker sig');
     return true;
@@ -333,13 +340,13 @@ async function api(path, body){
 let lastStateJSON = null;
 async function refreshState(silent){
   try{
-    const { state: s } = await api('state?room=' + encodeURIComponent(roomId));
+    const { state: s } = await api('state?room=' + encodeURIComponent(roomId) + '&member=' + encodeURIComponent((profile && profile.memberId) || ''));
     const json = JSON.stringify(s);
     if(silent && json === lastStateJSON) return; // intet nyt — undgå at afbryde en igangværende scroll unødigt
     lastStateJSON = json;
     state = s;
     const typingTag = document.activeElement && document.activeElement.tagName;
-    if(silent && activeApp === 'spil' && (typingTag === 'TEXTAREA' || typingTag === 'INPUT')) return; // undgå at nulstille et svar man er ved at skrive i Brokspillet
+    if(silent && (activeApp === 'spil' || activeApp === 'mrbrok') && (typingTag === 'TEXTAREA' || typingTag === 'INPUT')) return; // undgå at nulstille et svar man er ved at skrive i Brokspillet/MrBrok
     render();
   }catch(e){
     if(!silent) toast('Kunne ikke hente data: ' + e.message);
@@ -374,7 +381,7 @@ async function enterRoom(){
   localStorage.setItem('bk_lastRoom', roomId);
   app.innerHTML = `<div class="onboard"><div class="spinner" style="width:28px;height:28px;border-width:3px;margin-top:100px;"></div></div>`;
   try{
-    const { state: s } = await api('state?room=' + encodeURIComponent(roomId));
+    const { state: s } = await api('state?room=' + encodeURIComponent(roomId) + '&member=' + encodeURIComponent((profile && profile.memberId) || ''));
     state = s;
   }catch(e){
     renderCreateOrJoin('Den brokkekasse findes ikke længere. Opret en ny, eller tjek linket.');
@@ -385,6 +392,7 @@ async function enterRoom(){
     return;
   }
   if(!state.kasseEnabled && state.gameEnabled) activeApp = 'spil';
+  else if(!state.kasseEnabled && !state.gameEnabled && state.mrbrokEnabled) activeApp = 'mrbrok';
   else if(state.kasseEnabled) activeApp = 'kasse';
   rememberRoom();
   render();
@@ -414,6 +422,7 @@ function rememberRoom(){
 }
 async function switchToRoom(rid){
   if(gameTimerInterval){ clearInterval(gameTimerInterval); gameTimerInterval = null; }
+  if(mrbrokTimerInterval){ clearInterval(mrbrokTimerInterval); mrbrokTimerInterval = null; }
   activeApp = 'kasse';
   roomId = rid.toLowerCase();
   profile = JSON.parse(localStorage.getItem('bk_profile_' + roomId) || 'null');
@@ -424,6 +433,7 @@ async function switchToRoom(rid){
 function leaveRoom(){
   if(polling){ clearInterval(polling); polling = null; }
   if(gameTimerInterval){ clearInterval(gameTimerInterval); gameTimerInterval = null; }
+  if(mrbrokTimerInterval){ clearInterval(mrbrokTimerInterval); mrbrokTimerInterval = null; }
   localStorage.removeItem('bk_lastRoom');
   roomId = null; profile = null; state = null;
   const u = new URL(location.href); u.search = '';
@@ -489,6 +499,10 @@ function renderCreateOrJoin(errorMsg){
             <div style="font-size:26px;">👉</div>
             <div style="font-weight:700; margin-top:4px; font-size:13px;">Brokspillet</div>
           </div>
+          <div class="onboard-pick selected" data-pick="mrbrok" style="flex:1; cursor:pointer; text-align:center; padding:18px 8px; border-radius:16px; background:var(--sea); color:#fff; transition:opacity .15s;">
+            <div style="font-size:26px;">🕵️</div>
+            <div style="font-weight:700; margin-top:4px; font-size:13px;">MrBrok</div>
+          </div>
         </div>
         <button class="sheet-btn primary" id="createBtn" style="margin-top:0;">Opret nyt rum</button>
       </div>
@@ -543,7 +557,8 @@ function renderCreateOrJoin(errorMsg){
     try{
       const kasseEnabled = document.querySelector('[data-pick="kasse"]').classList.contains('selected');
       const gameEnabled = document.querySelector('[data-pick="spil"]').classList.contains('selected');
-      const r = await api('room', { kasseEnabled, gameEnabled });
+      const mrbrokEnabled = document.querySelector('[data-pick="mrbrok"]').classList.contains('selected');
+      const r = await api('room', { kasseEnabled, gameEnabled, mrbrokEnabled });
       roomId = r.roomId;
       const u = new URL(location.href); u.search = '?r=' + roomId;
       history.replaceState(null,'',u.toString());
@@ -588,7 +603,7 @@ function renderWhoAmI(justCreated){
     const email = document.getElementById('emailInput').value.trim();
     document.getElementById('joinBtn').innerHTML = '<span class="spinner"></span>';
     try{
-      const r = await api('join', { roomId, name, email });
+      const r = await api('room', { action: 'join', roomId, name, email });
       profile = { memberId: r.memberId, name };
       localStorage.setItem('bk_profile_' + roomId, JSON.stringify(profile));
       localStorage.setItem('bk_lastRoom', roomId);
@@ -629,8 +644,10 @@ function todayBalances(){
 function render(){
   // Forsvar mod at stå i en visning der er slået fra i dette rum.
   if(activeApp === 'spil' && !state.gameEnabled) activeApp = 'kasse';
-  if(activeApp === 'kasse' && !state.kasseEnabled) activeApp = state.gameEnabled ? 'spil' : 'kasse';
+  if(activeApp === 'mrbrok' && !state.mrbrokEnabled) activeApp = 'kasse';
+  if(activeApp === 'kasse' && !state.kasseEnabled) activeApp = state.gameEnabled ? 'spil' : (state.mrbrokEnabled ? 'mrbrok' : 'kasse');
   if(activeApp === 'spil') return renderGameScreen();
+  if(activeApp === 'mrbrok') return renderMrbrokScreen();
   const prevMain = document.getElementById('main');
   const savedMainScroll = prevMain ? prevMain.scrollTop : 0;
   const savedWindowScroll = window.scrollY;
@@ -692,6 +709,10 @@ function openAppMenuSheet(){
       ${state.gameEnabled ? `<div data-goto-app="spil" style="flex:1; cursor:pointer; text-align:center; padding:20px 10px; border-radius:18px; background:${activeApp==='spil'?'var(--sea)':'rgba(5,32,36,0.06)'}; color:${activeApp==='spil'?'#fff':'var(--ink)'};">
         <div style="font-size:30px;">👉</div>
         <div style="font-weight:700; margin-top:6px;">Brokspillet</div>
+      </div>` : ''}
+      ${state.mrbrokEnabled ? `<div data-goto-app="mrbrok" style="flex:1; cursor:pointer; text-align:center; padding:20px 10px; border-radius:18px; background:${activeApp==='mrbrok'?'var(--sea)':'rgba(5,32,36,0.06)'}; color:${activeApp==='mrbrok'?'#fff':'var(--ink)'};">
+        <div style="font-size:30px;">🕵️</div>
+        <div style="font-weight:700; margin-top:6px;">MrBrok</div>
       </div>` : ''}
     </div>
     <div class="divider">rum</div>
@@ -1223,6 +1244,413 @@ function bindGameHandlers(g){
   }
 }
 
+/* ============ MRBROK ============ */
+async function mrbrokApi(action, extra){
+  try{
+    const r = await api('mrbrok', Object.assign({ action, roomId, actorId: profile.memberId }, extra||{}));
+    state = r.state;
+    render();
+  }catch(e){ toast(e.message); }
+}
+
+function openMrbrokAdminMenuSheet(){
+  const active = state.mrbrok && state.mrbrok.active;
+  openSheet(`
+    <h2>MrBrok-admin ⚙️</h2>
+    <p class="hint">${active ? 'Der er et spil i gang lige nu.' : 'Der er ikke noget spil i gang lige nu.'}</p>
+    ${active ? `<button class="sheet-btn danger" id="mrbrokAdminRestartBtn">🔄 Genstart MrBrok</button>` : ''}
+    <button class="sheet-btn ghost" id="mrbrokAdminCloseBtn">Luk menu</button>
+  `, ()=>{
+    const restartBtn = document.getElementById('mrbrokAdminRestartBtn');
+    if(restartBtn) restartBtn.onclick = async ()=>{
+      closeSheet();
+      await mrbrokApi('end', {});
+      toast('🔄 MrBrok er nulstillet — klar til en ny omgang');
+    };
+    document.getElementById('mrbrokAdminCloseBtn').onclick = closeSheet;
+  });
+}
+
+// Nedtælling pr. fase — samme nødbremse-filosofi som Brokspillet: ingen kan
+// blokere resten af rummet ved bare at sidde stille.
+const MRBROK_PHASE_SECONDS = { 'turn:ask': 30, 'turn:answer': 30, 'guess:guess': 25, 'steal:guessing': 30, 'steal:voting': 25 };
+function mrbrokTimerKey(cur){
+  if(cur.type === 'steal') return 'steal:' + (cur.guess ? 'voting' : 'guessing');
+  if(cur.type === 'turn') return 'turn:' + cur.phase;
+  if(cur.type === 'guess') return 'guess:guess';
+  return null;
+}
+function startMrbrokTimer(cur){
+  clearInterval(mrbrokTimerInterval);
+  mrbrokTimerInterval = null;
+  if(!cur || cur.type === 'gameover') return;
+  const key = mrbrokTimerKey(cur);
+  const secs = key ? MRBROK_PHASE_SECONDS[key] : null;
+  if(!secs) return;
+  mrbrokTimerDeadline = Date.now() + secs*1000;
+  const tick = ()=>{
+    const el = document.getElementById('mrbrokTimer');
+    const left = Math.max(0, Math.ceil((mrbrokTimerDeadline - Date.now())/1000));
+    if(el) el.textContent = '⏱️ ' + left + 's';
+    if(left <= 0){
+      clearInterval(mrbrokTimerInterval);
+      mrbrokTimerInterval = null;
+      mrbrokApi('advance', {});
+    }
+  };
+  tick();
+  mrbrokTimerInterval = setInterval(tick, 1000);
+}
+
+function renderMrbrokScreen(){
+  const m = state.mrbrok || { active:false };
+  app.innerHTML = `
+    <header>
+      <div class="title" style="font-size:30px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+        <span>Mr<span>Brok</span> 🕵️</span>
+        <div style="display:flex; align-items:center; gap:8px;">
+          ${isAdmin() ? `<button id="btnMrbrokAdminMenu" title="Admin" style="width:32px; height:32px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.85); border-radius:100px; flex:0 0 auto;">⋯</button>` : ''}
+          <button id="btnAppMenu" title="Menu" style="width:32px; height:32px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.85); border-radius:100px; flex:0 0 auto;">☰</button>
+        </div>
+      </div>
+    </header>
+    <main id="main" style="padding:0 16px 40px;">${mrbrokBodyHtml(m)}</main>
+  `;
+  document.getElementById('btnAppMenu').onclick = openAppMenuSheet;
+  const btnMrbrokAdminMenu = document.getElementById('btnMrbrokAdminMenu');
+  if(btnMrbrokAdminMenu) btnMrbrokAdminMenu.onclick = openMrbrokAdminMenuSheet;
+  bindMrbrokHandlers(m);
+  const card = document.getElementById('mrbrokCard') || document.getElementById('mrbrokReveal');
+  if(card && typeof gsap !== 'undefined'){
+    gsap.fromTo(card, { opacity:0, y:14, scale:.97 }, { opacity:1, y:0, scale:1, duration:.45, ease:'power2.out' });
+  }
+  if(m.active && profile && m.players && m.players.includes(profile.memberId)){
+    startMrbrokTimer(m.current);
+  }else{
+    clearInterval(mrbrokTimerInterval);
+    mrbrokTimerInterval = null;
+  }
+}
+
+function mrbrokBodyHtml(m){
+  if(!m.active || !m.current) return mrbrokLobbyHtml();
+  const cur = m.current;
+  if(cur.type !== 'gameover' && profile && m.players && !m.players.includes(profile.memberId)){
+    return `
+      <div class="game-badge">Runde ${m.round}/${m.totalRounds} · 👀 Du kigger med</div>
+      <div class="empty-state"><span class="emoji">🍿</span><b>Du er ikke med i denne omgang</b>De andre spiller videre — du er velkommen næste spil.</div>
+    `;
+  }
+  if(cur.type === 'gameover') return mrbrokOverHtml(m, cur);
+  if(cur.type === 'turn') return mrbrokTurnHtml(m, cur);
+  if(cur.type === 'guess') return mrbrokGuessHtml(m, cur);
+  if(cur.type === 'steal') return mrbrokStealHtml(m, cur);
+  return '';
+}
+
+function mrbrokHighscoreHtml(){
+  const stats = state.mrbrokStats || {};
+  const ranked = state.members
+    .filter(mm => stats[mm.id] && stats[mm.id].played > 0)
+    .sort((a,b) => (stats[b.id].wins - stats[a.id].wins) || (stats[b.id].played - stats[a.id].played));
+  if(!ranked.length) return '';
+  const rows = ranked.map((mm,i)=>`
+    <div class="bal-row">
+      <div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${i===0?'🏆':(i+1)}</div>
+      <div class="feed-body"><div class="bal-name">${escapeHtml(mm.name)}</div><div style="font-size:12px; color:rgba(255,247,232,0.68);">${stats[mm.id].played} spillet</div></div>
+      <div class="bal-amt">${stats[mm.id].wins} sejre</div>
+    </div>
+  `).join('');
+  return `<div class="section-label">🏆 Highscore</div>${rows}`;
+}
+
+function mrbrokTopicBanner(m){
+  if(m.youAreMrBrok){
+    return `<div class="game-card" style="text-align:center; border-color:rgba(255,201,60,0.5); background:rgba(255,201,60,0.08);">
+      <div style="font-size:26px;">🕵️</div>
+      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; margin:4px 0 0;">Du er MrBrok!</p>
+      <p class="hint" style="color:rgba(255,247,232,0.7);">Du kender IKKE emnet — bluff dig igennem ud fra det de andre siger.</p>
+    </div>`;
+  }
+  return `<div class="game-card" style="text-align:center;">
+    <p class="hint" style="margin:0 0 4px; color:rgba(255,247,232,0.6);">Emnet er:</p>
+    <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:18px; margin:0;">${escapeHtml(m.topic || '?')}</p>
+  </div>`;
+}
+
+function mrbrokLobbyHtml(){
+  const allIds = state.members.map(mm=>mm.id);
+  if(!mrbrokSelectedPlayers || !mrbrokKnownMemberIds){
+    mrbrokSelectedPlayers = allIds.slice();
+  }else{
+    const newcomers = allIds.filter(id=>!mrbrokKnownMemberIds.includes(id));
+    if(newcomers.length) mrbrokSelectedPlayers = [...mrbrokSelectedPlayers, ...newcomers];
+  }
+  mrbrokKnownMemberIds = allIds.slice();
+  const chips = state.members.map(mm=>{
+    const on = mrbrokSelectedPlayers.includes(mm.id);
+    return `<div class="name-pill ${on?'selected':''}" data-mrbrok-player="${mm.id}" style="${on?'':'opacity:.5;'}">${on?'✅':'➖'} ${escapeHtml(mm.name)}</div>`;
+  }).join('');
+  const enough = mrbrokSelectedPlayers.length >= 3;
+  return `
+    <div class="empty-state" style="padding-top:26px;">
+      <span class="emoji">🕵️</span>
+      <b>MrBrok</b>
+      Alle undtagen én kender det samme brok-emne. Find ud af hvem der bluffer — inden de gennemskuer jer.
+    </div>
+    <div class="game-card" style="margin:10px 0;">
+      <label class="field-label" style="color:rgba(255,247,232,0.7);">Hvem er med? (mindst 3)</label>
+      <div class="name-grid" id="mrbrokPlayerGrid">${chips}</div>
+      <label class="field-label" style="color:rgba(255,247,232,0.7);">Spil om</label>
+      <div class="segmented" style="margin-bottom:14px;">
+        <div class="seg ${mrbrokWager!=='euro'?'active':''}" data-mrbrok-wager="fun">😄 For sjov</div>
+        <div class="seg ${mrbrokWager==='euro'?'active':''}" data-mrbrok-wager="euro">💶 1 euro i kassen</div>
+      </div>
+      <label class="field-label" style="color:rgba(255,247,232,0.7);">Antal omgange</label>
+      <div class="segmented" style="margin-bottom:0;">
+        <div class="seg ${mrbrokRounds===3?'active':''}" data-mrbrok-rounds="3">3</div>
+        <div class="seg ${mrbrokRounds===4?'active':''}" data-mrbrok-rounds="4">4</div>
+        <div class="seg ${mrbrokRounds===5?'active':''}" data-mrbrok-rounds="5">5</div>
+      </div>
+    </div>
+    <button class="game-btn" id="startMrbrokBtn" ${enough?'':'disabled'}>🕵️ Start MrBrok (${mrbrokSelectedPlayers.length} spillere)</button>
+    ${enough?'':'<p class="hint" style="text-align:center;">Vælg mindst 3 spillere</p>'}
+    ${mrbrokHighscoreHtml()}
+  `;
+}
+
+function mrbrokTurnHtml(m, cur){
+  const asker = state.members.find(mm=>mm.id===cur.askerId);
+  const target = state.members.find(mm=>mm.id===cur.targetId);
+  const isAsker = profile && profile.memberId === cur.askerId;
+  const isTarget = profile && profile.memberId === cur.targetId;
+  const turnNo = cur.turnIndex + 1, totalTurns = cur.pairing.length;
+  const badge = `<div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Omgang ${m.round}/${m.totalRounds} · Tur ${turnNo}/${totalTurns}</span><span id="mrbrokTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>`;
+
+  if(cur.phase === 'ask'){
+    if(isAsker){
+      return `
+        ${badge}
+        ${mrbrokTopicBanner(m)}
+        <div class="game-card" id="mrbrokCard">
+          <p class="hint" style="margin:0 0 8px; color:rgba(255,247,232,0.7);">Stil ${escapeHtml(target?target.name:'?')} et spørgsmål om emnet — uden at nævne det direkte.</p>
+          <textarea id="mrbrokQuestionInput" rows="2" maxlength="140" placeholder="Dit spørgsmål..."></textarea>
+          <button class="game-btn" id="mrbrokAskBtn" style="margin-top:10px;">🚀 Send spørgsmål</button>
+        </div>
+      `;
+    }
+    return `
+      ${badge}
+      ${mrbrokTopicBanner(m)}
+      <div class="empty-state"><span class="emoji">✍️</span><b>${escapeHtml(asker?asker.name:'?')} spørger ${escapeHtml(target?target.name:'?')}...</b>Vent til spørgsmålet er sendt.</div>
+    `;
+  }
+
+  // phase === 'answer'
+  if(isTarget){
+    return `
+      ${badge}
+      ${mrbrokTopicBanner(m)}
+      <div class="game-card" id="mrbrokCard">
+        <p class="hint" style="margin:0 0 4px; color:rgba(255,247,232,0.6);">${escapeHtml(asker?asker.name:'?')} spørger:</p>
+        <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:18px; margin:0 0 12px;">"${escapeHtml(cur.question||'')}"</p>
+        <textarea id="mrbrokAnswerInput" rows="2" maxlength="140" placeholder="Dit svar..."></textarea>
+        <button class="game-btn" id="mrbrokAnswerBtn" style="margin-top:10px;">🚀 Send svar</button>
+      </div>
+    `;
+  }
+  return `
+    ${badge}
+    ${mrbrokTopicBanner(m)}
+    <div class="game-card" id="mrbrokCard" style="text-align:center;">
+      <p class="hint" style="margin:0 0 4px; color:rgba(255,247,232,0.6);">${escapeHtml(asker?asker.name:'?')} spurgte ${escapeHtml(target?target.name:'?')}:</p>
+      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:17px;">"${escapeHtml(cur.question||'')}"</p>
+      <p class="hint" style="margin-top:8px; color:rgba(255,247,232,0.6);">Venter på svar...</p>
+    </div>
+  `;
+}
+
+function mrbrokGuessHtml(m, cur){
+  const badge = `<div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Omgang ${m.round}/${m.totalRounds} · 🤔 Hvem er MrBrok?</span><span id="mrbrokTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>`;
+  if(m.youAreMrBrok){
+    return `${badge}<div class="empty-state"><span class="emoji">🕵️</span><b>De andre gætter lige nu...</b>Du kan ikke gætte på dig selv — vent til næste omgang.</div>`;
+  }
+  const already = profile && profile.memberId in (cur.guesses||{});
+  if(already){
+    return `${badge}<div class="empty-state"><span class="emoji">🤫</span><b>Dit gæt er registreret</b>Ingen facit endnu — det kommer først til allersidst.</div>`;
+  }
+  const options = state.members.filter(mm=>m.players.includes(mm.id) && mm.id !== profile.memberId);
+  const rows = options.map(mm=>`
+    <div class="bal-row game-pick" data-mrbrok-guess="${mm.id}" style="cursor:pointer;">
+      <div class="avatar">${initials(mm.name)}</div>
+      <div class="feed-body"><div class="bal-name">${escapeHtml(mm.name)}</div></div>
+    </div>
+  `).join('');
+  return `
+    ${badge}
+    <p class="hint" style="text-align:center; margin:0 0 8px; color:rgba(255,247,232,0.7);">${m.round >= m.totalRounds ? 'Sidste omgang — dette er den afgørende anklage!' : 'Hvem tror du er MrBrok lige nu?'}</p>
+    ${rows}
+  `;
+}
+
+function mrbrokStealHtml(m, cur){
+  const mrbrokMember = state.members.find(mm=>mm.id===m.mrBrokId);
+  const badge = `<div class="game-badge">🕵️ MrBrok er afsløret!</div>`;
+  if(m.youAreMrBrok){
+    if(!cur.guess){
+      return `
+        ${badge}
+        <div class="game-card" id="mrbrokCard">
+          <p class="hint" style="margin:0 0 8px; color:rgba(255,247,232,0.7);">Sidste chance: gæt hvad emnet var for at stjæle sejren alligevel.</p>
+          <textarea id="mrbrokStealInput" rows="2" maxlength="140" placeholder="Dit gæt på emnet..."></textarea>
+          <button class="game-btn" id="mrbrokStealBtn" style="margin-top:10px;">🎯 Send gæt</button>
+        </div>
+      `;
+    }
+    return `${badge}<div class="empty-state"><span class="emoji">🤞</span><b>Dit gæt er sendt</b>De andre stemmer nu om det er tæt nok.</div>`;
+  }
+  if(!cur.guess){
+    return `${badge}<div class="empty-state"><span class="emoji">⏳</span><b>${escapeHtml(mrbrokMember?mrbrokMember.name:'MrBrok')} tænker...</b>Vent på deres sidste gæt på emnet.</div>`;
+  }
+  const already = profile && profile.memberId in (cur.votes||{});
+  if(already){
+    return `${badge}<div class="empty-state"><span class="emoji">🤫</span><b>Din stemme er registreret</b>Vent på de andre.</div>`;
+  }
+  return `
+    ${badge}
+    <div class="game-card" id="mrbrokCard" style="text-align:center;">
+      <p class="hint" style="margin:0 0 6px; color:rgba(255,247,232,0.6);">${escapeHtml(mrbrokMember?mrbrokMember.name:'MrBrok')} gættede emnet var:</p>
+      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:18px;">"${escapeHtml(cur.guess)}"</p>
+      <p class="hint" style="margin:10px 0; color:rgba(255,247,232,0.6);">Var det tæt nok? Husk at være fair — det er kun sjovt hvis dommen er ærlig.</p>
+      <div style="display:flex; gap:10px;">
+        <button class="game-btn" data-mrbrok-steal-vote="true" style="margin-top:0; background:linear-gradient(160deg, var(--sea), var(--sea-deep)); box-shadow:0 8px 18px rgba(11,58,63,0.4);">✅ Tæt nok</button>
+        <button class="game-btn" data-mrbrok-steal-vote="false" style="margin-top:0;">❌ Ikke tæt nok</button>
+      </div>
+    </div>
+  `;
+}
+
+function mrbrokRecapHtml(m, cur){
+  if(!cur.history || !cur.history.length) return '';
+  const rows = cur.history.map(h=>{
+    const turns = h.turns.map(t=>{
+      const asker = state.members.find(mm=>mm.id===t.askerId);
+      const target = state.members.find(mm=>mm.id===t.targetId);
+      return `<p class="hint" style="margin:2px 0; color:rgba(255,247,232,0.75);">${escapeHtml(asker?asker.name:'?')} → ${escapeHtml(target?target.name:'?')}: "${escapeHtml(t.question||'')}" — "${escapeHtml(t.answer||'')}"</p>`;
+    }).join('');
+    const guesses = Object.entries(h.guesses||{}).map(([voterId,guessedId])=>{
+      const voter = state.members.find(mm=>mm.id===voterId);
+      const guessed = state.members.find(mm=>mm.id===guessedId);
+      const right = guessedId === cur.mrBrokId;
+      return `<span style="display:inline-block; margin:2px 6px 2px 0; padding:3px 9px; border-radius:100px; font-size:11.5px; background:${right?'rgba(255,201,60,0.18)':'rgba(255,247,232,0.08)'};">${escapeHtml(voter?voter.name:'?')} → ${escapeHtml(guessed?guessed.name:'?')} ${right?'✓':''}</span>`;
+    }).join('');
+    return `<div class="game-card" style="text-align:left; margin-bottom:8px;">
+      <p style="font-weight:700; margin:0 0 6px;">Omgang ${h.round}</p>
+      ${turns}
+      <div style="margin-top:8px;">${guesses}</div>
+    </div>`;
+  }).join('');
+  return `<div class="section-label">📜 Sådan gik det</div>${rows}`;
+}
+
+function mrbrokOverHtml(m, cur){
+  const mrbrokMember = state.members.find(mm=>mm.id===cur.mrBrokId);
+  const ranked = state.members.filter(mm=>m.players.includes(mm.id) && mm.id !== cur.mrBrokId).sort((a,b)=>(cur.scores[b.id]||0)-(cur.scores[a.id]||0));
+  const scoreRows = ranked.map((mm,i)=>`
+    <div class="bal-row">
+      <div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${i===0?'🏆':(i+1)}</div>
+      <div class="feed-body"><div class="bal-name">${escapeHtml(mm.name)}</div></div>
+      <div class="bal-amt">${cur.scores[mm.id]||0} point</div>
+    </div>
+  `).join('');
+  const stealLine = cur.caught
+    ? (cur.stealGuess
+        ? (cur.mrBrokWon ? `<p class="hint" style="color:rgba(255,201,60,0.85); font-weight:600;">😏 MrBrok gættede "${escapeHtml(cur.stealGuess)}" — tæt nok! Sejren blev stjålet.</p>` : `<p class="hint" style="color:rgba(255,247,232,0.7);">MrBrok gættede "${escapeHtml(cur.stealGuess)}" — ikke tæt nok.</p>`)
+        : `<p class="hint" style="color:rgba(255,247,232,0.7);">MrBrok nåede ikke at gætte i tide.</p>`)
+    : `<p class="hint" style="color:rgba(255,247,232,0.7);">MrBrok blev aldrig afsløret af flertallet.</p>`;
+  return `
+    <div class="game-badge">🎉 MrBrok er slut!</div>
+    <div class="game-card" id="mrbrokReveal" style="text-align:center; margin-bottom:12px;">
+      <div style="font-size:34px;">🫵</div>
+      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:6px 0;">MrBrok var... ${escapeHtml(mrbrokMember?mrbrokMember.name:'?')}!</p>
+      <p class="hint" style="color:rgba(255,247,232,0.6);">Emnet var: <b style="color:rgba(255,247,232,0.85);">${escapeHtml(cur.topic||'?')}</b></p>
+      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; margin-top:8px; color:${cur.mrBrokWon?'var(--coin)':'var(--sea)'};">${cur.mrBrokWon ? '👑 MrBrok vandt!' : '👑 De andre afslørede MrBrok!'}</p>
+      ${stealLine}
+      ${m.wager==='euro' ? `<p class="hint" style="color:rgba(255,247,232,0.7);">${cur.mrBrokWon ? 'De andre lægger 1€ hver i puljen.' : 'MrBrok lægger 1€ i puljen.'}</p>` : '<p class="hint" style="color:rgba(255,247,232,0.7);">Kun for sjov denne gang.</p>'}
+    </div>
+    <div class="section-label">🎯 Gætte-regnskab</div>
+    ${scoreRows}
+    ${mrbrokRecapHtml(m, cur)}
+    ${mrbrokHighscoreHtml()}
+    <button class="game-btn" id="mrbrokPlayAgainBtn" style="margin-top:16px;">🕵️ Spil igen</button>
+    <button class="game-btn ghost" id="mrbrokEndBtn">Tilbage til lobbyen</button>
+  `;
+}
+
+function bindMrbrokHandlers(m){
+  const cur = m.current;
+  document.querySelectorAll('[data-mrbrok-wager]').forEach(el=>{
+    el.onclick = ()=>{ mrbrokWager = el.dataset.mrbrokWager; render(); };
+  });
+  document.querySelectorAll('[data-mrbrok-rounds]').forEach(el=>{
+    el.onclick = ()=>{ mrbrokRounds = parseInt(el.dataset.mrbrokRounds,10); render(); };
+  });
+  document.querySelectorAll('[data-mrbrok-player]').forEach(el=>{
+    el.onclick = ()=>{
+      const id = el.dataset.mrbrokPlayer;
+      if(mrbrokSelectedPlayers.includes(id)) mrbrokSelectedPlayers = mrbrokSelectedPlayers.filter(x=>x!==id);
+      else mrbrokSelectedPlayers = [...mrbrokSelectedPlayers, id];
+      render();
+    };
+  });
+  const startBtn = document.getElementById('startMrbrokBtn');
+  if(startBtn) startBtn.onclick = ()=> mrbrokApi('start', { wager: mrbrokWager, playerIds: mrbrokSelectedPlayers, totalRounds: mrbrokRounds });
+
+  const playAgainBtn = document.getElementById('mrbrokPlayAgainBtn');
+  if(playAgainBtn) playAgainBtn.onclick = ()=>{
+    mrbrokApi('end', {}).then(()=> mrbrokApi('start', { wager: mrbrokWager, playerIds: mrbrokSelectedPlayers, totalRounds: mrbrokRounds }));
+  };
+  const endBtn = document.getElementById('mrbrokEndBtn');
+  if(endBtn) endBtn.onclick = ()=> mrbrokApi('end', {});
+
+  if(!cur) return;
+
+  if(cur.type === 'turn' && cur.phase === 'ask' && profile && profile.memberId === cur.askerId){
+    const btn = document.getElementById('mrbrokAskBtn');
+    if(btn) btn.onclick = ()=>{
+      const question = document.getElementById('mrbrokQuestionInput').value.trim();
+      if(!question) return;
+      mrbrokApi('submit', { payload: { question } });
+    };
+  }
+  if(cur.type === 'turn' && cur.phase === 'answer' && profile && profile.memberId === cur.targetId){
+    const btn = document.getElementById('mrbrokAnswerBtn');
+    if(btn) btn.onclick = ()=>{
+      const answer = document.getElementById('mrbrokAnswerInput').value.trim();
+      if(!answer) return;
+      mrbrokApi('submit', { payload: { answer } });
+    };
+  }
+  if(cur.type === 'guess'){
+    document.querySelectorAll('[data-mrbrok-guess]').forEach(el=>{
+      el.onclick = ()=> mrbrokApi('submit', { payload: { guessedId: el.dataset.mrbrokGuess } });
+    });
+  }
+  if(cur.type === 'steal' && m.youAreMrBrok && !cur.guess){
+    const btn = document.getElementById('mrbrokStealBtn');
+    if(btn) btn.onclick = ()=>{
+      const guess = document.getElementById('mrbrokStealInput').value.trim();
+      if(!guess) return;
+      mrbrokApi('submit', { payload: { guess } });
+    };
+  }
+  if(cur.type === 'steal' && cur.guess && !m.youAreMrBrok){
+    document.querySelectorAll('[data-mrbrok-steal-vote]').forEach(el=>{
+      el.onclick = ()=> mrbrokApi('submit', { payload: { closeEnough: el.dataset.mrbrokStealVote === 'true' } });
+    });
+  }
+}
+
 function jarSVG(fillPct){
   const fillY = 190 - (fillPct/100)*150;
   return `
@@ -1288,7 +1716,7 @@ function bindPendingCardHandlers(){
       const p = state.pendingList.find(x=>x.id===pendingId);
       const complainer = p && state.members.find(m=>m.id===p.memberId);
       try{
-        const r = await api('vote', { roomId, voterId: profile.memberId, pendingId });
+        const r = await api('brok', { action: 'vote', roomId, voterId: profile.memberId, pendingId });
         state = r.state;
         if(r.confirmed){
           launchCoinToJar(()=>{
@@ -1308,7 +1736,7 @@ function bindPendingCardHandlers(){
   document.querySelectorAll('[data-cancel-pending]').forEach(el=>{
     el.onclick = async ()=>{
       const pendingId = el.dataset.cancelPending;
-      try{ const r = await api('cancel', { roomId, actorId: profile.memberId, pendingId }); state = r.state; render(); }
+      try{ const r = await api('brok', { action: 'cancel', roomId, actorId: profile.memberId, pendingId }); state = r.state; render(); }
       catch(e){ toast(e.message); }
     };
   });
@@ -1570,7 +1998,7 @@ function openBrokSheet(){
       if(!message){ toast('Skriv hvad de brokkede sig over først'); return; }
       nextBtn.innerHTML = '<span class="spinner"></span>';
       try{
-        const r = await api('brok', { roomId, memberId: selectedId, message, actorId: profile.memberId });
+        const r = await api('brok', { action: 'accuse', roomId, memberId: selectedId, message, actorId: profile.memberId });
         state = r.state;
         closeSheet();
         activeTab = 'feed';

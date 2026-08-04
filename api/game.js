@@ -1,4 +1,4 @@
-const { getState, setState, uid } = require('./_lib/store');
+const { getState, setState, uid, redactStateFor } = require('./_lib/store');
 const { beginRound } = require('./_lib/game');
 const { pushToMembers } = require('./_lib/push');
 
@@ -87,6 +87,7 @@ module.exports = async (req, res) => {
 
     if (action === 'start') {
       if (state.game.active) return res.status(409).json({ error: 'spillet er allerede i gang' });
+      if (state.mrbrok && state.mrbrok.active) return res.status(409).json({ error: 'MrBrok er i gang — afslut det først' });
       const requested = Array.isArray(req.body.playerIds) ? req.body.playerIds : state.members.map(m => m.id);
       const players = state.members.map(m => m.id).filter(id => requested.includes(id));
       if (players.length < 2) return res.status(400).json({ error: 'vælg mindst 2 spillere' });
@@ -107,7 +108,7 @@ module.exports = async (req, res) => {
         });
       } catch (e) { /* push-fejl må ikke vælte selve spilstarten */ }
 
-      return res.status(200).json({ state });
+      return res.status(200).json({ state: redactStateFor(state, actorId) });
     }
 
     if (!state.game.active) return res.status(409).json({ error: 'der er ikke noget spil i gang' });
@@ -151,7 +152,7 @@ module.exports = async (req, res) => {
         return res.status(400).json({ error: 'ugyldig handling lige nu' });
       }
       await setState(roomId, state);
-      return res.status(200).json({ state });
+      return res.status(200).json({ state: redactStateFor(state, actorId) });
     }
 
     // "ready" er spillerens EGET valg om at gå videre — bruges i resultat-
@@ -165,7 +166,7 @@ module.exports = async (req, res) => {
       if (!cur.readyIds.includes(actorId)) cur.readyIds.push(actorId);
       if (cur.readyIds.length >= players.length) goToNextRoundOrEnd(state, players);
       await setState(roomId, state);
-      return res.status(200).json({ state });
+      return res.status(200).json({ state: redactStateFor(state, actorId) });
     }
 
     // "advance" er nu kun nødbremsen som klientens nedtællings-timer bruger
@@ -189,13 +190,13 @@ module.exports = async (req, res) => {
         return res.status(400).json({ error: 'kan ikke gå videre lige nu' });
       }
       await setState(roomId, state);
-      return res.status(200).json({ state });
+      return res.status(200).json({ state: redactStateFor(state, actorId) });
     }
 
     if (action === 'end') {
       state.game = { active: false };
       await setState(roomId, state);
-      return res.status(200).json({ state });
+      return res.status(200).json({ state: redactStateFor(state, actorId) });
     }
 
     return res.status(400).json({ error: 'ukendt handling' });

@@ -1,4 +1,4 @@
-const { getState, setState, processPendingExpiry, checkSilenceNudge } = require('./_lib/store');
+const { getState, setState, processPendingExpiry, checkSilenceNudge, redactStateFor } = require('./_lib/store');
 const { pushToMembers } = require('./_lib/push');
 
 const SILENCE_LINES = [
@@ -12,6 +12,7 @@ const SILENCE_LINES = [
 
 module.exports = async (req, res) => {
   const roomId = (req.query.room || '').toString().trim();
+  const memberId = (req.query.member || '').toString().trim();
   if (!roomId) return res.status(400).json({ error: 'mangler room' });
   try {
     const state = await getState(roomId);
@@ -45,7 +46,7 @@ module.exports = async (req, res) => {
       } catch (e) { /* push-fejl må ikke vælte state-kaldet */ }
     }
 
-    res.status(200).json({ state });
+    res.status(200).json({ state: redactStateFor(state, memberId) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

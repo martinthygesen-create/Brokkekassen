@@ -32,10 +32,13 @@ function emptyState() {
     lastMilestoneAt: 0, // højeste rundetal (10, 20, 30...) puljen allerede er fejret ved
     game: { active: false }, // Brokspillet — se api/game.js + api/_lib/game.js
     gameStats: {}, // memberId -> {played, wins} — highscore på tværs af afsluttede Brokspil-runder
-    // Sat én gang ved oprettelse — Brokkekassen og Brokspillet er ligestillede
-    // valg, man kan vælge begge eller kun ét. Styrer kun hvad der vises.
+    mrbrok: { active: false }, // MrBrok — se api/mrbrok.js + api/_lib/mrbrok.js
+    mrbrokStats: {}, // memberId -> {played, wins} — highscore på tværs af afsluttede MrBrok-runder
+    // Sat én gang ved oprettelse — Brokkekassen, Brokspillet og MrBrok er
+    // ligestillede valg, man kan vælge en, flere eller alle. Styrer kun hvad der vises.
     kasseEnabled: true,
     gameEnabled: true,
+    mrbrokEnabled: true,
     gameContentBank: { truefalse: [] }, // sandt/falsk-udsagn folk har skrevet — genbruges nogle gange i senere spil
   };
 }
@@ -214,6 +217,10 @@ async function getState(roomId) {
   if (!state.gameStats) state.gameStats = {};
   if (state.gameEnabled === undefined) state.gameEnabled = true;
   if (state.kasseEnabled === undefined) state.kasseEnabled = true;
+  if (state.mrbrokEnabled === undefined) state.mrbrokEnabled = true;
+  if (!state.mrbrok) state.mrbrok = { active: false };
+  if (state.mrbrok.active && !state.mrbrok.players) state.mrbrok = { active: false };
+  if (!state.mrbrokStats) state.mrbrokStats = {};
   if (!state.gameContentBank) state.gameContentBank = { truefalse: [] };
   if (!state.pendingList) {
     // migrering fra det gamle enkelt-pending-felt til en liste
@@ -241,6 +248,7 @@ async function createRoom(roomId, opts) {
   const state = emptyState();
   if (opts && opts.kasseEnabled === false) state.kasseEnabled = false;
   if (opts && opts.gameEnabled === false) state.gameEnabled = false;
+  if (opts && opts.mrbrokEnabled === false) state.mrbrokEnabled = false;
   await setState(roomId, state);
   return state;
 }
@@ -261,4 +269,26 @@ function neededVotes(totalMembers) {
   return Math.min(others, Math.max(2, Math.ceil((others * 2) / 3)));
 }
 
-module.exports = { getState, setState, deleteRoom, createRoom, genRoomId, uid, emptyState, neededVotes, isAdmin, settleRound, updateStreaksAndDrawLottery, processPendingExpiry, checkSilenceNudge, checkPoolMilestone };
+// MrBrok gemmer en hemmelighed i state.mrbrok (hvem der er MrBrok, og selve
+// emnet) — men hele state sendes som én samlet JSON-blob til klienten ved
+// hver poll/handling, så vi er nødt til at maskere de hemmelige felter ud
+// fra HVEM der kigger, hver gang state skal serialiseres til et svar. Brugt
+// af alle api/-filer der returnerer `state` i deres svar.
+function redactStateFor(state, viewerId) {
+  const m = state.mrbrok;
+  if (!m || !m.active || (m.current && m.current.type === 'gameover')) return state;
+  const isMrBrok = !!(viewerId && viewerId === m.mrBrokId);
+  const safe = { ...m, mrBrokId: undefined, youAreMrBrok: isMrBrok, history: undefined };
+  if (isMrBrok) safe.topic = undefined;
+  if (safe.current && safe.current.guesses) {
+    const mine = viewerId && Object.prototype.hasOwnProperty.call(safe.current.guesses, viewerId);
+    safe.current = { ...safe.current, guesses: mine ? { [viewerId]: safe.current.guesses[viewerId] } : {} };
+  }
+  if (safe.current && safe.current.type === 'steal' && safe.current.votes) {
+    const mine = viewerId && Object.prototype.hasOwnProperty.call(safe.current.votes, viewerId);
+    safe.current = { ...safe.current, votes: mine ? { [viewerId]: safe.current.votes[viewerId] } : {} };
+  }
+  return { ...state, mrbrok: safe };
+}
+
+module.exports = { getState, setState, deleteRoom, createRoom, genRoomId, uid, emptyState, neededVotes, isAdmin, settleRound, updateStreaksAndDrawLottery, processPendingExpiry, checkSilenceNudge, checkPoolMilestone, redactStateFor };

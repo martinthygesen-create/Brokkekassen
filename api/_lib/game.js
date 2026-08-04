@@ -180,4 +180,4 @@ function beginRound(state, players) {
   }
 }
 
-module.exports = { pickRandom, shuffle, buildOptions, pickQuiplashPrompt, pickWorldTrivia, generateTriviaQuestion, beginRound };
+module.exports = { pickRandom, shuffle, buildOptions, pickFromBag, pickQuiplashPrompt, pickWorldTrivia, generateTriviaQuestion, beginRound };

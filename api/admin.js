@@ -1,4 +1,4 @@
-const { getState, setState, deleteRoom, emptyState, isAdmin, settleRound } = require('./_lib/store');
+const { getState, setState, deleteRoom, emptyState, isAdmin, settleRound, redactStateFor } = require('./_lib/store');
 const { pushToMembers } = require('./_lib/push');
 
 // Samler admin-handlingerne (gør op, luk, nulstil, besked, mål) i én
@@ -17,7 +17,7 @@ module.exports = async (req, res) => {
       if (!state.events.length) return res.status(400).json({ error: 'puljen er tom' });
       settleRound(state);
       await setState(roomId, state);
-      return res.status(200).json({ state });
+      return res.status(200).json({ state: redactStateFor(state, actorId) });
     }
 
     if (action === 'close') {
@@ -27,7 +27,7 @@ module.exports = async (req, res) => {
       state.pendingList = [];
       state.closed = true;
       await setState(roomId, state);
-      return res.status(200).json({ state });
+      return res.status(200).json({ state: redactStateFor(state, actorId) });
     }
 
     if (action === 'undoArchive') {
@@ -37,7 +37,7 @@ module.exports = async (req, res) => {
       state.events = [...last.events, ...state.events];
       state.createdAt = last.startedAt;
       await setState(roomId, state);
-      return res.status(200).json({ state });
+      return res.status(200).json({ state: redactStateFor(state, actorId) });
     }
 
     if (action === 'backdate') {
@@ -46,7 +46,7 @@ module.exports = async (req, res) => {
       if (!isAdmin(state, actorId)) return res.status(403).json({ error: 'kun den der oprettede brokkekassen kan gøre dette' });
       state.createdAt -= 86400000;
       await setState(roomId, state);
-      return res.status(200).json({ state });
+      return res.status(200).json({ state: redactStateFor(state, actorId) });
     }
 
     if (action === 'flagEvent') {
@@ -61,7 +61,7 @@ module.exports = async (req, res) => {
       if (!ev) return res.status(404).json({ error: 'brok findes ikke længere' });
       ev.voided = !!voided;
       await setState(roomId, state);
-      return res.status(200).json({ state });
+      return res.status(200).json({ state: redactStateFor(state, actorId) });
     }
 
     if (action === 'deleteRoom') {
@@ -101,7 +101,7 @@ module.exports = async (req, res) => {
       if (!isAdmin(state, actorId)) return res.status(403).json({ error: 'kun den der oprettede brokkekassen kan sætte mål' });
       state.goal = (goal || '').toString().trim().slice(0, 100);
       await setState(roomId, state);
-      return res.status(200).json({ state });
+      return res.status(200).json({ state: redactStateFor(state, actorId) });
     }
 
     return res.status(400).json({ error: 'ukendt handling' });
