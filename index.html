@@ -214,6 +214,7 @@ let lastCountdownRound = null; // undgår at afspille 3-2-1-nedtællingen flere 
 let mrbrokWager = 'fun';
 let mrbrokRounds = 4; // 3 | 4 | 5
 let mrbrokSelectedPlayers = null;
+let mrbrokInstructionsOpen = null; // null = ikke afgjort endnu denne session — "sådan foregår det" foldes automatisk ud første gang, sammen efterfølgende
 let mrbrokKnownMemberIds = null;
 let mrbrokTimerInterval = null;
 let mrbrokTimerDeadline = null;
@@ -1413,6 +1414,11 @@ function mrbrokLobbyHtml(){
     ['🤔', 'Alle gætter hvem der bluffer — ingen facit før til sidst'],
     ['🎭', 'Afsløring — og MrBrok får ét sidste gæt for at stjæle sejren'],
   ];
+  // Foldes automatisk ud første gang nogen ser lobbyen på denne enhed, og
+  // sammen alle gange efter — så det ikke bare bliver fyld man scroller
+  // forbi hver eneste gang man skal i gang med et nyt spil.
+  if(mrbrokInstructionsOpen === null) mrbrokInstructionsOpen = !localStorage.getItem('bk_mrbrok_seen_instructions');
+  localStorage.setItem('bk_mrbrok_seen_instructions', '1');
   return `
     <div class="empty-state" style="padding-top:22px;">
       <span class="emoji">🕵️</span>
@@ -1420,13 +1426,16 @@ function mrbrokLobbyHtml(){
       Find ud af hvem der bluffer — inden de gennemskuer jer.
     </div>
     <div class="game-card" style="margin:10px 0 10px;">
-      <label class="field-label" style="color:rgba(255,247,232,0.7); margin-bottom:8px; display:block;">Sådan foregår det</label>
-      ${steps.map(([icon,text])=>`
+      <div id="mrbrokInstructionsToggle" style="display:flex; align-items:center; justify-content:space-between; cursor:pointer; ${mrbrokInstructionsOpen?'margin-bottom:8px;':''}">
+        <label class="field-label" style="color:rgba(255,247,232,0.7); margin:0;">Sådan foregår det</label>
+        <span style="color:rgba(255,247,232,0.5); font-size:13px; transition:transform .2s; display:inline-block; ${mrbrokInstructionsOpen?'transform:rotate(180deg);':''}">⌄</span>
+      </div>
+      ${mrbrokInstructionsOpen ? steps.map(([icon,text])=>`
         <div style="display:flex; gap:10px; align-items:flex-start; margin-bottom:9px;">
           <span style="font-size:16px; line-height:1.4;">${icon}</span>
           <p style="margin:0; font-size:13px; line-height:1.4; color:rgba(255,247,232,0.8);">${text}</p>
         </div>
-      `).join('')}
+      `).join('') : ''}
     </div>
     <div class="game-card" style="margin:10px 0;">
       <label class="field-label" style="color:rgba(255,247,232,0.7);">Hvem er med? (mindst 3)</label>
@@ -1623,6 +1632,8 @@ function mrbrokOverHtml(m, cur){
 
 function bindMrbrokHandlers(m){
   const cur = m.current;
+  const instrToggle = document.getElementById('mrbrokInstructionsToggle');
+  if(instrToggle) instrToggle.onclick = ()=>{ mrbrokInstructionsOpen = !mrbrokInstructionsOpen; render(); };
   document.querySelectorAll('[data-mrbrok-wager]').forEach(el=>{
     el.onclick = ()=>{ mrbrokWager = el.dataset.mrbrokWager; render(); };
   });
