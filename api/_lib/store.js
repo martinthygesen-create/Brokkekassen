@@ -28,6 +28,7 @@ function emptyState() {
     pushSubs: {},  // memberId -> PushSubscription, til rigtige push-notifikationer
     goal: '',      // fri tekst sat af admin: hvad potten går til, fx "Fælles middag"
     acquittals: [], // {id, memberId, message, openedAt, expiredAt} — anklager der udløb uden nok stemmer
+    lastSilenceNudgeAt: null, // sidste gang alle fik en "her er stille" push, til at undgå at spamme
   };
 }
 
@@ -56,6 +57,22 @@ function processPendingExpiry(state) {
     return true;
   });
   return dueReminders;
+}
+
+const SILENCE_NUDGE_AFTER = 24 * 3600000; // så længe stilhed før vi drilsk minder om at boksen findes
+
+// Har der været fuldstændig stille (ingen brok) i over 24 timer? Returnerer
+// true højst én gang per stille-periode — sender selv ikke push, ligesom
+// processPendingExpiry, det gør api/state.js.
+function checkSilenceNudge(state) {
+  if (state.closed || state.members.length < 2) return false;
+  const lastEventTs = state.events.reduce((max, e) => Math.max(max, e.ts), 0);
+  const lastActivity = Math.max(lastEventTs, state.dayBoundary, state.createdAt);
+  const now = Date.now();
+  if (now - lastActivity < SILENCE_NUDGE_AFTER) return false;
+  if (state.lastSilenceNudgeAt && state.lastSilenceNudgeAt > lastActivity) return false;
+  state.lastSilenceNudgeAt = now;
+  return true;
 }
 
 // Finder Copenhagen-tidszonens offset (minutter) for et givent tidspunkt.
@@ -152,6 +169,7 @@ async function getState(roomId) {
   if (!state.dayBoundary) state.dayBoundary = Date.now();
   if (state.freeBrokDrawnAt === undefined) state.freeBrokDrawnAt = null;
   if (!state.acquittals) state.acquittals = [];
+  if (state.lastSilenceNudgeAt === undefined) state.lastSilenceNudgeAt = null;
   if (!state.pendingList) {
     // migrering fra det gamle enkelt-pending-felt til en liste
     state.pendingList = state.pending ? [state.pending] : [];
@@ -190,4 +208,4 @@ function neededVotes(totalMembers) {
   return Math.min(others, Math.max(2, Math.ceil((others * 2) / 3)));
 }
 
-module.exports = { getState, setState, createRoom, genRoomId, uid, emptyState, neededVotes, isAdmin, settleRound, updateStreaksAndDrawLottery, processPendingExpiry };
+module.exports = { getState, setState, createRoom, genRoomId, uid, emptyState, neededVotes, isAdmin, settleRound, updateStreaksAndDrawLottery, processPendingExpiry, checkSilenceNudge };
