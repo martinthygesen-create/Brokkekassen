@@ -159,6 +159,14 @@
   .onboard p{font-size:14.5px; color:rgba(255,247,232,0.7); line-height:1.5; margin-bottom:26px;}
   .onboard-card{ background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); border-radius:20px; padding:20px; text-align:left; }
   .onboard-pick:not(.selected){ opacity:.35; }
+  /* Delt "hvilken app"-kort-stil (onboarding-valg + ☰-menu) — ikonet sidder i
+     en fast-høj boks øverst i kortet, så ikonerne altid flugter vandret på
+     tværs af rækken uanset om et af navnene (fx "Brokkekassen") knækker om
+     på to linjer og et andet (fx "MrBrok") ikke gør. */
+  .app-pick{ flex:1; cursor:pointer; text-align:center; padding:16px 6px 14px; border-radius:18px; transition:opacity .15s, transform .08s; }
+  .app-pick:active{ transform:scale(.96); }
+  .app-pick .app-pick-icon{ height:34px; display:flex; align-items:center; justify-content:center; font-size:28px; line-height:1; }
+  .app-pick .app-pick-label{ font-family:'Baloo 2',sans-serif; font-weight:800; font-size:12.5px; line-height:1.2; margin-top:6px; letter-spacing:.01em; }
   .onboard-card input{ background:rgba(255,247,232,0.95); }
   .divider{ display:flex; align-items:center; gap:10px; color:rgba(255,247,232,0.4); font-size:12px; margin:22px 0; }
   .divider::before, .divider::after{ content:''; flex:1; height:1px; background:rgba(255,247,232,0.15); }
@@ -491,17 +499,17 @@ function renderCreateOrJoin(errorMsg){
       <div class="onboard-card">
         <label class="field-label" style="color:rgba(255,247,232,0.6);">Hvad vil I have med? (vælg en eller begge)</label>
         <div style="display:flex; gap:10px; margin:10px 0 16px;">
-          <div class="onboard-pick selected" data-pick="kasse" style="flex:1; cursor:pointer; text-align:center; padding:18px 8px; border-radius:16px; background:var(--sea); color:#fff; transition:opacity .15s;">
-            <div style="font-size:26px;">🫙</div>
-            <div style="font-weight:700; margin-top:4px; font-size:13px;">Brokkekassen</div>
+          <div class="onboard-pick app-pick selected" data-pick="kasse" style="background:var(--sea); color:#fff;">
+            <div class="app-pick-icon">🫙</div>
+            <div class="app-pick-label">Brokkekassen</div>
           </div>
-          <div class="onboard-pick selected" data-pick="spil" style="flex:1; cursor:pointer; text-align:center; padding:18px 8px; border-radius:16px; background:var(--sea); color:#fff; transition:opacity .15s;">
-            <div style="font-size:26px;">👉</div>
-            <div style="font-weight:700; margin-top:4px; font-size:13px;">Brokspillet</div>
+          <div class="onboard-pick app-pick selected" data-pick="spil" style="background:var(--sea); color:#fff;">
+            <div class="app-pick-icon">👉</div>
+            <div class="app-pick-label">Brokspillet</div>
           </div>
-          <div class="onboard-pick selected" data-pick="mrbrok" style="flex:1; cursor:pointer; text-align:center; padding:18px 8px; border-radius:16px; background:var(--sea); color:#fff; transition:opacity .15s;">
-            <div style="font-size:26px;">🕵️</div>
-            <div style="font-weight:700; margin-top:4px; font-size:13px;">MrBrok</div>
+          <div class="onboard-pick app-pick selected" data-pick="mrbrok" style="background:var(--sea); color:#fff;">
+            <div class="app-pick-icon">🕵️</div>
+            <div class="app-pick-label">MrBrok</div>
           </div>
         </div>
         <button class="sheet-btn primary" id="createBtn" style="margin-top:0;">Opret nyt rum</button>
@@ -702,17 +710,17 @@ function openAppMenuSheet(){
   openSheet(`
     <h2>Menu</h2>
     <div style="display:flex; gap:10px; margin:6px 0 4px;">
-      ${state.kasseEnabled ? `<div data-goto-app="kasse" style="flex:1; cursor:pointer; text-align:center; padding:20px 10px; border-radius:18px; background:${activeApp==='kasse'?'var(--sea)':'rgba(5,32,36,0.06)'}; color:${activeApp==='kasse'?'#fff':'var(--ink)'};">
-        <div style="font-size:30px;">🫙</div>
-        <div style="font-weight:700; margin-top:6px;">Brokkekassen</div>
+      ${state.kasseEnabled ? `<div class="app-pick" data-goto-app="kasse" style="background:${activeApp==='kasse'?'var(--sea)':'rgba(5,32,36,0.06)'}; color:${activeApp==='kasse'?'#fff':'var(--ink)'};">
+        <div class="app-pick-icon">🫙</div>
+        <div class="app-pick-label">Brokkekassen</div>
       </div>` : ''}
-      ${state.gameEnabled ? `<div data-goto-app="spil" style="flex:1; cursor:pointer; text-align:center; padding:20px 10px; border-radius:18px; background:${activeApp==='spil'?'var(--sea)':'rgba(5,32,36,0.06)'}; color:${activeApp==='spil'?'#fff':'var(--ink)'};">
-        <div style="font-size:30px;">👉</div>
-        <div style="font-weight:700; margin-top:6px;">Brokspillet</div>
+      ${state.gameEnabled ? `<div class="app-pick" data-goto-app="spil" style="background:${activeApp==='spil'?'var(--sea)':'rgba(5,32,36,0.06)'}; color:${activeApp==='spil'?'#fff':'var(--ink)'};">
+        <div class="app-pick-icon">👉</div>
+        <div class="app-pick-label">Brokspillet</div>
       </div>` : ''}
-      ${state.mrbrokEnabled ? `<div data-goto-app="mrbrok" style="flex:1; cursor:pointer; text-align:center; padding:20px 10px; border-radius:18px; background:${activeApp==='mrbrok'?'var(--sea)':'rgba(5,32,36,0.06)'}; color:${activeApp==='mrbrok'?'#fff':'var(--ink)'};">
-        <div style="font-size:30px;">🕵️</div>
-        <div style="font-weight:700; margin-top:6px;">MrBrok</div>
+      ${state.mrbrokEnabled ? `<div class="app-pick" data-goto-app="mrbrok" style="background:${activeApp==='mrbrok'?'var(--sea)':'rgba(5,32,36,0.06)'}; color:${activeApp==='mrbrok'?'#fff':'var(--ink)'};">
+        <div class="app-pick-icon">🕵️</div>
+        <div class="app-pick-label">MrBrok</div>
       </div>` : ''}
     </div>
     <div class="divider">rum</div>
