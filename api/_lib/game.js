@@ -137,18 +137,22 @@ function generateTriviaQuestion(state) {
   return pickRandom(candidates)();
 }
 
-// Vælger hvem der skal skrive næste sandt/falsk-udsagn — ikke rent
-// tilfældigt hver gang (kunne ved uheld ramme samme person 3 gange i træk),
-// men fra en "pose" der blandes og tømmes helt før den blandes igen, så alle
-// spillere kommer igennem lige ofte inden nogen gentages. Sessionsbundet
-// (ligger på selve spillet, ikke rummet), da det kun giver mening for de
-// spillere der faktisk er med i DENNE omgang.
+// Vælger hvem der skal skrive næste sandt/falsk-udsagn: den der har skrevet
+// mindst for nylig (eller aldrig), ikke rent tilfældigt — ellers kan samme
+// person ved uheld rammes flere gange i træk. Gemt på RUM-niveau (samme sted
+// som resten af indholds-rotationen), IKKE på selve spillet — en pose der
+// nulstilles ved hvert nyt spil ville kun give fair fordeling INDEN FOR én
+// omgang, ikke på tværs af flere spil samme aften, som var hele pointen.
+// Uafgjort (fx alle aldrig skrevet endnu) brydes tilfældigt.
 function pickAuthor(state, players) {
-  if (!state.game.authorBag || !state.game.authorBag.length) {
-    state.game.authorBag = shuffle(players.map(p => p.id));
-  }
-  const id = state.game.authorBag.pop();
-  return players.find(p => p.id === id) || pickRandom(players);
+  if (!state.gameContentBank) state.gameContentBank = {};
+  if (!state.gameContentBank.authorLastPicked) state.gameContentBank.authorLastPicked = {};
+  const lastPicked = state.gameContentBank.authorLastPicked;
+  const oldestTs = Math.min(...players.map(p => lastPicked[p.id] || 0));
+  const candidates = players.filter(p => (lastPicked[p.id] || 0) === oldestTs);
+  const author = pickRandom(candidates);
+  lastPicked[author.id] = Date.now();
+  return author;
 }
 
 // Sætter indholdet af en ny runde op — vælger tilfældigt mellem de tre

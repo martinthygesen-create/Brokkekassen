@@ -43,6 +43,14 @@
       radial-gradient(ellipse at 30% -10%, rgba(255,201,60,0.14) 0%, transparent 55%),
       radial-gradient(ellipse at 100% 0%, rgba(255,201,60,0.06) 0%, transparent 60%),
       linear-gradient(180deg, var(--noir) 0%, var(--noir-deep) 100%);
+    /* Vigtigt: `background` er en shorthand og nulstiller ALT den ikke selv
+       nævner — inkl. attachment/repeat fra den fælles body-regel ovenfor.
+       Uden disse to linjer falder attachment tilbage til "scroll" og
+       repeat til "repeat", så gradienten fliser (gentager sig) med en
+       hård søm midt på skærmen så snart siden er høj nok til at scrolle
+       (præcis den søm-fejl der tidligere sås på selve Brokkekassen). */
+    background-attachment: fixed;
+    background-repeat: no-repeat;
   }
   h1,h2,h3,.display{font-family:'Baloo 2', sans-serif;}
   button{font-family:inherit;}
@@ -85,6 +93,11 @@
   .slot-banner{ display:inline-block; background:linear-gradient(135deg, var(--coral), #e14d2e); color:#fff; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:15px; letter-spacing:.02em; padding:9px 20px; border-radius:8px; margin-bottom:16px; box-shadow:0 8px 18px rgba(255,107,74,.4); clip-path:polygon(4% 0%, 96% 0%, 100% 50%, 96% 100%, 4% 100%, 0% 50%); }
 
   .game-badge{ display:inline-block; background:linear-gradient(135deg, var(--coral), #e14d2e); color:#fff; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:12.5px; letter-spacing:.02em; padding:7px 16px; border-radius:100px; margin-bottom:14px; box-shadow:0 6px 14px rgba(255,107,74,.35); }
+  @keyframes timerPulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.12); } }
+  .game-timer-urgent{ animation:timerPulse .8s ease-in-out infinite; display:inline-block; }
+  .waiting-pill{ display:flex; align-items:center; justify-content:center; gap:9px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.18); border-radius:100px; padding:11px 18px; margin-top:12px; font-size:14.5px; font-weight:700; color:rgba(255,247,232,0.85); }
+  .waiting-pill .waiting-dot{ width:8px; height:8px; flex:0 0 auto; border-radius:50%; background:var(--coin); animation:waitingBlink 1.1s ease-in-out infinite; }
+  @keyframes waitingBlink{ 0%,100%{opacity:.25;} 50%{opacity:1;} }
   .game-card{ background:linear-gradient(160deg, rgba(255,201,60,0.18), rgba(255,107,74,0.10)); border:1px solid rgba(255,201,60,0.35); border-radius:22px; padding:20px; box-shadow:0 10px 24px rgba(0,0,0,.18); }
   .game-card p{ color:var(--cream); }
   .game-btn{ display:block; width:100%; background:linear-gradient(160deg, var(--coral), #e14d2e); color:#fff; border:none; border-radius:100px; padding:15px; font-family:'Baloo 2',sans-serif; font-weight:700; font-size:16px; box-shadow:0 8px 18px rgba(255,107,74,0.35); cursor:pointer; margin-top:14px; }
@@ -301,6 +314,14 @@ function titleFor(count){
   return 'Pletfri (indtil videre)';
 }
 
+// Giver ØJEBLIKKELIG visuel bekræftelse på et tryk (spinner + deaktiveret),
+// FØR netværkskaldet er færdigt — så man aldrig er i tvivl om trykket
+// registrerede, uanset hvor lang tid selve requesten tager.
+function lockSubmitBtn(btn, label){
+  if(!btn) return;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> ' + (label || 'Sender...');
+}
 function toast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -889,7 +910,7 @@ function openGameAdminMenuSheet(){
 // reelt går i stå bare fordi nogen glemmer at trykke.
 const GAME_PHASE_SECONDS = {
   'quiplash:answer': 60, 'quiplash:vote': 35, 'quiplash:results': 20,
-  'truefalse:write': 45, 'truefalse:guess': 35, 'truefalse:results': 20,
+  'truefalse:write': 60, 'truefalse:guess': 35, 'truefalse:results': 20,
   'trivia:answer': 35, 'trivia:results': 20,
 };
 function startGameTimer(cur){
@@ -902,7 +923,13 @@ function startGameTimer(cur){
   const tick = ()=>{
     const el = document.getElementById('gameTimer');
     const left = Math.max(0, Math.ceil((gameTimerDeadline - Date.now())/1000));
-    if(el) el.textContent = '⏱️ ' + left + 's';
+    if(el){
+      el.textContent = '⏱️ ' + left + 's';
+      // Sidste 10 sekunder skifter til en advarselsfarve og pulserer let,
+      // så uret ikke bare er endnu en detalje man overser i badgen.
+      el.style.color = left <= 10 ? '#FFD9CC' : '';
+      el.classList.toggle('game-timer-urgent', left <= 10 && left > 0);
+    }
     if(left <= 0){
       clearInterval(gameTimerInterval);
       gameTimerInterval = null;
@@ -1070,7 +1097,7 @@ function gameReadyHtml(g, cur){
   return `
     ${gameProgressHtml(readyCount, g.players.length, 'er klar')}
     ${already
-      ? `<p class="hint" style="text-align:center; color:rgba(255,247,232,0.75); font-size:15px; font-weight:700;">⏳ Venter på de andre...</p>`
+      ? `<div class="waiting-pill"><span class="waiting-dot"></span> Venter på de andre...</div>`
       : `<button class="game-btn" id="readyBtn">✅ Klar til næste runde</button>`}
   `;
 }
@@ -1128,7 +1155,7 @@ function quiplashHtml(g, cur){
         <button class="game-btn" id="quipSubmitBtn" style="margin-top:10px;">🔒 Lås dit svar</button>
       </div>
       ${gameProgressHtml(answered, g.players.length, 'har svaret')}
-      ${mine ? `<p class="hint" style="text-align:center; color:rgba(255,247,232,0.75); font-size:15px; font-weight:700;">⏳ Venter på de andre...</p>` : ''}
+      ${mine ? `<div class="waiting-pill"><span class="waiting-dot"></span> Venter på de andre...</div>` : ''}
     `;
   }
   if(cur.phase === 'vote'){
@@ -1147,7 +1174,7 @@ function quiplashHtml(g, cur){
       <p class="hint" style="margin:0 0 10px; color:rgba(255,247,232,0.75);">${escapeHtml(cur.prompt)}</p>
       ${rows || '<p class="hint">Ingen andre svar at stemme på.</p>'}
       ${gameProgressHtml(votedCount, g.players.length, 'har stemt')}
-      ${myVote ? `<p class="hint" style="text-align:center; color:rgba(255,247,232,0.75); font-size:15px; font-weight:700;">⏳ Venter på de andre...</p>` : ''}
+      ${myVote ? `<div class="waiting-pill"><span class="waiting-dot"></span> Venter på de andre...</div>` : ''}
     `;
   }
   const winners = (cur.winnerIds||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
@@ -1179,11 +1206,11 @@ function truefalseHtml(g, cur){
         <div class="empty-state"><span class="emoji">✍️</span><b>${escapeHtml(author?author.name:'?')} skriver et udsagn...</b>Vent til det er klar, så skal I gætte.</div>
       `;
     }
-    const chips = state.members.filter(m=>g.players.includes(m.id)).map(m=>`<div class="name-pill ${m.id===profile.memberId?'selected':''}" data-target="${m.id}">${escapeHtml(m.name)}</div>`).join('');
+    const chips = state.members.filter(m=>g.players.includes(m.id)).map(m=>`<div class="name-pill" data-target="${m.id}">${escapeHtml(m.name)}</div>`).join('');
     return `
       <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · ⚖️ Det er dig der skriver!</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
       <div class="game-card" id="gameCard">
-        <label class="field-label" style="color:rgba(255,247,232,0.7);">Om hvem? (kan være dig selv)</label>
+        <label class="field-label" style="color:rgba(255,247,232,0.7);">👉 Om hvem? Vælg en person (kan være dig selv)</label>
         <div class="name-grid" id="ttTargetGrid">${chips}</div>
         <label class="field-label" style="color:rgba(255,247,232,0.7);">Udsagnet</label>
         <textarea id="ttStatement" rows="2" maxlength="120" placeholder="Skriv noget sandt eller opdigtet..."></textarea>
@@ -1217,7 +1244,7 @@ function truefalseHtml(g, cur){
         `)}
       </div>
       ${gameProgressHtml(guessedCount, eligible, 'har gættet')}
-      ${(myGuess || isAuthor) ? `<p class="hint" style="text-align:center; color:rgba(255,247,232,0.75); font-size:15px; font-weight:700;">⏳ Venter på de andre...</p>` : ''}
+      ${(myGuess || isAuthor) ? `<div class="waiting-pill"><span class="waiting-dot"></span> Venter på de andre...</div>` : ''}
     `;
   }
   const target = state.members.find(m=>m.id===cur.targetId);
@@ -1253,7 +1280,7 @@ function triviaHtml(g, cur){
         ${opts}
       </div>
       ${gameProgressHtml(answered, g.players.length, 'har svaret')}
-      ${mine !== undefined ? `<p class="hint" style="text-align:center; color:rgba(255,247,232,0.75); font-size:15px; font-weight:700;">⏳ Venter på de andre...</p>` : ''}
+      ${mine !== undefined ? `<div class="waiting-pill"><span class="waiting-dot"></span> Venter på de andre...</div>` : ''}
     `;
   }
   const correct = (cur.correctGuessers||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
@@ -1330,6 +1357,7 @@ function bindGameHandlers(g){
     if(btn) btn.onclick = ()=>{
       const text = document.getElementById('quipInput').value.trim();
       if(!text) return;
+      lockSubmitBtn(btn, 'Låser svar...');
       gameApi('submit', { payload: { text } });
     };
   }
@@ -1339,15 +1367,16 @@ function bindGameHandlers(g){
     });
   }
   if(cur.type === 'truefalse' && cur.phase === 'write' && profile && profile.memberId === cur.authorId){
-    let chosenTarget = profile.memberId;
+    let chosenTarget = null; // skal vælges eksplicit — ingen forudvalgt person, så man aktivt tager stilling til hvem det handler om
     let chosenTruth = null; // skal vælges eksplicit — ingen forudvalgt "sandt", så man ikke sender ved et uheld uden at tage stilling
     const input = document.getElementById('ttStatement');
     const submitBtn = document.getElementById('ttSubmitBtn');
-    const updateSubmitState = ()=>{ submitBtn.disabled = !input.value.trim() || chosenTruth === null; };
+    const updateSubmitState = ()=>{ submitBtn.disabled = !input.value.trim() || chosenTruth === null || chosenTarget === null; };
     document.querySelectorAll('#ttTargetGrid .name-pill').forEach(p=>{
       p.onclick = ()=>{
         document.querySelectorAll('#ttTargetGrid .name-pill').forEach(x=>x.classList.remove('selected'));
         p.classList.add('selected'); chosenTarget = p.dataset.target;
+        updateSubmitState();
       };
     });
     document.querySelectorAll('[data-truth]').forEach(seg=>{
@@ -1360,7 +1389,8 @@ function bindGameHandlers(g){
     input.addEventListener('input', updateSubmitState);
     submitBtn.onclick = ()=>{
       const statement = input.value.trim();
-      if(!statement || chosenTruth === null) return;
+      if(!statement || chosenTruth === null || chosenTarget === null) return;
+      lockSubmitBtn(submitBtn, 'Sender...');
       gameApi('submit', { payload: { targetId: chosenTarget, statement, isTrue: chosenTruth } });
     };
   }
@@ -1423,7 +1453,11 @@ function startMrbrokTimer(cur){
   const tick = ()=>{
     const el = document.getElementById('mrbrokTimer');
     const left = Math.max(0, Math.ceil((mrbrokTimerDeadline - Date.now())/1000));
-    if(el) el.textContent = '⏱️ ' + left + 's';
+    if(el){
+      el.textContent = '⏱️ ' + left + 's';
+      el.style.color = left <= 10 ? '#FFD9CC' : '';
+      el.classList.toggle('game-timer-urgent', left <= 10 && left > 0);
+    }
     if(left <= 0){
       clearInterval(mrbrokTimerInterval);
       mrbrokTimerInterval = null;
@@ -1782,6 +1816,7 @@ function bindMrbrokHandlers(m){
     if(btn) btn.onclick = ()=>{
       const question = document.getElementById('mrbrokQuestionInput').value.trim();
       if(!question) return;
+      lockSubmitBtn(btn, 'Sender...');
       mrbrokApi('submit', { payload: { question } });
     };
   }
@@ -1790,12 +1825,17 @@ function bindMrbrokHandlers(m){
     if(btn) btn.onclick = ()=>{
       const answer = document.getElementById('mrbrokAnswerInput').value.trim();
       if(!answer) return;
+      lockSubmitBtn(btn, 'Sender...');
       mrbrokApi('submit', { payload: { answer } });
     };
   }
   if(cur.type === 'guess'){
     document.querySelectorAll('[data-mrbrok-guess]').forEach(el=>{
-      el.onclick = ()=> mrbrokApi('submit', { payload: { guessedId: el.dataset.mrbrokGuess } });
+      el.onclick = ()=>{
+        document.querySelectorAll('[data-mrbrok-guess]').forEach(x=>x.style.opacity='.4');
+        el.style.opacity='1'; el.style.outline='2px solid var(--coin)';
+        mrbrokApi('submit', { payload: { guessedId: el.dataset.mrbrokGuess } });
+      };
     });
   }
   if(cur.type === 'steal' && m.youAreMrBrok && !cur.guess){
@@ -1803,6 +1843,7 @@ function bindMrbrokHandlers(m){
     if(btn) btn.onclick = ()=>{
       const guess = document.getElementById('mrbrokStealInput').value.trim();
       if(!guess) return;
+      lockSubmitBtn(btn, 'Sender...');
       mrbrokApi('submit', { payload: { guess } });
     };
   }

@@ -183,6 +183,12 @@ module.exports = async (req, res) => {
           }
         } else if (cur.type === 'quiplash' && cur.phase === 'vote') {
           resolveQuiplashVote(state, cur);
+        } else if (cur.type === 'truefalse' && cur.phase === 'write') {
+          // Forfatteren nåede aldrig at skrive et udsagn inden tiden løb ud
+          // — der er intet at gætte på, så spring hele runden over i stedet
+          // for at spillet går permanent i stå (dette var tidligere slet
+          // ikke håndteret her, så en tavs forfatter låste hele spillet fast).
+          goToNextRoundOrEnd(state, players);
         } else if (cur.type === 'truefalse' && cur.phase === 'guess') {
           resolveTrueFalseGuess(state, cur);
         } else if (cur.type === 'trivia' && cur.phase === 'answer') {
