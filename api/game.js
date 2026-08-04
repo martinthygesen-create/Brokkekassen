@@ -2,7 +2,8 @@ const { getState, setState, uid } = require('./_lib/store');
 const { beginRound } = require('./_lib/game');
 const { pushToMembers } = require('./_lib/push');
 
-const TOTAL_ROUNDS = 5;
+const DEFAULT_ROUNDS = 8;
+const ALLOWED_ROUNDS = [5, 8, 12];
 const ROUND_POINTS = 2;
 
 function resolveQuiplashVote(state, cur) {
@@ -16,15 +17,20 @@ function resolveQuiplashVote(state, cur) {
   cur.readyIds = [];
 }
 
+// Point-fordeling: hver spiller der gætter RIGTIGT får 2 point. Forfatteren
+// får til gengæld 1 point for hver spiller de FORVIRREDE (gættede forkert)
+// — så forfatteren reelt konkurrerer mod gætterne om den samme pulje af
+// point i stedet for en alt-eller-intet-bonus.
 function resolveTrueFalseGuess(state, cur) {
   const correctGuessers = Object.keys(cur.guesses).filter(id => cur.guesses[id] === cur.isTrue);
+  const fooledGuessers = Object.keys(cur.guesses).filter(id => cur.guesses[id] !== cur.isTrue);
   correctGuessers.forEach(id => { state.game.scores[id] = (state.game.scores[id] || 0) + ROUND_POINTS; });
-  const guessCount = Object.keys(cur.guesses).length;
-  if (guessCount > 0 && correctGuessers.length === 0) {
-    state.game.scores[cur.authorId] = (state.game.scores[cur.authorId] || 0) + ROUND_POINTS;
+  if (state.game.scores[cur.authorId] !== undefined && fooledGuessers.length) {
+    state.game.scores[cur.authorId] += fooledGuessers.length;
   }
   cur.phase = 'results';
   cur.correctGuessers = correctGuessers;
+  cur.fooledCount = fooledGuessers.length;
   cur.readyIds = [];
 }
 
@@ -84,9 +90,10 @@ module.exports = async (req, res) => {
       const players = state.members.map(m => m.id).filter(id => requested.includes(id));
       if (players.length < 2) return res.status(400).json({ error: 'vælg mindst 2 spillere' });
       const wager = req.body.wager === 'euro' ? 'euro' : 'fun';
+      const totalRounds = ALLOWED_ROUNDS.includes(req.body.totalRounds) ? req.body.totalRounds : DEFAULT_ROUNDS;
       const scores = {};
       players.forEach(id => (scores[id] = 0));
-      state.game = { active: true, wager, players, round: 0, totalRounds: TOTAL_ROUNDS, scores, current: null };
+      state.game = { active: true, wager, players, round: 0, totalRounds, scores, current: null, startedAt: Date.now() };
       beginRound(state, state.members.filter(m => players.includes(m.id)));
       await setState(roomId, state);
 
@@ -127,6 +134,11 @@ module.exports = async (req, res) => {
         cur.statement = statement;
         cur.isTrue = !!payload.isTrue;
         cur.phase = 'guess';
+        // Gemmes til senere spil — content skal ikke gå til spilde.
+        if (!state.gameContentBank) state.gameContentBank = { truefalse: [] };
+        if (!state.gameContentBank.truefalse) state.gameContentBank.truefalse = [];
+        state.gameContentBank.truefalse.push({ authorId: cur.authorId, targetId, statement, isTrue: cur.isTrue, ts: Date.now() });
+        if (state.gameContentBank.truefalse.length > 60) state.gameContentBank.truefalse.shift();
       } else if (cur.type === 'truefalse' && cur.phase === 'guess') {
         if (actorId === cur.authorId) return res.status(403).json({ error: 'du kan ikke gætte på dit eget udsagn' });
         cur.guesses[actorId] = !!payload.guess;

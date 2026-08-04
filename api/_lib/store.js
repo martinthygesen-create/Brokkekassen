@@ -36,6 +36,7 @@ function emptyState() {
     // valg, man kan vælge begge eller kun ét. Styrer kun hvad der vises.
     kasseEnabled: true,
     gameEnabled: true,
+    gameContentBank: { truefalse: [] }, // sandt/falsk-udsagn folk har skrevet — genbruges nogle gange i senere spil
   };
 }
 
@@ -213,6 +214,7 @@ async function getState(roomId) {
   if (!state.gameStats) state.gameStats = {};
   if (state.gameEnabled === undefined) state.gameEnabled = true;
   if (state.kasseEnabled === undefined) state.kasseEnabled = true;
+  if (!state.gameContentBank) state.gameContentBank = { truefalse: [] };
   if (!state.pendingList) {
     // migrering fra det gamle enkelt-pending-felt til en liste
     state.pendingList = state.pending ? [state.pending] : [];

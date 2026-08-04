@@ -186,6 +186,7 @@ let state = null;
 let activeTab = 'feed';
 let activeApp = 'kasse'; // 'kasse' | 'spil' — hvilken af de to "apps" i samme rum der vises
 let gameWager = 'fun'; // 'fun' | 'euro' — valgt i Brokspillets lobby, før spillet startes
+let gameRounds = 8; // 5 | 8 | 12 — valgt i lobbyen, før spillet startes
 let gameSelectedPlayers = null; // memberId[] valgt i lobbyen — sættes til alle medlemmer første gang lobbyen vises
 let gameKnownMemberIds = null; // holder styr på hvem der allerede er set, så nytilkomne medlemmer auto-vælges uden at overskrive en bevidst fravalgt
 let gameTimerInterval = null;
@@ -485,7 +486,7 @@ function renderCreateOrJoin(errorMsg){
             <div style="font-weight:700; margin-top:4px; font-size:13px;">Brokkekassen</div>
           </div>
           <div class="onboard-pick selected" data-pick="spil" style="flex:1; cursor:pointer; text-align:center; padding:18px 8px; border-radius:16px; background:var(--sea); color:#fff; transition:opacity .15s;">
-            <div style="font-size:26px;">🎲</div>
+            <div style="font-size:26px;">👉</div>
             <div style="font-weight:700; margin-top:4px; font-size:13px;">Brokspillet</div>
           </div>
         </div>
@@ -689,7 +690,7 @@ function openAppMenuSheet(){
         <div style="font-weight:700; margin-top:6px;">Brokkekassen</div>
       </div>` : ''}
       ${state.gameEnabled ? `<div data-goto-app="spil" style="flex:1; cursor:pointer; text-align:center; padding:20px 10px; border-radius:18px; background:${activeApp==='spil'?'var(--sea)':'rgba(5,32,36,0.06)'}; color:${activeApp==='spil'?'#fff':'var(--ink)'};">
-        <div style="font-size:30px;">🎲</div>
+        <div style="font-size:30px;">👉</div>
         <div style="font-weight:700; margin-top:6px;">Brokspillet</div>
       </div>` : ''}
     </div>
@@ -849,7 +850,7 @@ function renderGameScreen(){
   app.innerHTML = `
     <header>
       <div class="title" style="font-size:30px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
-        <span>Brok<span>spillet</span> 🎲</span>
+        <span>Brok<span>spillet</span> 👉</span>
         <div style="display:flex; align-items:center; gap:8px;">
           ${isAdmin() ? `<button id="btnGameAdminMenu" title="Admin" style="width:32px; height:32px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.85); border-radius:100px; flex:0 0 auto;">⋯</button>` : ''}
           <button id="btnAppMenu" title="Menu" style="width:32px; height:32px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.85); border-radius:100px; flex:0 0 auto;">☰</button>
@@ -942,7 +943,7 @@ function gameLobbyHtml(){
   const enough = gameSelectedPlayers.length >= 2;
   return `
     <div class="empty-state" style="padding-top:26px;">
-      <span class="emoji">🎲</span>
+      <span class="emoji">👉</span>
       <b>Brokspillet</b>
       Skriv-og-stem, sandt/falsk og trivia om jeres egen brok-historik.
     </div>
@@ -950,12 +951,18 @@ function gameLobbyHtml(){
       <label class="field-label" style="color:rgba(255,247,232,0.7);">Hvem er med? (mindst 2)</label>
       <div class="name-grid" id="playerGrid">${chips}</div>
       <label class="field-label" style="color:rgba(255,247,232,0.7);">Spil om</label>
-      <div class="segmented" style="margin-bottom:0;">
+      <div class="segmented" style="margin-bottom:14px;">
         <div class="seg ${gameWager!=='euro'?'active':''}" data-wager="fun">😄 For sjov</div>
         <div class="seg ${gameWager==='euro'?'active':''}" data-wager="euro">💶 Om en euro</div>
       </div>
+      <label class="field-label" style="color:rgba(255,247,232,0.7);">Antal runder</label>
+      <div class="segmented" style="margin-bottom:0;">
+        <div class="seg ${gameRounds===5?'active':''}" data-rounds="5">5</div>
+        <div class="seg ${gameRounds===8?'active':''}" data-rounds="8">8</div>
+        <div class="seg ${gameRounds===12?'active':''}" data-rounds="12">12</div>
+      </div>
     </div>
-    <button class="game-btn" id="startGameBtn" ${enough?'':'disabled'}>🎲 Start spillet (${gameSelectedPlayers.length} spillere)</button>
+    <button class="game-btn" id="startGameBtn" ${enough?'':'disabled'}>👉 Start spillet (${gameSelectedPlayers.length} spillere)</button>
     ${enough?'':'<p class="hint" style="text-align:center;">Vælg mindst 2 spillere</p>'}
     ${gameHighscoreHtml()}
   `;
@@ -1048,7 +1055,8 @@ function truefalseHtml(g, cur){
     return `
       <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · ⚖️ Sandt eller falsk</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
       <div class="game-card" id="gameCard" style="text-align:center;">
-        <p class="hint" style="margin:0 0 6px; color:rgba(255,247,232,0.6);">${escapeHtml(author?author.name:'?')} skriver om ${escapeHtml(target?target.name:'?')}:</p>
+        ${cur.reused ? `<p class="hint" style="margin:0 0 6px; color:rgba(255,201,60,0.85); font-weight:600;">♻️ Genbrugt udsagn fra tidligere</p>` : ''}
+        <p class="hint" style="margin:0 0 6px; color:rgba(255,247,232,0.6);">${escapeHtml(author?author.name:'?')} skrev om ${escapeHtml(target?target.name:'?')}:</p>
         <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px;">"${escapeHtml(cur.statement)}"</p>
         ${isAuthor ? '<p class="hint" style="color:rgba(255,247,232,0.6);">Du skrev det — vent på de andres gæt.</p>' : (myGuess ? '' : `
           <div style="display:flex; gap:10px; margin-top:14px;">
@@ -1069,7 +1077,8 @@ function truefalseHtml(g, cur){
       <p class="hint" style="color:rgba(255,247,232,0.6);">${escapeHtml(author?author.name:'?')} skrev om ${escapeHtml(target?target.name:'?')}:</p>
       <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px;">"${escapeHtml(cur.statement)}"</p>
       <p style="margin-top:10px; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:18px; color:${cur.isTrue?'var(--coin)':'var(--coral)'};">${cur.isTrue ? '✅ Det var faktisk SANDT' : '🎭 Det var OPDIGTET'}</p>
-      <p class="hint" style="margin-top:8px; color:rgba(255,247,232,0.7);">${correct.length ? '🏆 ' + correct.map(m=>escapeHtml(m.name)).join(', ') + ' gættede rigtigt' : (Object.keys(cur.guesses||{}).length ? 'Ingen gættede rigtigt — point til ' + escapeHtml(author?author.name:'?') + '!' : 'Ingen nåede at gætte.')}</p>
+      <p class="hint" style="margin-top:8px; color:rgba(255,247,232,0.7);">${correct.length ? '🏆 ' + correct.map(m=>escapeHtml(m.name)).join(', ') + ' gættede rigtigt (+2 point hver)' : 'Ingen gættede rigtigt.'}</p>
+      ${cur.fooledCount ? `<p class="hint" style="color:rgba(255,201,60,0.85); font-weight:600;">😏 ${escapeHtml(author?author.name:'?')} narrede ${cur.fooledCount} spiller${cur.fooledCount===1?'':'e'} (+${cur.fooledCount} point)</p>` : ''}
     </div>
     ${gameReadyHtml(g, cur)}
   `;
@@ -1087,7 +1096,7 @@ function triviaHtml(g, cur){
       </div>
     `).join('');
     return `
-      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · 🔍 Ægte Brok</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
+      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · ${cur.isWorld ? '🌍 Verdens-brok' : '🔍 Ægte Brok'}</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
       <div class="game-card" id="gameCard">
         <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:18px; margin:0 0 14px; line-height:1.3;">${escapeHtml(cur.question)}</p>
         ${opts}
@@ -1129,7 +1138,7 @@ function gameOverHtml(g, cur){
       ${g.wager==='euro' ? '<p class="hint" style="color:rgba(255,247,232,0.7);">1€ lagt i Brokkekassens pulje.</p>' : '<p class="hint" style="color:rgba(255,247,232,0.7);">Kun for sjov denne gang.</p>'}
     </div>
     ${gameHighscoreHtml()}
-    <button class="game-btn" id="playAgainBtn" style="margin-top:16px;">🎲 Spil igen</button>
+    <button class="game-btn" id="playAgainBtn" style="margin-top:16px;">👉 Spil igen</button>
     <button class="game-btn ghost" id="endGameBtn">Tilbage til lobbyen</button>
   `;
 }
@@ -1138,6 +1147,9 @@ function bindGameHandlers(g){
   const cur = g.current;
   document.querySelectorAll('[data-wager]').forEach(el=>{
     el.onclick = ()=>{ gameWager = el.dataset.wager; render(); };
+  });
+  document.querySelectorAll('[data-rounds]').forEach(el=>{
+    el.onclick = ()=>{ gameRounds = parseInt(el.dataset.rounds,10); render(); };
   });
   document.querySelectorAll('[data-player]').forEach(el=>{
     el.onclick = ()=>{
@@ -1148,14 +1160,14 @@ function bindGameHandlers(g){
     };
   });
   const startBtn = document.getElementById('startGameBtn');
-  if(startBtn) startBtn.onclick = ()=> gameApi('start', { wager: gameWager, playerIds: gameSelectedPlayers });
+  if(startBtn) startBtn.onclick = ()=> gameApi('start', { wager: gameWager, playerIds: gameSelectedPlayers, totalRounds: gameRounds });
 
   const readyBtn = document.getElementById('readyBtn');
   if(readyBtn) readyBtn.onclick = ()=> gameApi('ready', {});
 
   const playAgainBtn = document.getElementById('playAgainBtn');
   if(playAgainBtn) playAgainBtn.onclick = ()=>{
-    gameApi('end', {}).then(()=> gameApi('start', { wager: gameWager, playerIds: gameSelectedPlayers }));
+    gameApi('end', {}).then(()=> gameApi('start', { wager: gameWager, playerIds: gameSelectedPlayers, totalRounds: gameRounds }));
   };
   const endGameBtn = document.getElementById('endGameBtn');
   if(endGameBtn) endGameBtn.onclick = ()=> gameApi('end', {});
@@ -1318,7 +1330,7 @@ function feedItemHtml(e, old){
   return `<div class="feed-item" style="opacity:${opacity};">
     <div class="avatar" style="${e.voided?'filter:grayscale(1);':''}">${initials(name)}</div>
     <div class="feed-body">
-    <div class="feed-name">${escapeHtml(name)} <span class="amt">${e.voided ? '🫤 talt fra' : (e.gameLoss ? '🎲 +1€' : (e.free ? '🎫 gratis' : '+1€'))}</span></div>
+    <div class="feed-name">${escapeHtml(name)} <span class="amt">${e.voided ? '🫤 talt fra' : (e.gameLoss ? '👉 +1€' : (e.free ? '🎫 gratis' : '+1€'))}</span></div>
     ${e.message ? `<div class="feed-msg" style="${e.voided?'text-decoration:line-through;':''}">"${escapeHtml(e.message)}"</div>` : ''}
     ${e.voided ? `<div class="feed-msg" style="color:rgba(255,201,60,0.85); font-weight:600;">🫤 Mistanke om snyd — tæller ikke med</div>` : ''}
     <div class="feed-time">${fmtTime(e.ts)}</div></div></div>`;

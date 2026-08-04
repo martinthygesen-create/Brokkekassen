@@ -29,10 +29,46 @@ const QUIPLASH_PROMPTS = [
   'Om 10 år brokker {target} sig stadig over...',
 ];
 
-function pickQuiplashPrompt(members) {
+// Ægte real-world "brok der endte med et resultat"-trivia — blandes ind
+// imellem rundens egne data-spørgsmål, så der er noget at grine af selv
+// tidligt i en frisk brokkekasse uden meget historik endnu.
+const WORLD_TRIVIA = [
+  { question: 'I 1985 lancerede Coca-Cola en ny opskrift der fik så massivt brok fra kunderne, at de måtte tage den gamle tilbage efter kun 3 måneder. Hvad hed fadæsen?', correct: 'New Coke', distractors: ['Coca-Cola Zero', 'Cherry Coke', 'Coca-Cola Life'] },
+  { question: 'Da Toblerone i 2016 ændrede formen for at spare på chokoladen, brokkede tusindvis af briter sig højlydt. Hvad var deres klage over?', correct: 'For store huller mellem trekanterne', distractors: ['For lille æske', 'Ny smag', 'Manglende nødder'] },
+  { question: 'Microsoft fjernede Start-menuen i Windows 8 — og måtte give den tilbage i Windows 10 efter massivt brok. Hvad ville brugerne have tilbage?', correct: 'Start-menuen', distractors: ['Solitaire', 'Den blå skærm', 'Internet Explorer'] },
+  { question: 'Facebook fik i årevis brok fra brugere der ville have en "dislike"-knap. Hvad indførte Facebook i stedet i 2016?', correct: 'Reaktioner (fx vred/ked af det)', distractors: ['En decideret dislike-knap', 'Anonyme kommentarer', 'Et klagepanel'] },
+  { question: 'En berømt retssag i USA i 1994 handlede om en kunde der brokkede sig over alt for varm kaffe fra en fastfood-kæde. Hvilken kæde?', correct: "McDonald's", distractors: ['Burger King', 'KFC', 'Starbucks'] },
+  { question: 'EU har regler om hvor krumme bananer og agurker må være til salg — ofte brugt som eksempel på "unødvendigt bureaukrati". Hvad handler reglerne officielt om?', correct: 'Kvalitetsklassificering ved salg', distractors: ['Miljøbeskyttelse', 'Skattefradrag', 'Transportsikkerhed'] },
+  { question: 'Hvad kaldes en person i moderne slang, der er kendt for at brokke sig unødigt meget og forlange "at tale med chefen"?', correct: 'Karen', distractors: ['Susan', 'Karla', 'Debbie'] },
+  { question: "Netflix' upopulære forbud mod login-deling på tværs af husstande fik massivt brok — men endte alligevel med at gøre hvad?", correct: "Øge Netflix' omsætning og antal abonnenter", distractors: ['Gå konkurs', 'Fjerne alle gebyrer igen', 'Skifte navn'] },
+  { question: 'En britisk navnekonkurrence for et forskningsskib endte med det folkelige forslag "Boaty McBoatface". Hvad besluttede myndighederne til sidst?', correct: 'Skibet fik et andet navn — men en ubåd blev opkaldt Boaty McBoatface', distractors: ['Skibet hed officielt Boaty McBoatface', 'Konkurrencen blev aflyst', 'Navnet blev solgt på auktion'] },
+  { question: 'Ryanair er berygtet for ekstra gebyrer rejsende brokker sig over. Hvilket af disse har Ryanair faktisk opkrævet gebyr for?', correct: 'Print af boardingkort i lufthavnen', distractors: ['At sidde i vinduespladsen', 'At tale engelsk ombord', 'Håndbagage under 1 kg'] },
+];
+
+// "Shuffle bag": trækker uden tilbagelægning fra en pulje af indeks, så intet
+// gentages før ALT er brugt — brugte ting ryger bagerst i køen, ikke tilbage
+// i puljen med det samme. Gemmes på RUM-niveau (ikke i selve spil-sessionen),
+// så rotationen holder på tværs af flere afsluttede spil, ikke kun én omgang.
+function pickFromBag(state, bagKey, poolLength) {
+  if (!state.gameContentBank) state.gameContentBank = {};
+  if (!state.gameContentBank.bags) state.gameContentBank.bags = {};
+  let bag = state.gameContentBank.bags[bagKey];
+  if (!bag || !bag.length) bag = shuffle(Array.from({ length: poolLength }, (_, i) => i));
+  const idx = bag.pop();
+  state.gameContentBank.bags[bagKey] = bag;
+  return idx;
+}
+
+function pickQuiplashPrompt(state, members) {
   const target = pickRandom(members);
-  const tpl = pickRandom(QUIPLASH_PROMPTS);
-  return { prompt: tpl.replace(/\{target\}/g, target.name), targetId: target.id };
+  const idx = pickFromBag(state, 'quiplash', QUIPLASH_PROMPTS.length);
+  return { prompt: QUIPLASH_PROMPTS[idx].replace(/\{target\}/g, target.name), targetId: target.id };
+}
+
+function pickWorldTrivia(state) {
+  const idx = pickFromBag(state, 'world', WORLD_TRIVIA.length);
+  const item = WORLD_TRIVIA[idx];
+  return { question: item.question, isWorld: true, ...buildOptions(item.correct, item.distractors) };
 }
 
 // Genererer et multiple-choice trivia-spørgsmål ud fra rummets EGNE rigtige
@@ -96,19 +132,42 @@ function generateTriviaQuestion(state) {
 // medlemmer der reelt er med i DENNE runde af spillet (kan være en delmængde
 // af hele rummet) — trivia-spørgsmål handler stadig om hele rummets rigtige
 // brok-historik, uanset hvem der spiller med lige nu.
+const ROUND_TYPES = ['quiplash', 'truefalse', 'trivia'];
+
 function beginRound(state, players) {
   state.game.round += 1;
-  const type = pickRandom(['quiplash', 'truefalse', 'trivia']);
+  const playerIds = players.map(m => m.id);
+  // Rundetypen trækkes fra samme slags "shuffle bag" som resten af indholdet
+  // — sikrer en jævn blanding uden mønstre (fx samme type 3 runder i træk),
+  // og rotationen holder også her på tværs af flere spil.
+  const type = ROUND_TYPES[pickFromBag(state, 'roundType', ROUND_TYPES.length)];
   if (type === 'quiplash') {
-    const { prompt, targetId } = pickQuiplashPrompt(players);
+    const { prompt, targetId } = pickQuiplashPrompt(state, players);
     state.game.current = { type, phase: 'answer', prompt, targetId, answers: {} };
   } else if (type === 'truefalse') {
-    const author = pickRandom(players);
-    state.game.current = { type, phase: 'write', authorId: author.id, targetId: null, statement: null, isTrue: null, guesses: {} };
+    // Ca. hver 4. sandt/falsk-runde genbruges et udsagn fra et TIDLIGERE spil
+    // (ikke fra denne runde af spillet selv) i stedet for at kræve en frisk
+    // forfatter — content skal ikke gå til spilde, og det er sjovt at blive
+    // mindet om gamle påstande, uden at det bliver et selv-citat midt i spillet.
+    // Det mindst for nylig genbrugte udsagn vælges først, så et enkelt ikke
+    // bliver ved med at dukke op igen og igen — brugte ting ryger bagerst i køen.
+    const bank = (state.gameContentBank && state.gameContentBank.truefalse) || [];
+    const reusable = bank.filter(e => playerIds.includes(e.targetId) && e.ts < state.game.startedAt);
+    if (reusable.length && Math.random() < 0.25) {
+      const old = reusable.slice().sort((a, b) => (a.lastUsedTs || 0) - (b.lastUsedTs || 0))[0];
+      old.lastUsedTs = Date.now();
+      state.game.current = { type, phase: 'guess', authorId: old.authorId, targetId: old.targetId, statement: old.statement, isTrue: old.isTrue, guesses: {}, reused: true };
+    } else {
+      const author = pickRandom(players);
+      state.game.current = { type, phase: 'write', authorId: author.id, targetId: null, statement: null, isTrue: null, guesses: {} };
+    }
   } else {
-    const q = generateTriviaQuestion(state);
+    // Ca. hver 3. trivia-runde er ægte real-world brok-trivia i stedet for
+    // spørgsmål om rummets egne data — særlig kærkomment i et frisk rum
+    // uden meget historik endnu.
+    const q = Math.random() < 0.35 ? pickWorldTrivia(state) : generateTriviaQuestion(state);
     state.game.current = { type, phase: 'answer', ...q, choices: {} };
   }
 }
 
-module.exports = { pickRandom, shuffle, buildOptions, pickQuiplashPrompt, generateTriviaQuestion, beginRound };
+module.exports = { pickRandom, shuffle, buildOptions, pickQuiplashPrompt, pickWorldTrivia, generateTriviaQuestion, beginRound };
