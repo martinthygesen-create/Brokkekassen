@@ -856,7 +856,10 @@ function gameLobbyHtml(){
     if(newcomers.length) gameSelectedPlayers = [...gameSelectedPlayers, ...newcomers];
   }
   gameKnownMemberIds = allIds.slice();
-  const chips = state.members.map(m=>`<div class="name-pill ${gameSelectedPlayers.includes(m.id)?'selected':''}" data-player="${m.id}">${escapeHtml(m.name)}</div>`).join('');
+  const chips = state.members.map(m=>{
+    const on = gameSelectedPlayers.includes(m.id);
+    return `<div class="name-pill ${on?'selected':''}" data-player="${m.id}" style="${on?'':'opacity:.5;'}">${on?'✅':'➖'} ${escapeHtml(m.name)}</div>`;
+  }).join('');
   const enough = gameSelectedPlayers.length >= 2;
   return `
     <div class="empty-state" style="padding-top:26px;">
