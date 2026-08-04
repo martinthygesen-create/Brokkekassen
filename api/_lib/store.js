@@ -60,10 +60,19 @@ function processPendingExpiry(state) {
 }
 
 const SILENCE_NUDGE_AFTER = 24 * 3600000; // så længe stilhed før vi drilsk minder om at boksen findes
+const QUIET_HOURS_START = 21; // ingen push efter kl. 21...
+const QUIET_HOURS_END = 8;    // ...før kl. 08 lokal tid
+
+// Aktuel lokal time i Copenhagen (0-23), til at holde push ude af nattetimer.
+function copenhagenLocalHour(ts) {
+  const dtf = new Intl.DateTimeFormat('en-US', { timeZone: RESET_TZ, hourCycle: 'h23', hour: '2-digit' });
+  return parseInt(dtf.format(new Date(ts)), 10);
+}
 
 // Har der været fuldstændig stille (ingen brok) i over 24 timer? Returnerer
 // true højst én gang per stille-periode — sender selv ikke push, ligesom
-// processPendingExpiry, det gør api/state.js.
+// processPendingExpiry, det gør api/state.js. Sendes aldrig i nattetimerne;
+// falder bare tilbage og prøver igen ved næste poll efter kl. 08.
 function checkSilenceNudge(state) {
   if (state.closed || state.members.length < 2) return false;
   const lastEventTs = state.events.reduce((max, e) => Math.max(max, e.ts), 0);
@@ -71,6 +80,8 @@ function checkSilenceNudge(state) {
   const now = Date.now();
   if (now - lastActivity < SILENCE_NUDGE_AFTER) return false;
   if (state.lastSilenceNudgeAt && state.lastSilenceNudgeAt > lastActivity) return false;
+  const hour = copenhagenLocalHour(now);
+  if (hour >= QUIET_HOURS_START || hour < QUIET_HOURS_END) return false;
   state.lastSilenceNudgeAt = now;
   return true;
 }

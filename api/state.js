@@ -5,6 +5,9 @@ const SILENCE_LINES = [
   'Er alt for perfekt i dag? 🤔 Ingen har brokket sig i 24 timer... det virker mistænkeligt.',
   '24 timers stilhed i Brokkekassen. Enten er alt fantastisk, eller også holder nogen igen. 👀',
   'Boksen keder sig. Der må da være ét eneste lille brok i jer? 🫙',
+  'Officiel påmindelse: at undertrykke sit brok er skadeligt for folkesundheden. Registrér det — for menneskehedens skyld. 🧑‍⚕️',
+  'Videnskaben er enig: udiagnosticeret irritation vokser sig større i mørket. Bring det frem i lyset. 🔬',
+  'Denne besked er en tjeneste fra Brokkekassen: husk at registrere jeres brok, som samfundsansvarlige borgere. 🫡',
 ];
 
 module.exports = async (req, res) => {
