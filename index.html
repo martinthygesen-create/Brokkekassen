@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#0B4F55" />
+<meta name="theme-color" content="#12666b" />
 <title>Brokkekassen</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
@@ -104,6 +104,7 @@
   .game-card p{ color:var(--cream); }
   .game-btn{ display:block; width:100%; background:linear-gradient(160deg, var(--coral), #e14d2e); color:#fff; border:none; border-radius:100px; padding:15px; font-family:'Baloo 2',sans-serif; font-weight:700; font-size:16px; box-shadow:0 8px 18px rgba(255,107,74,0.35); cursor:pointer; margin-top:14px; }
   .game-btn:active{ transform:scale(.98); }
+  .game-btn:disabled{ background:rgba(255,247,232,0.12); color:rgba(255,247,232,0.4); box-shadow:none; cursor:not-allowed; }
   .game-btn.ghost{ background:transparent; box-shadow:none; color:rgba(255,247,232,0.75); font-weight:600; font-size:14px; padding:10px; }
   .game-progress{ display:flex; align-items:center; gap:10px; margin:14px 4px; font-size:12.5px; font-weight:600; color:rgba(255,247,232,0.65); }
   .game-progress .bar-track{ flex:1; }
@@ -219,6 +220,15 @@
   .onboard-card input{ background:rgba(255,247,232,0.95); }
   .divider{ display:flex; align-items:center; gap:10px; color:rgba(255,247,232,0.4); font-size:12px; margin:22px 0; }
   .divider::before, .divider::after{ content:''; flex:1; height:1px; background:rgba(255,247,232,0.15); }
+  /* .divider er designet til mørke baggrunde (.onboard, spilskærme) — cremet
+     tekst på cremet baggrund. Men den bruges også inde i .sheet (☰-menuen,
+     admin-menuen), som har en LYS baggrund med mørk tekst — der blev
+     "afregning"/"kan ikke fortrydes"-overskrifterne næsten usynlige, så
+     knapperne fra forskellige sektioner så ud til at flyde sammen uden nogen
+     synlig adskillelse. Denne override retter farverne når .divider sidder
+     inde i en .sheet. */
+  .sheet .divider{ color:rgba(5,32,36,0.4); }
+  .sheet .divider::before, .sheet .divider::after{ background:rgba(5,32,36,0.14); }
 
   .toast{ position:fixed; top:16px; left:50%; transform:translateX(-50%) translateY(-6px); background:linear-gradient(160deg, #0d4b52, var(--ink)); color:var(--cream); padding:13px 20px; border-radius:18px; font-size:14px; font-weight:600; z-index:80; box-shadow:0 10px 28px rgba(0,0,0,.35), 0 0 0 1px rgba(255,247,232,0.08) inset; opacity:0; transition:opacity .3s ease, transform .3s cubic-bezier(.2,.9,.3,1.2); pointer-events:none; max-width:88vw; text-align:center; line-height:1.4; }
 
@@ -786,7 +796,17 @@ function render(){
   // i gang — når selve spillet starter, falder baggrunden tilbage til det
   // fælles teal (bliver en blød fade takket være transition på body), og
   // kun headerens accent forbliver mørk/guld foroven.
-  document.body.classList.toggle('theme-mrbrok', activeApp === 'mrbrok' && !(state.mrbrok && state.mrbrok.active));
+  const isMrbrokTheme = activeApp === 'mrbrok' && !(state.mrbrok && state.mrbrok.active);
+  document.body.classList.toggle('theme-mrbrok', isMrbrokTheme);
+  // OS-statusbaren (og browserens egen UI-chrome) males IKKE af sidens CSS —
+  // den bruger kun den statiske <meta theme-color>-værdi, som ellers stod
+  // fast på teal uanset skærm. Det gav en hård søm øverst hver gang MrBroks
+  // mørke baggrund var aktiv (teal statusbar oven på en næsten sort side),
+  // og en mindre men stadig synlig søm på Brokkekassen/Brokspillet fordi den
+  // faste farve var mørkere end selve gradientens top. Matcher den nu til
+  // den farve der rent faktisk er øverst i den aktive baggrund.
+  const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+  if(themeColorMeta) themeColorMeta.setAttribute('content', isMrbrokTheme ? '#0A1416' : '#12666b');
   if(activeApp === 'spil') return renderGameScreen();
   if(activeApp === 'mrbrok') return renderMrbrokScreen();
   const prevMain = document.getElementById('main');
@@ -1142,7 +1162,11 @@ function gameLobbyHtml(){
     gameSelectedPlayers = allIds.slice();
   }else{
     const newcomers = allIds.filter(id=>!gameKnownMemberIds.includes(id));
-    if(newcomers.length) gameSelectedPlayers = [...gameSelectedPlayers, ...newcomers];
+    // Fjerner ID'er på medlemmer der ikke længere er i rummet — ellers
+    // tæller "Start spillet (X spillere)"-knappen dem stadig med, så den
+    // ser aktiv/nok ud selvom kun de RESTERENDE, faktiske medlemmer er for
+    // få, og serveren afviser starten et øjeblik efter med "vælg mindst..."
+    gameSelectedPlayers = [...gameSelectedPlayers.filter(id=>allIds.includes(id)), ...newcomers];
   }
   gameKnownMemberIds = allIds.slice();
   const chips = state.members.map(m=>{
@@ -1160,10 +1184,10 @@ function gameLobbyHtml(){
   if(gameInstructionsOpen === null) gameInstructionsOpen = !localStorage.getItem('bk_game_seen_instructions');
   localStorage.setItem('bk_game_seen_instructions', '1');
   return `
-    <div class="empty-state" style="padding-top:26px;">
+    <div class="empty-state" style="padding-top:18px;">
       <span class="emoji">👉</span>
       <b>Brokspillet</b>
-      Skriv-og-stem, sandt/falsk og trivia om jeres egen brok-historik.
+      Skriv, gæt og stem jer igennem jeres egen brok-historie.
     </div>
     <div class="game-card" style="margin:10px 0 10px;">
       <div id="gameInstructionsToggle" style="display:flex; align-items:center; justify-content:space-between; cursor:pointer; ${gameInstructionsOpen?'margin-bottom:8px;':''}">
@@ -1705,7 +1729,10 @@ function mrbrokLobbyHtml(){
     mrbrokSelectedPlayers = allIds.slice();
   }else{
     const newcomers = allIds.filter(id=>!mrbrokKnownMemberIds.includes(id));
-    if(newcomers.length) mrbrokSelectedPlayers = [...mrbrokSelectedPlayers, ...newcomers];
+    // Samme fix som Brokspillet: fjern ID'er på medlemmer der ikke længere
+    // er i rummet, så "Start MrBrok (X spillere)"-knappen matcher hvad der
+    // faktisk kan startes med, i stedet for at tælle spøgelses-medlemmer med.
+    mrbrokSelectedPlayers = [...mrbrokSelectedPlayers.filter(id=>allIds.includes(id)), ...newcomers];
   }
   mrbrokKnownMemberIds = allIds.slice();
   const chips = state.members.map(mm=>{
@@ -1725,7 +1752,7 @@ function mrbrokLobbyHtml(){
   if(mrbrokInstructionsOpen === null) mrbrokInstructionsOpen = !localStorage.getItem('bk_mrbrok_seen_instructions');
   localStorage.setItem('bk_mrbrok_seen_instructions', '1');
   return `
-    <div class="empty-state" style="padding-top:22px;">
+    <div class="empty-state" style="padding-top:18px;">
       <span class="emoji">🕵️</span>
       <b>MrBrok</b>
       Find ud af hvem der bluffer — inden de gennemskuer jer.
@@ -2241,7 +2268,7 @@ function renderAllTimeHistory(main){
   ) : '';
 
   if(!state.history.length){
-    main.innerHTML = chart + `<div class="empty-state"><span class="emoji">📜</span><b>Ingen afsluttede dage endnu</b>Dage afsluttes automatisk kl. 04, eller tryk 💶 for at gøre op tidligere.</div>`;
+    main.innerHTML = chart + `<div class="empty-state"><span class="emoji">📜</span><b>Ingen opgjorte perioder endnu</b>Puljen arkiveres kun når I selv trykker 💶 "Gør op" — det sker ikke automatisk, så I kan samle brok op så længe I vil, inden I gør endeligt op.</div>`;
     return;
   }
   const days = `<div class="section-label" style="margin-top:${anyTotal?22:0}px;">🗓️ Dag for dag</div>` + [...state.history].reverse().map(r=>{
