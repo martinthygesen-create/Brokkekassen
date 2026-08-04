@@ -4,6 +4,42 @@ const { beginRound } = require('./_lib/game');
 const TOTAL_ROUNDS = 5;
 const ROUND_POINTS = 2;
 
+function resolveQuiplashVote(state, cur) {
+  const tally = {};
+  Object.values(cur.votes).forEach(id => (tally[id] = (tally[id] || 0) + 1));
+  const maxVotes = Math.max(0, ...Object.values(tally));
+  const winnerIds = maxVotes > 0 ? Object.keys(tally).filter(id => tally[id] === maxVotes) : [];
+  winnerIds.forEach(id => { state.game.scores[id] = (state.game.scores[id] || 0) + ROUND_POINTS; });
+  cur.phase = 'results';
+  cur.winnerIds = winnerIds;
+  cur.readyIds = [];
+}
+
+function resolveTrueFalseGuess(state, cur) {
+  const correctGuessers = Object.keys(cur.guesses).filter(id => cur.guesses[id] === cur.isTrue);
+  correctGuessers.forEach(id => { state.game.scores[id] = (state.game.scores[id] || 0) + ROUND_POINTS; });
+  const guessCount = Object.keys(cur.guesses).length;
+  if (guessCount > 0 && correctGuessers.length === 0) {
+    state.game.scores[cur.authorId] = (state.game.scores[cur.authorId] || 0) + ROUND_POINTS;
+  }
+  cur.phase = 'results';
+  cur.correctGuessers = correctGuessers;
+  cur.readyIds = [];
+}
+
+function resolveTriviaAnswer(state, cur) {
+  const correctGuessers = Object.keys(cur.choices).filter(id => cur.choices[id] === cur.correctIndex);
+  correctGuessers.forEach(id => { state.game.scores[id] = (state.game.scores[id] || 0) + ROUND_POINTS; });
+  cur.phase = 'results';
+  cur.correctGuessers = correctGuessers;
+  cur.readyIds = [];
+}
+
+function goToNextRoundOrEnd(state, players) {
+  if (state.game.round >= state.game.totalRounds) endGame(state);
+  else beginRound(state, state.members.filter(m => players.includes(m.id)));
+}
+
 function endGame(state) {
   const scores = state.game.scores;
   const memberIds = state.game.players;
@@ -67,8 +103,10 @@ module.exports = async (req, res) => {
       if (cur.type === 'quiplash' && cur.phase === 'answer') {
         const text = (payload.text || '').toString().trim().slice(0, 120);
         if (text) cur.answers[actorId] = text;
+        if (Object.keys(cur.answers).length >= players.length) { cur.phase = 'vote'; cur.votes = {}; }
       } else if (cur.type === 'quiplash' && cur.phase === 'vote') {
         if (payload.votedFor && payload.votedFor !== actorId) cur.votes[actorId] = payload.votedFor;
+        if (Object.keys(cur.votes).length >= players.length) resolveQuiplashVote(state, cur);
       } else if (cur.type === 'truefalse' && cur.phase === 'write') {
         if (actorId !== cur.authorId) return res.status(403).json({ error: 'kun den der skriver rundens udsagn kan gøre dette' });
         const targetId = payload.targetId && players.includes(payload.targetId) ? payload.targetId : cur.authorId;
@@ -81,8 +119,10 @@ module.exports = async (req, res) => {
       } else if (cur.type === 'truefalse' && cur.phase === 'guess') {
         if (actorId === cur.authorId) return res.status(403).json({ error: 'du kan ikke gætte på dit eget udsagn' });
         cur.guesses[actorId] = !!payload.guess;
+        if (Object.keys(cur.guesses).length >= players.length - 1) resolveTrueFalseGuess(state, cur);
       } else if (cur.type === 'trivia' && cur.phase === 'answer') {
         if (Number.isInteger(payload.choiceIndex)) cur.choices[actorId] = payload.choiceIndex;
+        if (Object.keys(cur.choices).length >= players.length) resolveTriviaAnswer(state, cur);
       } else {
         return res.status(400).json({ error: 'ugyldig handling lige nu' });
       }
@@ -90,6 +130,23 @@ module.exports = async (req, res) => {
       return res.status(200).json({ state });
     }
 
+    // "ready" er spillerens EGET valg om at gå videre — bruges i resultat-
+    // pausen mellem runder, hvor der ikke er noget at indsende. Runden går
+    // først videre når alle er klar (eller når nedtællingen løber ud, se
+    // 'advance' herunder som stadig er den fælles nødbremse).
+    if (action === 'ready') {
+      if (!cur || cur.phase !== 'results') return res.status(400).json({ error: 'kan ikke gøres klar lige nu' });
+      if (!players.includes(actorId)) return res.status(403).json({ error: 'du er ikke med i denne runde af Brokspillet' });
+      if (!cur.readyIds) cur.readyIds = [];
+      if (!cur.readyIds.includes(actorId)) cur.readyIds.push(actorId);
+      if (cur.readyIds.length >= players.length) goToNextRoundOrEnd(state, players);
+      await setState(roomId, state);
+      return res.status(200).json({ state });
+    }
+
+    // "advance" er nu kun nødbremsen som klientens nedtællings-timer bruger
+    // hvis nogen ikke når at svare/blive klar til tiden — ikke længere en
+    // knap nogen trykker for at afbryde de andre.
     if (action === 'advance') {
       if (!cur) return res.status(400).json({ error: 'ingen aktiv runde' });
 
@@ -97,33 +154,13 @@ module.exports = async (req, res) => {
         cur.phase = 'vote';
         cur.votes = {};
       } else if (cur.type === 'quiplash' && cur.phase === 'vote') {
-        const tally = {};
-        Object.values(cur.votes).forEach(id => (tally[id] = (tally[id] || 0) + 1));
-        const maxVotes = Math.max(0, ...Object.values(tally));
-        const winnerIds = maxVotes > 0 ? Object.keys(tally).filter(id => tally[id] === maxVotes) : [];
-        winnerIds.forEach(id => { state.game.scores[id] = (state.game.scores[id] || 0) + ROUND_POINTS; });
-        cur.phase = 'results';
-        cur.winnerIds = winnerIds;
+        resolveQuiplashVote(state, cur);
       } else if (cur.type === 'truefalse' && cur.phase === 'guess') {
-        const correctGuessers = Object.keys(cur.guesses).filter(id => cur.guesses[id] === cur.isTrue);
-        correctGuessers.forEach(id => { state.game.scores[id] = (state.game.scores[id] || 0) + ROUND_POINTS; });
-        const guessCount = Object.keys(cur.guesses).length;
-        if (guessCount > 0 && correctGuessers.length === 0) {
-          state.game.scores[cur.authorId] = (state.game.scores[cur.authorId] || 0) + ROUND_POINTS;
-        }
-        cur.phase = 'results';
-        cur.correctGuessers = correctGuessers;
+        resolveTrueFalseGuess(state, cur);
       } else if (cur.type === 'trivia' && cur.phase === 'answer') {
-        const correctGuessers = Object.keys(cur.choices).filter(id => cur.choices[id] === cur.correctIndex);
-        correctGuessers.forEach(id => { state.game.scores[id] = (state.game.scores[id] || 0) + ROUND_POINTS; });
-        cur.phase = 'results';
-        cur.correctGuessers = correctGuessers;
+        resolveTriviaAnswer(state, cur);
       } else if (cur.phase === 'results') {
-        if (state.game.round >= state.game.totalRounds) {
-          endGame(state);
-        } else {
-          beginRound(state, state.members.filter(m => players.includes(m.id)));
-        }
+        goToNextRoundOrEnd(state, players);
       } else {
         return res.status(400).json({ error: 'kan ikke gå videre lige nu' });
       }
