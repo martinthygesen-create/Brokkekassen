@@ -58,6 +58,17 @@
   .segmented .seg.active{ background:rgba(255,247,232,0.15); color:var(--cream); }
 
   .slot-banner{ display:inline-block; background:linear-gradient(135deg, var(--coral), #e14d2e); color:#fff; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:15px; letter-spacing:.02em; padding:9px 20px; border-radius:8px; margin-bottom:16px; box-shadow:0 8px 18px rgba(255,107,74,.4); clip-path:polygon(4% 0%, 96% 0%, 100% 50%, 96% 100%, 4% 100%, 0% 50%); }
+
+  .game-badge{ display:inline-block; background:linear-gradient(135deg, var(--coral), #e14d2e); color:#fff; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:12.5px; letter-spacing:.02em; padding:7px 16px; border-radius:100px; margin-bottom:14px; box-shadow:0 6px 14px rgba(255,107,74,.35); }
+  .game-card{ background:linear-gradient(160deg, rgba(255,201,60,0.18), rgba(255,107,74,0.10)); border:1px solid rgba(255,201,60,0.35); border-radius:22px; padding:20px; box-shadow:0 10px 24px rgba(0,0,0,.18); }
+  .game-card p{ color:var(--cream); }
+  .game-btn{ display:block; width:100%; background:linear-gradient(160deg, var(--coral), #e14d2e); color:#fff; border:none; border-radius:100px; padding:15px; font-family:'Baloo 2',sans-serif; font-weight:700; font-size:16px; box-shadow:0 8px 18px rgba(255,107,74,0.35); cursor:pointer; margin-top:14px; }
+  .game-btn:active{ transform:scale(.98); }
+  .game-btn.ghost{ background:transparent; box-shadow:none; color:rgba(255,247,232,0.75); font-weight:600; font-size:14px; padding:10px; }
+  .game-progress{ display:flex; align-items:center; gap:10px; margin:14px 4px; font-size:12.5px; font-weight:600; color:rgba(255,247,232,0.65); }
+  .game-progress .bar-track{ flex:1; }
+  .game-pick{ background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); }
+  .game-pick:hover{ background:rgba(255,247,232,0.13); }
   .slot-cabinet{ background:linear-gradient(160deg,#2e2a24,#141414); border-radius:24px; padding:16px 12px 14px; box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #8a6b1f; position:relative; }
   .slot-cabinet::before, .slot-cabinet::after{ content:''; position:absolute; top:10px; width:8px; height:8px; border-radius:50%; background:radial-gradient(circle at 35% 30%, #ffe9a8, #b8860b); box-shadow:0 0 6px rgba(255,201,60,.6); }
   .slot-cabinet::before{ left:12px; } .slot-cabinet::after{ right:12px; }
@@ -665,6 +676,10 @@ function renderGameScreen(){
   `;
   document.getElementById('btnAppMenu').onclick = openAppMenuSheet;
   bindGameHandlers(g);
+  const card = document.getElementById('gameCard') || document.getElementById('gameoverReveal');
+  if(card && typeof gsap !== 'undefined'){
+    gsap.fromTo(card, { opacity:0, y:14, scale:.97 }, { opacity:1, y:0, scale:1, duration:.45, ease:'power2.out' });
+  }
 }
 
 function gameBodyHtml(g){
@@ -693,6 +708,11 @@ function gameHighscoreHtml(){
   return `<div class="section-label">🏆 Highscore</div>${rows}`;
 }
 
+function gameProgressHtml(count, total, label){
+  const pct = total ? Math.min(100, Math.round((count/total)*100)) : 0;
+  return `<div class="game-progress"><span>${count}/${total} ${label}</span><div class="bar-track"><div class="bar-fill" style="width:${pct}%;"></div></div></div>`;
+}
+
 function gameLobbyHtml(){
   return `
     <div class="empty-state" style="padding-top:26px;">
@@ -700,14 +720,14 @@ function gameLobbyHtml(){
       <b>Brokspillet</b>
       Skriv-og-stem, sandt/falsk og trivia om jeres egen brok-historik. ${state.members.length} spillere klar.
     </div>
-    <div class="onboard-card" style="margin:10px 0;">
-      <label class="field-label">Spil om</label>
+    <div class="game-card" style="margin:10px 0;">
+      <label class="field-label" style="color:rgba(255,247,232,0.7);">Spil om</label>
       <div class="segmented" style="margin-bottom:0;">
         <div class="seg ${gameWager!=='euro'?'active':''}" data-wager="fun">😄 For sjov</div>
         <div class="seg ${gameWager==='euro'?'active':''}" data-wager="euro">💶 Om en euro</div>
       </div>
     </div>
-    <button class="sheet-btn primary" id="startGameBtn" ${state.members.length<2?'disabled':''} style="margin-top:16px;">🎲 Start spillet</button>
+    <button class="game-btn" id="startGameBtn" ${state.members.length<2?'disabled':''}>🎲 Start spillet</button>
     ${state.members.length<2?'<p class="hint" style="text-align:center;">Kræver mindst 2 medlemmer</p>':''}
     ${gameHighscoreHtml()}
   `;
@@ -718,14 +738,14 @@ function quiplashHtml(g, cur){
     const answered = Object.keys(cur.answers||{}).length;
     const mine = profile && cur.answers[profile.memberId];
     return `
-      <div class="section-label">Runde ${g.round}/${g.totalRounds} · 🎭 Skriv-og-stem</div>
-      <div class="onboard-card">
-        <p style="font-weight:700; font-size:16px; margin:0 0 14px;">${escapeHtml(cur.prompt)}</p>
+      <div class="game-badge">Runde ${g.round}/${g.totalRounds} · 🎭 Skriv-og-stem</div>
+      <div class="game-card" id="gameCard">
+        <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:0 0 14px; line-height:1.3;">${escapeHtml(cur.prompt)}</p>
         <textarea id="quipInput" rows="2" maxlength="120" placeholder="Dit svar...">${mine?escapeHtml(mine):''}</textarea>
-        <button class="sheet-btn primary" id="quipSubmitBtn" style="margin-top:10px;">${mine?'Opdatér svar':'Send svar'}</button>
+        <button class="game-btn" id="quipSubmitBtn" style="margin-top:10px;">${mine?'✏️ Opdatér svar':'🚀 Send svar'}</button>
       </div>
-      <p class="hint" style="text-align:center;">${answered}/${state.members.length} har svaret</p>
-      <button class="sheet-btn ghost" id="advanceBtn">👉 Gå videre til afstemning</button>
+      ${gameProgressHtml(answered, state.members.length, 'har svaret')}
+      <button class="game-btn ghost" id="advanceBtn">👉 Gå videre til afstemning</button>
     `;
   }
   if(cur.phase === 'vote'){
@@ -733,36 +753,36 @@ function quiplashHtml(g, cur){
     const myVote = profile && cur.votes[profile.memberId];
     const votedCount = Object.keys(cur.votes||{}).length;
     const rows = entries.map(([id,text],i)=>`
-      <div class="bal-row" data-vote-for="${id}" style="cursor:pointer; ${myVote===id?'outline:2px solid var(--sea);':''}">
-        <div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${i+1}</div>
+      <div class="bal-row game-pick" data-vote-for="${id}" style="cursor:pointer; ${myVote===id?'outline:2px solid var(--coin);':''}">
+        <div class="avatar" style="width:34px;height:34px;font-size:12.5px; background:linear-gradient(160deg, var(--coin), var(--coin-dark)); color:var(--ink);">${i+1}</div>
         <div class="feed-body"><div class="bal-name">"${escapeHtml(text)}"</div></div>
         ${myVote===id?'<span style="font-size:18px;">✓</span>':''}
       </div>
     `).join('');
     return `
-      <div class="section-label">Runde ${g.round}/${g.totalRounds} · Stem på det bedste svar</div>
-      <p class="hint" style="margin:0 0 10px;">${escapeHtml(cur.prompt)}</p>
+      <div class="game-badge">Runde ${g.round}/${g.totalRounds} · Stem på det bedste svar</div>
+      <p class="hint" style="margin:0 0 10px; color:rgba(255,247,232,0.75);">${escapeHtml(cur.prompt)}</p>
       ${rows || '<p class="hint">Ingen andre svar at stemme på.</p>'}
-      <p class="hint" style="text-align:center;">${votedCount}/${state.members.length} har stemt</p>
-      <button class="sheet-btn ghost" id="advanceBtn">👉 Afslør vinderen</button>
+      ${gameProgressHtml(votedCount, state.members.length, 'har stemt')}
+      <button class="game-btn ghost" id="advanceBtn">👉 Afslør vinderen</button>
     `;
   }
   const winners = (cur.winnerIds||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
   return `
-    <div class="section-label">Runde ${g.round}/${g.totalRounds} · Resultat</div>
-    <div class="onboard-card" style="text-align:center;">
+    <div class="game-badge">Runde ${g.round}/${g.totalRounds} · Resultat</div>
+    <div class="game-card" id="gameCard" style="text-align:center;">
       <p style="margin:0 0 10px;">${escapeHtml(cur.prompt)}</p>
       ${Object.entries(cur.answers||{}).map(([id,text])=>{
         const m = state.members.find(x=>x.id===id);
         const won = (cur.winnerIds||[]).includes(id);
-        return `<div class="feed-item" style="${won?'border-color:var(--coin); background:rgba(255,201,60,0.1);':''}">
+        return `<div class="feed-item" style="${won?'border-color:var(--coin); background:rgba(255,201,60,0.16);':''}">
           <div class="avatar">${initials(m?m.name:'?')}</div>
           <div class="feed-body"><div class="feed-name">${escapeHtml(m?m.name:'?')} ${won?'🏆':''}</div><div class="feed-msg">"${escapeHtml(text)}"</div></div>
         </div>`;
       }).join('')}
-      <p style="font-weight:700; margin-top:10px;">${winners.length ? '🏆 ' + winners.map(w=>escapeHtml(w.name)).join(' & ') + ' vandt runden!' : 'Ingen stemmer denne gang.'}</p>
+      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:17px; margin-top:12px; color:var(--coin);">${winners.length ? '🏆 ' + winners.map(w=>escapeHtml(w.name)).join(' & ') + ' vandt runden!' : 'Ingen stemmer denne gang.'}</p>
     </div>
-    <button class="sheet-btn primary" id="advanceBtn">👉 Næste runde</button>
+    <button class="game-btn" id="advanceBtn">👉 Næste runde</button>
   `;
 }
 
@@ -772,23 +792,23 @@ function truefalseHtml(g, cur){
   if(cur.phase === 'write'){
     if(!isAuthor){
       return `
-        <div class="section-label">Runde ${g.round}/${g.totalRounds} · ⚖️ Sandt eller falsk</div>
+        <div class="game-badge">Runde ${g.round}/${g.totalRounds} · ⚖️ Sandt eller falsk</div>
         <div class="empty-state"><span class="emoji">✍️</span><b>${escapeHtml(author?author.name:'?')} skriver et udsagn...</b>Vent til det er klar, så skal I gætte.</div>
       `;
     }
     const chips = state.members.map(m=>`<div class="name-pill ${m.id===profile.memberId?'selected':''}" data-target="${m.id}">${escapeHtml(m.name)}</div>`).join('');
     return `
-      <div class="section-label">Runde ${g.round}/${g.totalRounds} · ⚖️ Sandt eller falsk — det er dig der skriver!</div>
-      <div class="onboard-card">
-        <label class="field-label">Om hvem? (kan være dig selv)</label>
+      <div class="game-badge">Runde ${g.round}/${g.totalRounds} · ⚖️ Det er dig der skriver!</div>
+      <div class="game-card" id="gameCard">
+        <label class="field-label" style="color:rgba(255,247,232,0.7);">Om hvem? (kan være dig selv)</label>
         <div class="name-grid" id="ttTargetGrid">${chips}</div>
-        <label class="field-label">Udsagnet</label>
+        <label class="field-label" style="color:rgba(255,247,232,0.7);">Udsagnet</label>
         <textarea id="ttStatement" rows="2" maxlength="120" placeholder="Skriv noget sandt eller opdigtet..."></textarea>
         <div class="segmented" style="margin-top:10px;">
           <div class="seg active" data-truth="true">✅ Det er sandt</div>
           <div class="seg" data-truth="false">🎭 Jeg fandt på det</div>
         </div>
-        <button class="sheet-btn primary" id="ttSubmitBtn" style="margin-top:12px;" disabled>Send udsagn</button>
+        <button class="game-btn" id="ttSubmitBtn" style="margin-top:12px;" disabled>🚀 Send udsagn</button>
       </div>
     `;
   }
@@ -797,32 +817,32 @@ function truefalseHtml(g, cur){
     const guessedCount = Object.keys(cur.guesses||{}).length;
     const eligible = state.members.length - 1;
     return `
-      <div class="section-label">Runde ${g.round}/${g.totalRounds} · ⚖️ Sandt eller falsk</div>
-      <div class="onboard-card" style="text-align:center;">
-        <p class="hint" style="margin:0 0 6px;">${escapeHtml(author?author.name:'?')} skriver om ${escapeHtml(target?target.name:'?')}:</p>
-        <p style="font-weight:700; font-size:17px;">"${escapeHtml(cur.statement)}"</p>
-        ${isAuthor ? '<p class="hint">Du skrev det — vent på de andres gæt.</p>' : `
+      <div class="game-badge">Runde ${g.round}/${g.totalRounds} · ⚖️ Sandt eller falsk</div>
+      <div class="game-card" id="gameCard" style="text-align:center;">
+        <p class="hint" style="margin:0 0 6px; color:rgba(255,247,232,0.6);">${escapeHtml(author?author.name:'?')} skriver om ${escapeHtml(target?target.name:'?')}:</p>
+        <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px;">"${escapeHtml(cur.statement)}"</p>
+        ${isAuthor ? '<p class="hint" style="color:rgba(255,247,232,0.6);">Du skrev det — vent på de andres gæt.</p>' : `
           <div style="display:flex; gap:10px; margin-top:14px;">
-            <button class="sheet-btn primary" data-guess="true" style="margin-top:0;">✅ Sandt</button>
-            <button class="sheet-btn danger" data-guess="false" style="margin-top:0;">🎭 Opdigtet</button>
+            <button class="game-btn" data-guess="true" style="margin-top:0; background:linear-gradient(160deg, var(--sea), var(--sea-deep)); box-shadow:0 8px 18px rgba(11,58,63,0.4);">✅ Sandt</button>
+            <button class="game-btn" data-guess="false" style="margin-top:0;">🎭 Opdigtet</button>
           </div>
         `}
       </div>
-      <p class="hint" style="text-align:center;">${guessedCount}/${eligible} har gættet</p>
-      <button class="sheet-btn ghost" id="advanceBtn">👉 Afslør sandheden</button>
+      ${gameProgressHtml(guessedCount, eligible, 'har gættet')}
+      <button class="game-btn ghost" id="advanceBtn">👉 Afslør sandheden</button>
     `;
   }
   const target = state.members.find(m=>m.id===cur.targetId);
   const correct = (cur.correctGuessers||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
   return `
-    <div class="section-label">Runde ${g.round}/${g.totalRounds} · Resultat</div>
-    <div class="onboard-card" style="text-align:center;">
-      <p class="hint">${escapeHtml(author?author.name:'?')} skrev om ${escapeHtml(target?target.name:'?')}:</p>
-      <p style="font-weight:700; font-size:17px;">"${escapeHtml(cur.statement)}"</p>
-      <p style="margin-top:10px; font-weight:800; color:${cur.isTrue?'var(--sea)':'var(--coral)'};">${cur.isTrue ? '✅ Det var faktisk SANDT' : '🎭 Det var OPDIGTET'}</p>
-      <p class="hint" style="margin-top:8px;">${correct.length ? '🏆 ' + correct.map(m=>escapeHtml(m.name)).join(', ') + ' gættede rigtigt' : (Object.keys(cur.guesses||{}).length ? 'Ingen gættede rigtigt — point til ' + escapeHtml(author?author.name:'?') + '!' : 'Ingen nåede at gætte.')}</p>
+    <div class="game-badge">Runde ${g.round}/${g.totalRounds} · Resultat</div>
+    <div class="game-card" id="gameCard" style="text-align:center;">
+      <p class="hint" style="color:rgba(255,247,232,0.6);">${escapeHtml(author?author.name:'?')} skrev om ${escapeHtml(target?target.name:'?')}:</p>
+      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px;">"${escapeHtml(cur.statement)}"</p>
+      <p style="margin-top:10px; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:18px; color:${cur.isTrue?'var(--coin)':'var(--coral)'};">${cur.isTrue ? '✅ Det var faktisk SANDT' : '🎭 Det var OPDIGTET'}</p>
+      <p class="hint" style="margin-top:8px; color:rgba(255,247,232,0.7);">${correct.length ? '🏆 ' + correct.map(m=>escapeHtml(m.name)).join(', ') + ' gættede rigtigt' : (Object.keys(cur.guesses||{}).length ? 'Ingen gættede rigtigt — point til ' + escapeHtml(author?author.name:'?') + '!' : 'Ingen nåede at gætte.')}</p>
     </div>
-    <button class="sheet-btn primary" id="advanceBtn">👉 Næste runde</button>
+    <button class="game-btn" id="advanceBtn">👉 Næste runde</button>
   `;
 }
 
@@ -831,31 +851,31 @@ function triviaHtml(g, cur){
     const mine = profile ? cur.choices[profile.memberId] : undefined;
     const answered = Object.keys(cur.choices||{}).length;
     const opts = cur.options.map((label,i)=>`
-      <div class="bal-row" data-choice="${i}" style="cursor:pointer; ${mine===i?'outline:2px solid var(--sea);':''}">
-        <div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${String.fromCharCode(65+i)}</div>
+      <div class="bal-row game-pick" data-choice="${i}" style="cursor:pointer; ${mine===i?'outline:2px solid var(--coin);':''}">
+        <div class="avatar" style="width:34px;height:34px;font-size:12.5px; background:linear-gradient(160deg, var(--coin), var(--coin-dark)); color:var(--ink);">${String.fromCharCode(65+i)}</div>
         <div class="feed-body"><div class="bal-name">${escapeHtml(label)}</div></div>
         ${mine===i?'<span style="font-size:18px;">✓</span>':''}
       </div>
     `).join('');
     return `
-      <div class="section-label">Runde ${g.round}/${g.totalRounds} · 🔍 Ægte Brok</div>
-      <div class="onboard-card">
-        <p style="font-weight:700; font-size:16px; margin:0 0 14px;">${escapeHtml(cur.question)}</p>
+      <div class="game-badge">Runde ${g.round}/${g.totalRounds} · 🔍 Ægte Brok</div>
+      <div class="game-card" id="gameCard">
+        <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:18px; margin:0 0 14px; line-height:1.3;">${escapeHtml(cur.question)}</p>
         ${opts}
       </div>
-      <p class="hint" style="text-align:center;">${answered}/${state.members.length} har svaret</p>
-      <button class="sheet-btn ghost" id="advanceBtn">👉 Afslør svaret</button>
+      ${gameProgressHtml(answered, state.members.length, 'har svaret')}
+      <button class="game-btn ghost" id="advanceBtn">👉 Afslør svaret</button>
     `;
   }
   const correct = (cur.correctGuessers||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
   return `
-    <div class="section-label">Runde ${g.round}/${g.totalRounds} · Resultat</div>
-    <div class="onboard-card" style="text-align:center;">
+    <div class="game-badge">Runde ${g.round}/${g.totalRounds} · Resultat</div>
+    <div class="game-card" id="gameCard" style="text-align:center;">
       <p style="margin:0 0 8px;">${escapeHtml(cur.question)}</p>
-      <p style="font-weight:800; color:var(--sea); font-size:17px;">✅ ${escapeHtml(cur.options[cur.correctIndex])}</p>
-      <p class="hint" style="margin-top:8px;">${correct.length ? '🏆 ' + correct.map(m=>escapeHtml(m.name)).join(', ') + ' fik den rigtige' : 'Ingen gættede rigtigt denne gang.'}</p>
+      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; color:var(--coin); font-size:18px;">✅ ${escapeHtml(cur.options[cur.correctIndex])}</p>
+      <p class="hint" style="margin-top:8px; color:rgba(255,247,232,0.7);">${correct.length ? '🏆 ' + correct.map(m=>escapeHtml(m.name)).join(', ') + ' fik den rigtige' : 'Ingen gættede rigtigt denne gang.'}</p>
     </div>
-    <button class="sheet-btn primary" id="advanceBtn">👉 Næste runde</button>
+    <button class="game-btn" id="advanceBtn">👉 Næste runde</button>
   `;
 }
 
@@ -871,17 +891,17 @@ function gameOverHtml(g, cur){
     </div>
   `).join('');
   return `
-    <div class="section-label">Spillet er slut!</div>
+    <div class="game-badge">🎉 Spillet er slut!</div>
     ${rows}
-    ${winners.length ? `<p class="hint" style="text-align:center; margin-top:10px;">👑 Vinder: ${winners.map(m=>escapeHtml(m.name)).join(' & ')}</p>` : ''}
-    <div class="onboard-card" id="gameoverReveal" style="text-align:center; margin-top:16px;">
+    ${winners.length ? `<p class="hint" style="text-align:center; margin-top:10px; color:rgba(255,247,232,0.75);">👑 Vinder: ${winners.map(m=>escapeHtml(m.name)).join(' & ')}</p>` : ''}
+    <div class="game-card" id="gameoverReveal" style="text-align:center; margin-top:16px;">
       <div style="font-size:34px;">🫵</div>
-      <p style="font-weight:800; font-size:19px; margin:6px 0;">Taberen er... ${losers.map(m=>escapeHtml(m.name)).join(' & ')}!</p>
-      ${g.wager==='euro' ? '<p class="hint">1€ lagt i Brokkekassens pulje.</p>' : '<p class="hint">Kun for sjov denne gang.</p>'}
+      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:6px 0;">Taberen er... ${losers.map(m=>escapeHtml(m.name)).join(' & ')}!</p>
+      ${g.wager==='euro' ? '<p class="hint" style="color:rgba(255,247,232,0.7);">1€ lagt i Brokkekassens pulje.</p>' : '<p class="hint" style="color:rgba(255,247,232,0.7);">Kun for sjov denne gang.</p>'}
     </div>
     ${gameHighscoreHtml()}
-    <button class="sheet-btn primary" id="playAgainBtn" style="margin-top:16px;">🎲 Spil igen</button>
-    <button class="sheet-btn ghost" id="endGameBtn">Tilbage til lobbyen</button>
+    <button class="game-btn" id="playAgainBtn" style="margin-top:16px;">🎲 Spil igen</button>
+    <button class="game-btn ghost" id="endGameBtn">Tilbage til lobbyen</button>
   `;
 }
 
