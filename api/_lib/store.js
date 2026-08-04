@@ -282,11 +282,14 @@ function redactStateFor(state, viewerId) {
   if (isMrBrok) safe.topic = undefined;
   if (safe.current && safe.current.guesses) {
     const mine = viewerId && Object.prototype.hasOwnProperty.call(safe.current.guesses, viewerId);
-    safe.current = { ...safe.current, guesses: mine ? { [viewerId]: safe.current.guesses[viewerId] } : {} };
+    // Antallet af indsendte gæt er ikke hemmeligt (kun HVEM der gættede
+    // hvad er) — sendes med så klienten kan vise en fremdrifts-bar uden at
+    // lække andres gæt.
+    safe.current = { ...safe.current, guessCount: Object.keys(safe.current.guesses).length, guesses: mine ? { [viewerId]: safe.current.guesses[viewerId] } : {} };
   }
   if (safe.current && safe.current.type === 'steal' && safe.current.votes) {
     const mine = viewerId && Object.prototype.hasOwnProperty.call(safe.current.votes, viewerId);
-    safe.current = { ...safe.current, votes: mine ? { [viewerId]: safe.current.votes[viewerId] } : {} };
+    safe.current = { ...safe.current, voteCount: Object.keys(safe.current.votes).length, votes: mine ? { [viewerId]: safe.current.votes[viewerId] } : {} };
   }
   return { ...state, mrbrok: safe };
 }

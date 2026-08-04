@@ -1472,12 +1472,13 @@ function mrbrokTurnHtml(m, cur){
 
 function mrbrokGuessHtml(m, cur){
   const badge = `<div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Omgang ${m.round}/${m.totalRounds} · 🤔 Hvem er MrBrok?</span><span id="mrbrokTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>`;
+  const eligible = m.players.length - 1; // alle undtagen MrBrok selv
   if(m.youAreMrBrok){
-    return `${badge}<div class="empty-state"><span class="emoji">🕵️</span><b>De andre gætter lige nu...</b>Du kan ikke gætte på dig selv — vent til næste omgang.</div>`;
+    return `${badge}<div class="empty-state"><span class="emoji">🕵️</span><b>De andre gætter lige nu...</b>Du kan ikke gætte på dig selv — vent til næste omgang.</div>${gameProgressHtml(cur.guessCount||0, eligible, 'har gættet')}`;
   }
   const already = profile && profile.memberId in (cur.guesses||{});
   if(already){
-    return `${badge}<div class="empty-state"><span class="emoji">🤫</span><b>Dit gæt er registreret</b>Ingen facit endnu — det kommer først til allersidst.</div>`;
+    return `${badge}<div class="empty-state"><span class="emoji">🤫</span><b>Dit gæt er registreret</b>Ingen facit endnu — det kommer først til allersidst.</div>${gameProgressHtml(cur.guessCount||0, eligible, 'har gættet')}`;
   }
   const options = state.members.filter(mm=>m.players.includes(mm.id) && mm.id !== profile.memberId);
   const rows = options.map(mm=>`
@@ -1490,12 +1491,14 @@ function mrbrokGuessHtml(m, cur){
     ${badge}
     <p class="hint" style="text-align:center; margin:0 0 8px; color:rgba(255,247,232,0.7);">${m.round >= m.totalRounds ? 'Sidste omgang — dette er den afgørende anklage!' : 'Hvem tror du er MrBrok lige nu?'}</p>
     ${rows}
+    ${gameProgressHtml(cur.guessCount||0, eligible, 'har gættet')}
   `;
 }
 
 function mrbrokStealHtml(m, cur){
   const mrbrokMember = state.members.find(mm=>mm.id===m.mrBrokId);
   const badge = `<div class="game-badge">🕵️ MrBrok er afsløret!</div>`;
+  const eligible = m.players.length - 1; // alle undtagen MrBrok selv
   if(m.youAreMrBrok){
     if(!cur.guess){
       return `
@@ -1507,14 +1510,14 @@ function mrbrokStealHtml(m, cur){
         </div>
       `;
     }
-    return `${badge}<div class="empty-state"><span class="emoji">🤞</span><b>Dit gæt er sendt</b>De andre stemmer nu om det er tæt nok.</div>`;
+    return `${badge}<div class="empty-state"><span class="emoji">🤞</span><b>Dit gæt er sendt</b>De andre stemmer nu om det er tæt nok.</div>${gameProgressHtml(cur.voteCount||0, eligible, 'har stemt')}`;
   }
   if(!cur.guess){
     return `${badge}<div class="empty-state"><span class="emoji">⏳</span><b>${escapeHtml(mrbrokMember?mrbrokMember.name:'MrBrok')} tænker...</b>Vent på deres sidste gæt på emnet.</div>`;
   }
   const already = profile && profile.memberId in (cur.votes||{});
   if(already){
-    return `${badge}<div class="empty-state"><span class="emoji">🤫</span><b>Din stemme er registreret</b>Vent på de andre.</div>`;
+    return `${badge}<div class="empty-state"><span class="emoji">🤫</span><b>Din stemme er registreret</b>Vent på de andre.</div>${gameProgressHtml(cur.voteCount||0, eligible, 'har stemt')}`;
   }
   return `
     ${badge}
@@ -1527,6 +1530,7 @@ function mrbrokStealHtml(m, cur){
         <button class="game-btn" data-mrbrok-steal-vote="false" style="margin-top:0;">❌ Ikke tæt nok</button>
       </div>
     </div>
+    ${gameProgressHtml(cur.voteCount||0, eligible, 'har stemt')}
   `;
 }
 
