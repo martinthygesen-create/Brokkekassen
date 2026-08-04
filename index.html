@@ -927,6 +927,7 @@ const GAME_PHASE_SECONDS = {
   'quiplash:answer': 60, 'quiplash:vote': 35, 'quiplash:results': 20,
   'truefalse:write': 60, 'truefalse:guess': 35, 'truefalse:results': 20,
   'trivia:answer': 35, 'trivia:results': 20,
+  'guessbrok:write': 60, 'guessbrok:guess': 35, 'guessbrok:results': 20,
 };
 function paintGameTimerNow(){
   // Hvert stille poll-opdatering (fx en anden spiller der svarer) erstatter
@@ -1096,6 +1097,7 @@ function gameBodyHtml(g){
   if(cur.type === 'quiplash') return quiplashHtml(g, cur);
   if(cur.type === 'truefalse') return truefalseHtml(g, cur);
   if(cur.type === 'trivia') return triviaHtml(g, cur);
+  if(cur.type === 'guessbrok') return guessBrokHtml(g, cur);
   return '';
 }
 
@@ -1151,6 +1153,7 @@ function gameLobbyHtml(){
   const gameSteps = [
     ['🎭', 'Skriv-og-stem: alle skriver et sjovt svar, så stemmer I på det bedste'],
     ['⚖️', 'Sandt/falsk: én skriver et udsagn om en anden — resten gætter'],
+    ['🎯', 'Hvilket brok? Én skriver et RIGTIGT brok blandt 3 opdigtede — resten gætter hvilket der er ægte'],
     ['🔍', 'Trivia om jeres egen brok-historik (og lidt verdens-brok ind imellem)'],
     ['🏆', 'Point tælles på tværs af alle runder — flest point vinder'],
   ];
@@ -1286,16 +1289,16 @@ function truefalseHtml(g, cur){
   if(cur.phase === 'guess'){
     const target = state.members.find(m=>m.id===cur.targetId);
     const guessedCount = Object.keys(cur.guesses||{}).length;
-    const eligible = g.players.length - 1;
+    const eligible = cur.isWorld ? g.players.length : g.players.length - 1;
     const myGuess = profile && cur.guesses[profile.memberId] !== undefined;
     const badgeLabel = isAuthor ? '⚖️ Sandt eller falsk' : (myGuess ? '⚖️ Sandt eller falsk' : '⚖️ Stem nu: sandt eller opdigtet?');
     return `
       <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · ${badgeLabel}</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
       <div class="game-card" id="gameCard" style="text-align:center;">
-        ${cur.reused ? `<p class="hint" style="margin:0 0 6px; color:rgba(255,201,60,0.85); font-weight:600;">♻️ Genbrugt udsagn fra tidligere</p>` : ''}
-        <p class="hint" style="margin:0 0 6px; color:rgba(255,247,232,0.6);">${escapeHtml(author?author.name:'?')} skrev om ${escapeHtml(target?target.name:'?')}:</p>
+        ${cur.isWorld ? `<p class="hint" style="margin:0 0 6px; color:rgba(255,201,60,0.85); font-weight:600;">🌍 Verdens-brok</p>` : cur.reused ? `<p class="hint" style="margin:0 0 6px; color:rgba(255,201,60,0.85); font-weight:600;">♻️ Genbrugt udsagn fra tidligere</p>` : ''}
+        ${cur.isWorld ? '' : `<p class="hint" style="margin:0 0 6px; color:rgba(255,247,232,0.6);">${escapeHtml(author?author.name:'?')} skrev om ${escapeHtml(target?target.name:'?')}:</p>`}
         <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px;">"${escapeHtml(cur.statement)}"</p>
-        ${isAuthor ? '<p class="hint" style="color:rgba(255,247,232,0.6);">Du skrev det — vent på de andres gæt.</p>' : (myGuess ? '' : `
+        ${(!cur.isWorld && isAuthor) ? '<p class="hint" style="color:rgba(255,247,232,0.6);">Du skrev det — vent på de andres gæt.</p>' : (myGuess ? '' : `
           <p style="font-weight:700; margin:10px 0 0; font-size:14px;">🗳️ Din tur — stem: er det sandt eller opdigtet?</p>
           <div style="display:flex; gap:10px; margin-top:10px;">
             <button class="game-btn" data-guess="true" style="margin-top:0; background:linear-gradient(160deg, var(--sea), var(--sea-deep)); box-shadow:0 8px 18px rgba(11,58,63,0.4);">✅ Sandt</button>
@@ -1304,7 +1307,7 @@ function truefalseHtml(g, cur){
         `)}
       </div>
       ${gameProgressHtml(guessedCount, eligible, 'har gættet')}
-      ${(myGuess || isAuthor) ? `<div class="waiting-pill"><span class="waiting-dot"></span> Venter på de andre...</div>` : ''}
+      ${(myGuess || (!cur.isWorld && isAuthor)) ? `<div class="waiting-pill"><span class="waiting-dot"></span> Venter på de andre...</div>` : ''}
     `;
   }
   const target = state.members.find(m=>m.id===cur.targetId);
@@ -1312,11 +1315,70 @@ function truefalseHtml(g, cur){
   return `
     <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
     <div class="game-card" id="gameCard" style="text-align:center;">
-      <p class="hint" style="color:rgba(255,247,232,0.6);">${escapeHtml(author?author.name:'?')} skrev om ${escapeHtml(target?target.name:'?')}:</p>
+      ${cur.isWorld ? `<p class="hint" style="color:rgba(255,201,60,0.85); font-weight:600;">🌍 Verdens-brok</p>` : `<p class="hint" style="color:rgba(255,247,232,0.6);">${escapeHtml(author?author.name:'?')} skrev om ${escapeHtml(target?target.name:'?')}:</p>`}
       <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px;">"${escapeHtml(cur.statement)}"</p>
       <p style="margin-top:10px; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:18px; color:${cur.isTrue?'var(--coin)':'var(--coral)'};">${cur.isTrue ? '✅ Det var faktisk SANDT' : '🎭 Det var OPDIGTET'}</p>
       <p class="hint" style="margin-top:8px; color:rgba(255,247,232,0.7);">${correct.length ? '🏆 ' + correct.map(m=>escapeHtml(m.name)).join(', ') + ' gættede rigtigt (+1)' : 'Ingen gættede rigtigt.'}</p>
       ${cur.authorWon ? `<p class="hint" style="color:rgba(255,201,60,0.85); font-weight:600;">😏 ${escapeHtml(author?author.name:'?')} narrede flertallet (+1)</p>` : ''}
+    </div>
+    ${gameReadyHtml(g, cur)}
+  `;
+}
+
+function guessBrokHtml(g, cur){
+  const author = state.members.find(m=>m.id===cur.authorId);
+  const isAuthor = profile && profile.memberId === cur.authorId;
+  if(cur.phase === 'skipped'){
+    return `
+      <div class="game-badge">Runde ${g.round}/${g.totalRounds} · 🎯 Hvilket brok?</div>
+      <div class="empty-state"><span class="emoji">😴</span><b>${escapeHtml(author?author.name:'?')} nåede ikke at skrive et brok</b>Ingen sag denne gang — vi går videre til næste spørgsmål.</div>
+      ${gameReadyHtml(g, cur)}
+    `;
+  }
+  if(cur.phase === 'write'){
+    if(!isAuthor){
+      return `
+        <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · 🎯 Hvilket brok?</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
+        <div class="empty-state"><span class="emoji">✍️</span><b>${escapeHtml(author?author.name:'?')} skriver et rigtigt brok...</b>Vent til det er klar, så skal I gætte hvilket der er ægte.</div>
+      `;
+    }
+    return `
+      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · 🎯 Det er dig der skriver!</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
+      <div class="game-card" id="gameCard">
+        <label class="field-label" style="color:rgba(255,247,232,0.7);">Skriv et RIGTIGT brok — noget I faktisk ville brokke jer over. Vi blander 3 opdigtede forslag ind, og de andre skal gætte hvilket der er ægte.</label>
+        <textarea id="gbStatement" rows="2" maxlength="120" placeholder="Fx: Der var ikke plads til alle håndklæderne i skabet igen..."></textarea>
+        <button class="game-btn" id="gbSubmitBtn" style="margin-top:12px;" disabled>🚀 Send brok</button>
+      </div>
+    `;
+  }
+  if(cur.phase === 'guess'){
+    const guessedCount = Object.keys(cur.guesses||{}).length;
+    const eligible = g.players.length - 1;
+    const myGuess = profile && cur.guesses[profile.memberId] !== undefined;
+    const badgeLabel = isAuthor ? '🎯 Hvilket brok?' : (myGuess ? '🎯 Hvilket brok?' : '🎯 Gæt: hvilket er ægte?');
+    const opts = (cur.options||[]).map((label,i)=>`
+      <div class="bal-row game-pick" data-choice="${i}" style="cursor:pointer; ${myGuess===i?'outline:2px solid var(--coin);':''}">
+        <div class="avatar" style="width:34px;height:34px;font-size:12.5px; background:linear-gradient(160deg, var(--coin), var(--coin-dark)); color:var(--ink);">${String.fromCharCode(65+i)}</div>
+        <div class="feed-body"><div class="bal-name">"${escapeHtml(label)}"</div></div>
+        ${myGuess===i?'<span style="font-size:18px;">✓</span>':''}
+      </div>
+    `).join('');
+    return `
+      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · ${badgeLabel}</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
+      <p class="hint" style="margin:0 0 10px; color:rgba(255,247,232,0.75);">Hvilket af disse ville ${escapeHtml(author?author.name:'?')} faktisk brokke sig over?</p>
+      ${isAuthor ? `<p class="hint" style="color:rgba(255,247,232,0.6); margin-bottom:10px;">Du skrev det — vent på de andres gæt.</p>` : opts}
+      ${gameProgressHtml(guessedCount, eligible, 'har gættet')}
+      ${(myGuess !== undefined || isAuthor) ? `<div class="waiting-pill"><span class="waiting-dot"></span> Venter på de andre...</div>` : ''}
+    `;
+  }
+  const correct = (cur.correctGuessers||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
+  return `
+    <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
+    <div class="game-card" id="gameCard" style="text-align:center;">
+      <p class="hint" style="color:rgba(255,247,232,0.6);">${escapeHtml(author?author.name:'?')}s ægte brok var:</p>
+      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; color:var(--coin);">✅ "${escapeHtml((cur.options||[])[cur.correctIndex] || '')}"</p>
+      <p class="hint" style="margin-top:8px; color:rgba(255,247,232,0.7);">${correct.length ? '🏆 ' + correct.map(m=>escapeHtml(m.name)).join(', ') + ' gættede rigtigt (+1)' : 'Ingen gættede rigtigt.'}</p>
+      ${cur.authorWon ? `<p class="hint" style="color:rgba(255,201,60,0.85); font-weight:600;">😏 ${escapeHtml(author?author.name:'?')} narrede alle (+1)</p>` : ''}
     </div>
     ${gameReadyHtml(g, cur)}
   `;
@@ -1462,6 +1524,23 @@ function bindGameHandlers(g){
     });
   }
   if(cur.type === 'trivia' && cur.phase === 'answer'){
+    document.querySelectorAll('[data-choice]').forEach(el=>{
+      el.onclick = ()=> gameApi('submit', { payload: { choiceIndex: parseInt(el.dataset.choice,10) } });
+    });
+  }
+  if(cur.type === 'guessbrok' && cur.phase === 'write' && profile && profile.memberId === cur.authorId){
+    const input = document.getElementById('gbStatement');
+    const submitBtn = document.getElementById('gbSubmitBtn');
+    const updateSubmitState = ()=>{ submitBtn.disabled = !input.value.trim(); };
+    input.addEventListener('input', updateSubmitState);
+    submitBtn.onclick = ()=>{
+      const statement = input.value.trim();
+      if(!statement) return;
+      lockSubmitBtn(submitBtn, 'Sender...');
+      gameApi('submit', { payload: { statement } });
+    };
+  }
+  if(cur.type === 'guessbrok' && cur.phase === 'guess' && profile && profile.memberId !== cur.authorId){
     document.querySelectorAll('[data-choice]').forEach(el=>{
       el.onclick = ()=> gameApi('submit', { payload: { choiceIndex: parseInt(el.dataset.choice,10) } });
     });

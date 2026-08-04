@@ -1,5 +1,5 @@
 const { mutateState, uid, redactStateFor, ApiError } = require('./_lib/store');
-const { beginRound } = require('./_lib/game');
+const { beginRound, buildOptions, pickDecoyBroks } = require('./_lib/game');
 const { pushToMembers } = require('./_lib/push');
 
 const DEFAULT_ROUNDS = 8;
@@ -44,6 +44,24 @@ function resolveTrueFalseGuess(state, cur) {
   const totalGuessers = correctGuessers.length + fooledGuessers.length;
   correctGuessers.forEach(id => { state.game.scores[id] = (state.game.scores[id] || 0) + 1; });
   const authorWon = totalGuessers > 0 && fooledGuessers.length > totalGuessers / 2;
+  if (authorWon && state.game.scores[cur.authorId] !== undefined) {
+    state.game.scores[cur.authorId] += 1;
+  }
+  cur.phase = 'results';
+  cur.correctGuessers = correctGuessers;
+  cur.authorWon = authorWon;
+  cur.readyIds = [];
+}
+
+// Point-fordeling for "Hvilket brok ville {author} sige?": gæt rigtigt
+// (find forfatterens ægte brok blandt de opdigtede) = 1 point. Hvis INGEN
+// finder det ægte, får forfatteren en bonus for at have skrevet et
+// overbevisende opdigtet-agtigt rigtigt brok.
+function resolveGuessBrok(state, cur) {
+  const correctGuessers = Object.keys(cur.guesses).filter(id => cur.guesses[id] === cur.correctIndex);
+  const totalGuessers = Object.keys(cur.guesses).length;
+  correctGuessers.forEach(id => { state.game.scores[id] = (state.game.scores[id] || 0) + 1; });
+  const authorWon = totalGuessers > 0 && correctGuessers.length === 0;
   if (authorWon && state.game.scores[cur.authorId] !== undefined) {
     state.game.scores[cur.authorId] += 1;
   }
@@ -160,12 +178,31 @@ module.exports = async (req, res) => {
           state.gameContentBank.truefalse.push({ authorId: cur.authorId, targetId, statement, isTrue: cur.isTrue, ts: Date.now() });
           if (state.gameContentBank.truefalse.length > 60) state.gameContentBank.truefalse.shift();
         } else if (cur.type === 'truefalse' && cur.phase === 'guess') {
-          if (actorId === cur.authorId) throw new ApiError(403, 'du kan ikke gætte på dit eget udsagn');
+          if (cur.authorId && actorId === cur.authorId) throw new ApiError(403, 'du kan ikke gætte på dit eget udsagn');
           cur.guesses[actorId] = !!payload.guess;
-          if (Object.keys(cur.guesses).length >= players.length - 1) resolveTrueFalseGuess(state, cur);
+          // Ved et "verdens-brok"-udsagn (isWorld) er der ingen forfatter der
+          // sidder over — ALLE spillere gætter, så tærsklen er players.length
+          // i stedet for players.length - 1.
+          const eligible = cur.authorId ? players.length - 1 : players.length;
+          if (Object.keys(cur.guesses).length >= eligible) resolveTrueFalseGuess(state, cur);
         } else if (cur.type === 'trivia' && cur.phase === 'answer') {
           if (Number.isInteger(payload.choiceIndex)) cur.choices[actorId] = payload.choiceIndex;
           if (Object.keys(cur.choices).length >= players.length) resolveTriviaAnswer(state, cur);
+        } else if (cur.type === 'guessbrok' && cur.phase === 'write') {
+          if (actorId !== cur.authorId) throw new ApiError(403, 'kun den der skriver rundens brok kan gøre dette');
+          const statement = (payload.statement || '').toString().trim().slice(0, 120);
+          if (!statement) throw new ApiError(400, 'skriv et brok');
+          const decoys = pickDecoyBroks(state, 3);
+          const { options, correctIndex } = buildOptions(statement, decoys);
+          cur.statement = statement;
+          cur.options = options;
+          cur.correctIndex = correctIndex;
+          cur.phase = 'guess';
+          cur.guesses = {};
+        } else if (cur.type === 'guessbrok' && cur.phase === 'guess') {
+          if (actorId === cur.authorId) throw new ApiError(403, 'du kan ikke gætte på dit eget brok');
+          if (Number.isInteger(payload.choiceIndex)) cur.guesses[actorId] = payload.choiceIndex;
+          if (Object.keys(cur.guesses).length >= players.length - 1) resolveGuessBrok(state, cur);
         } else {
           throw new ApiError(400, 'ugyldig handling lige nu');
         }
@@ -219,6 +256,13 @@ module.exports = async (req, res) => {
           resolveTrueFalseGuess(state, cur);
         } else if (cur.type === 'trivia' && cur.phase === 'answer') {
           resolveTriviaAnswer(state, cur);
+        } else if (cur.type === 'guessbrok' && cur.phase === 'write') {
+          // Samme mønster som sandt/falsk: forfatteren nåede aldrig at
+          // skrive et brok — spring runden over i stedet for at hænge.
+          cur.phase = 'skipped';
+          cur.readyIds = [];
+        } else if (cur.type === 'guessbrok' && cur.phase === 'guess') {
+          resolveGuessBrok(state, cur);
         } else if (cur.phase === 'results' || cur.phase === 'skipped') {
           goToNextRoundOrEnd(state, players);
         } else {
