@@ -33,7 +33,7 @@
     color:var(--cream); min-height:100dvh; overflow-x:hidden;
     -webkit-tap-highlight-color: transparent; user-select:none;
     -webkit-overflow-scrolling: touch;
-    transition:background .3s ease;
+    transition:background .7s ease;
   }
   /* MrBrok får sit eget mørke "efterforskningslokale" i stedet for det
      fælles teal — sat via en klasse på body, fordi baggrunden ellers er
@@ -206,6 +206,12 @@
   .divider::before, .divider::after{ content:''; flex:1; height:1px; background:rgba(255,247,232,0.15); }
 
   .toast{ position:fixed; top:16px; left:50%; transform:translateX(-50%) translateY(-6px); background:linear-gradient(160deg, #0d4b52, var(--ink)); color:var(--cream); padding:13px 20px; border-radius:18px; font-size:14px; font-weight:600; z-index:80; box-shadow:0 10px 28px rgba(0,0,0,.35), 0 0 0 1px rgba(255,247,232,0.08) inset; opacity:0; transition:opacity .3s ease, transform .3s cubic-bezier(.2,.9,.3,1.2); pointer-events:none; max-width:88vw; text-align:center; line-height:1.4; }
+
+  /* Rolig, ikke-alarmerende banner når nettet mangler — understreger at
+     data bare er "sidst kendte" og IKKE væk/nulstillet, i modsætning til
+     hvis siden bare stille viste en tom/frisk kasse. */
+  .offline-banner{ position:fixed; top:0; left:0; right:0; z-index:90; background:linear-gradient(90deg, var(--coin-dark), var(--coin)); color:var(--ink); font-size:12.5px; font-weight:700; text-align:center; padding:calc(8px + env(safe-area-inset-top)) 16px 8px; transform:translateY(-100%); transition:transform .25s ease; }
+  .offline-banner.show{ transform:translateY(0); }
   .toast.show{opacity:1; transform:translateX(-50%) translateY(6px);}
   .confetti{ position:fixed; inset:0; pointer-events:none; z-index:95; }
   .spinner{ width:16px;height:16px;border-radius:50%; border:2px solid rgba(255,255,255,.4); border-top-color:#fff; display:inline-block; animation:spin .7s linear infinite; }
@@ -214,6 +220,7 @@
 </head>
 <body>
 <div id="app"></div>
+<div class="offline-banner" id="offlineBanner">📡 Ingen forbindelse — viser sidste kendte data</div>
 <div class="toast" id="toast"></div>
 
 <script src="gsap.min.js"></script>
@@ -370,20 +377,46 @@ function escapeHtml(s){ const d = document.createElement('div'); d.textContent =
 
 /* ============ API ============ */
 async function api(path, body){
-  const r = await fetch('/api/' + path, {
-    method: body ? 'POST' : 'GET',
-    headers: body ? {'Content-Type':'application/json'} : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let r;
+  try{
+    // Et svagt/hængende signal fejler ikke altid hurtigt af sig selv — uden
+    // en øvre grænse kan et fetch-kald hænge langt længere end brugeren
+    // gider vente, i stedet for at vise offline-tilstanden. 8 sek er rigeligt
+    // for et normalt svar, men kort nok til at føles responsivt.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(()=>controller.abort(), 8000);
+    try{
+      r = await fetch('/api/' + path, {
+        method: body ? 'POST' : 'GET',
+        headers: body ? {'Content-Type':'application/json'} : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
+    }finally{ clearTimeout(timeoutId); }
+  }catch(networkErr){
+    // fetch selv fejlede (offline, DNS, timeout...) — adskil det tydeligt
+    // fra et rigtigt API-svar som "ukendt brokkekasse", som er noget helt
+    // andet. Bruges bl.a. til IKKE at vise "rummet findes ikke længere" når
+    // det bare er nettet der mangler.
+    const err = new Error('Ingen forbindelse');
+    err.isNetworkError = true;
+    throw err;
+  }
   const data = await r.json().catch(()=>({}));
   if(!r.ok) throw new Error(data.error || 'Noget gik galt');
   return data;
+}
+
+function setOfflineBanner(show){
+  const el = document.getElementById('offlineBanner');
+  if(el) el.classList.toggle('show', !!show);
 }
 
 let lastStateJSON = null;
 async function refreshState(silent){
   try{
     const { state: s } = await api('state?room=' + encodeURIComponent(roomId) + '&member=' + encodeURIComponent((profile && profile.memberId) || ''));
+    setOfflineBanner(false);
     const json = JSON.stringify(s);
     if(silent && json === lastStateJSON) return; // intet nyt — undgå at afbryde en igangværende scroll unødigt
     lastStateJSON = json;
@@ -392,9 +425,23 @@ async function refreshState(silent){
     if(silent && (activeApp === 'spil' || activeApp === 'mrbrok') && (typingTag === 'TEXTAREA' || typingTag === 'INPUT')) return; // undgå at nulstille et svar man er ved at skrive i Brokspillet/MrBrok
     render();
   }catch(e){
+    if(e.isNetworkError){
+      // Vis den rolige banner i stedet for en fejl-toast — state rører vi
+      // slet ikke, så det der allerede står på skærmen (fx 15€ i puljen)
+      // bliver stående uændret, i stedet for at se nulstillet ud.
+      setOfflineBanner(true);
+      return;
+    }
     if(!silent) toast('Kunne ikke hente data: ' + e.message);
   }
 }
+window.addEventListener('online', ()=>{
+  setOfflineBanner(false);
+  if(!roomId) return;
+  if(!state) enterRoom(); // aldrig kommet ind i rummet endnu — prøv forfra i stedet for bare at polle
+  else refreshState(true);
+});
+window.addEventListener('offline', ()=> setOfflineBanner(true));
 function startPolling(){
   if(polling) clearInterval(polling);
   polling = setInterval(()=>refreshState(true), 3000);
@@ -408,6 +455,18 @@ document.addEventListener('visibilitychange', ()=>{
     startPolling();
   }
 });
+
+function renderOfflineRetry(){
+  app.innerHTML = `
+    <div class="onboard">
+      <div class="emoji">📡</div>
+      <h1>Ingen forbindelse</h1>
+      <p>Kan ikke hente jeres brokkekasse lige nu — men intet er slettet, den venter bare på serveren. Prøv igen når du har forbindelse.</p>
+      <button class="sheet-btn primary" id="offlineRetryBtn" style="margin-top:0;">🔄 Prøv igen</button>
+    </div>
+  `;
+  document.getElementById('offlineRetryBtn').onclick = enterRoom;
+}
 
 /* ============ APP ENTRY ============ */
 const app = document.getElementById('app');
@@ -427,6 +486,14 @@ async function enterRoom(){
     const { state: s } = await api('state?room=' + encodeURIComponent(roomId) + '&member=' + encodeURIComponent((profile && profile.memberId) || ''));
     state = s;
   }catch(e){
+    if(e.isNetworkError){
+      // VIGTIGT: dette er IKKE "rummet findes ikke" — det er bare ingen
+      // forbindelse lige nu. At vise "opret et nyt rum" her ville se ud som
+      // om alt (fx puljen) var væk, selvom data stadig ligger urørt på
+      // serveren og bare ikke kan hentes lige nu.
+      renderOfflineRetry();
+      return;
+    }
     renderCreateOrJoin('Den brokkekasse findes ikke længere. Opret en ny, eller tjek linket.');
     return;
   }
@@ -689,7 +756,11 @@ function render(){
   if(activeApp === 'spil' && !state.gameEnabled) activeApp = 'kasse';
   if(activeApp === 'mrbrok' && !state.mrbrokEnabled) activeApp = 'kasse';
   if(activeApp === 'kasse' && !state.kasseEnabled) activeApp = state.gameEnabled ? 'spil' : (state.mrbrokEnabled ? 'mrbrok' : 'kasse');
-  document.body.classList.toggle('theme-mrbrok', activeApp === 'mrbrok');
+  // Det mørke "efterforskningslokale" hører kun til lobbyen, før spillet er
+  // i gang — når selve spillet starter, falder baggrunden tilbage til det
+  // fælles teal (bliver en blød fade takket være transition på body), og
+  // kun headerens accent forbliver mørk/guld foroven.
+  document.body.classList.toggle('theme-mrbrok', activeApp === 'mrbrok' && !(state.mrbrok && state.mrbrok.active));
   if(activeApp === 'spil') return renderGameScreen();
   if(activeApp === 'mrbrok') return renderMrbrokScreen();
   const prevMain = document.getElementById('main');
