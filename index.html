@@ -149,6 +149,16 @@
   .sheet-btn.ghost{background:transparent; color:rgba(5,32,36,0.5); font-weight:600; font-size:14px; padding:8px;}
   .sheet-btn.danger{background:var(--coral); color:#fff;}
 
+  /* Grupperet handlings-liste i sheets (fx ☰-menuen) — en samlet kortflade
+     med ikon-chip + label pr. række, i stedet for løstflydende ghost-knapper
+     uden nogen visuel beholder omkring sig. */
+  .menu-row-list{ background:rgba(5,32,36,0.045); border-radius:18px; margin-top:14px; overflow:hidden; }
+  .menu-row{ display:flex; align-items:center; gap:12px; padding:13px 14px; cursor:pointer; border-bottom:1px solid rgba(5,32,36,0.07); }
+  .menu-row:last-child{ border-bottom:none; }
+  .menu-row-icon{ width:32px; height:32px; border-radius:10px; background:rgba(5,32,36,0.06); display:flex; align-items:center; justify-content:center; font-size:15px; flex:0 0 auto; }
+  .menu-row-label{ font-family:'Baloo 2',sans-serif; font-weight:700; font-size:14.5px; color:var(--ink); flex:1; }
+  .menu-row-chevron{ color:rgba(5,32,36,0.25); font-size:14px; }
+
   .vote-progress{ display:flex; align-items:center; gap:10px; margin:6px 0 16px; font-size:13.5px; font-weight:600; color:rgba(5,32,36,0.6); }
   .vote-progress .bar{flex:1; height:8px; background:rgba(5,32,36,0.1); border-radius:10px; overflow:hidden;}
   .vote-progress .bar > div{height:100%; background:var(--coral); border-radius:10px; transition:width .25s;}
@@ -723,9 +733,11 @@ function openAppMenuSheet(){
         <div class="app-pick-label">MrBrok</div>
       </div>` : ''}
     </div>
-    ${showPushBell ? `<button class="sheet-btn ghost" id="menuPushBtn">🔔 Slå push til</button>` : ''}
-    <button class="sheet-btn ghost" id="menuShareBtn">📤 Del link</button>
-    <button class="sheet-btn ghost" id="menuLeaveBtn">🚪 Skift/forlad rum</button>
+    <div class="menu-row-list">
+      ${showPushBell ? `<div class="menu-row" id="menuPushBtn"><div class="menu-row-icon">🔔</div><div class="menu-row-label">Slå push til</div><span class="menu-row-chevron">›</span></div>` : ''}
+      <div class="menu-row" id="menuShareBtn"><div class="menu-row-icon">📤</div><div class="menu-row-label">Del link</div><span class="menu-row-chevron">›</span></div>
+      <div class="menu-row" id="menuLeaveBtn"><div class="menu-row-icon">🚪</div><div class="menu-row-label">Skift/forlad rum</div><span class="menu-row-chevron">›</span></div>
+    </div>
   `, ()=>{
     document.querySelectorAll('[data-goto-app]').forEach(el=>{
       el.onclick = ()=>{ activeApp = el.dataset.gotoApp; closeSheet(); render(); };
