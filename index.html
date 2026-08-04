@@ -1061,7 +1061,7 @@ function gameReadyHtml(g, cur){
   return `
     ${gameProgressHtml(readyCount, g.players.length, 'er klar')}
     ${already
-      ? `<p class="hint" style="text-align:center; color:rgba(255,247,232,0.6);">Venter på de andre...</p>`
+      ? `<p class="hint" style="text-align:center; color:rgba(255,247,232,0.75); font-size:15px; font-weight:700;">⏳ Venter på de andre...</p>`
       : `<button class="game-btn" id="readyBtn">✅ Klar til næste runde</button>`}
   `;
 }
@@ -1112,14 +1112,14 @@ function quiplashHtml(g, cur){
     const answered = Object.keys(cur.answers||{}).length;
     const mine = profile && cur.answers[profile.memberId];
     return `
-      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · 🎭 Skriv-og-stem</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
+      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · 🎭 Skriv-og-stem</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
       <div class="game-card" id="gameCard">
         <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:0 0 14px; line-height:1.3;">${escapeHtml(cur.prompt)}</p>
         <textarea id="quipInput" rows="2" maxlength="120" placeholder="Dit svar...">${mine?escapeHtml(mine):''}</textarea>
         <button class="game-btn" id="quipSubmitBtn" style="margin-top:10px;">🔒 Lås dit svar</button>
       </div>
       ${gameProgressHtml(answered, g.players.length, 'har svaret')}
-      ${mine ? `<p class="hint" style="text-align:center; color:rgba(255,247,232,0.6);">Venter på de andre...</p>` : ''}
+      ${mine ? `<p class="hint" style="text-align:center; color:rgba(255,247,232,0.75); font-size:15px; font-weight:700;">⏳ Venter på de andre...</p>` : ''}
     `;
   }
   if(cur.phase === 'vote'){
@@ -1134,16 +1134,16 @@ function quiplashHtml(g, cur){
       </div>
     `).join('');
     return `
-      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Stem på det bedste svar</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
+      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Stem på det bedste svar</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
       <p class="hint" style="margin:0 0 10px; color:rgba(255,247,232,0.75);">${escapeHtml(cur.prompt)}</p>
       ${rows || '<p class="hint">Ingen andre svar at stemme på.</p>'}
       ${gameProgressHtml(votedCount, g.players.length, 'har stemt')}
-      ${myVote ? `<p class="hint" style="text-align:center; color:rgba(255,247,232,0.6);">Venter på de andre...</p>` : ''}
+      ${myVote ? `<p class="hint" style="text-align:center; color:rgba(255,247,232,0.75); font-size:15px; font-weight:700;">⏳ Venter på de andre...</p>` : ''}
     `;
   }
   const winners = (cur.winnerIds||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
   return `
-    <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
+    <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
     <div class="game-card" id="gameCard" style="text-align:center;">
       <p style="margin:0 0 10px;">${escapeHtml(cur.prompt)}</p>
       ${Object.entries(cur.answers||{}).map(([id,text])=>{
@@ -1166,13 +1166,13 @@ function truefalseHtml(g, cur){
   if(cur.phase === 'write'){
     if(!isAuthor){
       return `
-        <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · ⚖️ Sandt eller falsk</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
+        <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · ⚖️ Sandt eller falsk</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
         <div class="empty-state"><span class="emoji">✍️</span><b>${escapeHtml(author?author.name:'?')} skriver et udsagn...</b>Vent til det er klar, så skal I gætte.</div>
       `;
     }
     const chips = state.members.filter(m=>g.players.includes(m.id)).map(m=>`<div class="name-pill ${m.id===profile.memberId?'selected':''}" data-target="${m.id}">${escapeHtml(m.name)}</div>`).join('');
     return `
-      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · ⚖️ Det er dig der skriver!</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
+      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · ⚖️ Det er dig der skriver!</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
       <div class="game-card" id="gameCard">
         <label class="field-label" style="color:rgba(255,247,232,0.7);">Om hvem? (kan være dig selv)</label>
         <div class="name-grid" id="ttTargetGrid">${chips}</div>
@@ -1194,7 +1194,7 @@ function truefalseHtml(g, cur){
     const myGuess = profile && cur.guesses[profile.memberId] !== undefined;
     const badgeLabel = isAuthor ? '⚖️ Sandt eller falsk' : (myGuess ? '⚖️ Sandt eller falsk' : '⚖️ Stem nu: sandt eller opdigtet?');
     return `
-      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · ${badgeLabel}</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
+      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · ${badgeLabel}</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
       <div class="game-card" id="gameCard" style="text-align:center;">
         ${cur.reused ? `<p class="hint" style="margin:0 0 6px; color:rgba(255,201,60,0.85); font-weight:600;">♻️ Genbrugt udsagn fra tidligere</p>` : ''}
         <p class="hint" style="margin:0 0 6px; color:rgba(255,247,232,0.6);">${escapeHtml(author?author.name:'?')} skrev om ${escapeHtml(target?target.name:'?')}:</p>
@@ -1208,13 +1208,13 @@ function truefalseHtml(g, cur){
         `)}
       </div>
       ${gameProgressHtml(guessedCount, eligible, 'har gættet')}
-      ${(myGuess || isAuthor) ? `<p class="hint" style="text-align:center; color:rgba(255,247,232,0.6);">Venter på de andre...</p>` : ''}
+      ${(myGuess || isAuthor) ? `<p class="hint" style="text-align:center; color:rgba(255,247,232,0.75); font-size:15px; font-weight:700;">⏳ Venter på de andre...</p>` : ''}
     `;
   }
   const target = state.members.find(m=>m.id===cur.targetId);
   const correct = (cur.correctGuessers||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
   return `
-    <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
+    <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
     <div class="game-card" id="gameCard" style="text-align:center;">
       <p class="hint" style="color:rgba(255,247,232,0.6);">${escapeHtml(author?author.name:'?')} skrev om ${escapeHtml(target?target.name:'?')}:</p>
       <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px;">"${escapeHtml(cur.statement)}"</p>
@@ -1238,18 +1238,18 @@ function triviaHtml(g, cur){
       </div>
     `).join('');
     return `
-      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · ${cur.isWorld ? '🌍 Verdens-brok' : '🔍 Ægte Brok'}</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
+      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · ${cur.isWorld ? '🌍 Verdens-brok' : '🔍 Ægte Brok'}</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
       <div class="game-card" id="gameCard">
         <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:18px; margin:0 0 14px; line-height:1.3;">${escapeHtml(cur.question)}</p>
         ${opts}
       </div>
       ${gameProgressHtml(answered, g.players.length, 'har svaret')}
-      ${mine !== undefined ? `<p class="hint" style="text-align:center; color:rgba(255,247,232,0.6);">Venter på de andre...</p>` : ''}
+      ${mine !== undefined ? `<p class="hint" style="text-align:center; color:rgba(255,247,232,0.75); font-size:15px; font-weight:700;">⏳ Venter på de andre...</p>` : ''}
     `;
   }
   const correct = (cur.correctGuessers||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
   return `
-    <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
+    <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
     <div class="game-card" id="gameCard" style="text-align:center;">
       <p style="margin:0 0 8px;">${escapeHtml(cur.question)}</p>
       <p style="font-family:'Baloo 2',sans-serif; font-weight:800; color:var(--coin); font-size:18px;">✅ ${escapeHtml(cur.options[cur.correctIndex])}</p>
@@ -1566,7 +1566,7 @@ function mrbrokTurnHtml(m, cur){
   const isAsker = profile && profile.memberId === cur.askerId;
   const isTarget = profile && profile.memberId === cur.targetId;
   const turnNo = cur.turnIndex + 1, totalTurns = cur.pairing.length;
-  const badge = `<div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Omgang ${m.round}/${m.totalRounds} · Tur ${turnNo}/${totalTurns}</span><span id="mrbrokTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>`;
+  const badge = `<div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Omgang ${m.round}/${m.totalRounds} · Tur ${turnNo}/${totalTurns}</span><span id="mrbrokTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>`;
 
   if(cur.phase === 'ask'){
     if(isAsker){
@@ -1612,7 +1612,7 @@ function mrbrokTurnHtml(m, cur){
 }
 
 function mrbrokGuessHtml(m, cur){
-  const badge = `<div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Omgang ${m.round}/${m.totalRounds} · 🤔 Hvem er MrBrok?</span><span id="mrbrokTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>`;
+  const badge = `<div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Omgang ${m.round}/${m.totalRounds} · 🤔 Hvem er MrBrok?</span><span id="mrbrokTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>`;
   const eligible = m.players.length - 1; // alle undtagen MrBrok selv
   if(m.youAreMrBrok){
     return `${badge}<div class="empty-state"><span class="emoji">🕵️</span><b>De andre gætter lige nu...</b>Du kan ikke gætte på dig selv — vent til næste omgang.</div>${gameProgressHtml(cur.guessCount||0, eligible, 'har gættet')}`;

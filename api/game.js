@@ -176,8 +176,16 @@ module.exports = async (req, res) => {
       if (!cur) return res.status(400).json({ error: 'ingen aktiv runde' });
 
       if (cur.type === 'quiplash' && cur.phase === 'answer') {
-        cur.phase = 'vote';
         cur.votes = {};
+        if (Object.keys(cur.answers).length < 2) {
+          // For få nåede at svare inden tiden løb ud — der er intet
+          // meningsfyldt at stemme om (hver spiller ville se "ingen andre
+          // svar at stemme på"), så spring stemme-fasen over og gå direkte
+          // til et resultat uden vinder i stedet for at gå i stå der.
+          resolveQuiplashVote(state, cur);
+        } else {
+          cur.phase = 'vote';
+        }
       } else if (cur.type === 'quiplash' && cur.phase === 'vote') {
         resolveQuiplashVote(state, cur);
       } else if (cur.type === 'truefalse' && cur.phase === 'guess') {
