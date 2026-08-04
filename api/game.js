@@ -17,20 +17,21 @@ function resolveQuiplashVote(state, cur) {
   cur.readyIds = [];
 }
 
-// Point-fordeling: hver spiller der gætter RIGTIGT får 2 point. Forfatteren
-// får til gengæld 1 point for hver spiller de FORVIRREDE (gættede forkert)
-// — så forfatteren reelt konkurrerer mod gætterne om den samme pulje af
-// point i stedet for en alt-eller-intet-bonus.
+// Point-fordeling: gæt rigtigt = 1 point. Narrer forfatteren FLERTALLET af
+// gætterne = 1 point til forfatteren. Simpelt og loftbelagt, så det ikke kan
+// løbe løbsk hvis man narrer alle på én gang.
 function resolveTrueFalseGuess(state, cur) {
   const correctGuessers = Object.keys(cur.guesses).filter(id => cur.guesses[id] === cur.isTrue);
   const fooledGuessers = Object.keys(cur.guesses).filter(id => cur.guesses[id] !== cur.isTrue);
-  correctGuessers.forEach(id => { state.game.scores[id] = (state.game.scores[id] || 0) + ROUND_POINTS; });
-  if (state.game.scores[cur.authorId] !== undefined && fooledGuessers.length) {
-    state.game.scores[cur.authorId] += fooledGuessers.length;
+  const totalGuessers = correctGuessers.length + fooledGuessers.length;
+  correctGuessers.forEach(id => { state.game.scores[id] = (state.game.scores[id] || 0) + 1; });
+  const authorWon = totalGuessers > 0 && fooledGuessers.length > totalGuessers / 2;
+  if (authorWon && state.game.scores[cur.authorId] !== undefined) {
+    state.game.scores[cur.authorId] += 1;
   }
   cur.phase = 'results';
   cur.correctGuessers = correctGuessers;
-  cur.fooledCount = fooledGuessers.length;
+  cur.authorWon = authorWon;
   cur.readyIds = [];
 }
 

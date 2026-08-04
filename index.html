@@ -1077,8 +1077,8 @@ function truefalseHtml(g, cur){
       <p class="hint" style="color:rgba(255,247,232,0.6);">${escapeHtml(author?author.name:'?')} skrev om ${escapeHtml(target?target.name:'?')}:</p>
       <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px;">"${escapeHtml(cur.statement)}"</p>
       <p style="margin-top:10px; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:18px; color:${cur.isTrue?'var(--coin)':'var(--coral)'};">${cur.isTrue ? '✅ Det var faktisk SANDT' : '🎭 Det var OPDIGTET'}</p>
-      <p class="hint" style="margin-top:8px; color:rgba(255,247,232,0.7);">${correct.length ? '🏆 ' + correct.map(m=>escapeHtml(m.name)).join(', ') + ' gættede rigtigt (+2 point hver)' : 'Ingen gættede rigtigt.'}</p>
-      ${cur.fooledCount ? `<p class="hint" style="color:rgba(255,201,60,0.85); font-weight:600;">😏 ${escapeHtml(author?author.name:'?')} narrede ${cur.fooledCount} spiller${cur.fooledCount===1?'':'e'} (+${cur.fooledCount} point)</p>` : ''}
+      <p class="hint" style="margin-top:8px; color:rgba(255,247,232,0.7);">${correct.length ? '🏆 ' + correct.map(m=>escapeHtml(m.name)).join(', ') + ' gættede rigtigt (+1)' : 'Ingen gættede rigtigt.'}</p>
+      ${cur.authorWon ? `<p class="hint" style="color:rgba(255,201,60,0.85); font-weight:600;">😏 ${escapeHtml(author?author.name:'?')} narrede flertallet (+1)</p>` : ''}
     </div>
     ${gameReadyHtml(g, cur)}
   `;
