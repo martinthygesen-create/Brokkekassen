@@ -697,6 +697,7 @@ function openAppMenuSheet(){
     ${showPushBell ? `<button class="sheet-btn ghost" id="menuPushBtn">🔔 Slå push-beskeder til</button>` : ''}
     <button class="sheet-btn ghost" id="menuShareBtn">📤 Del invite-link</button>
     <button class="sheet-btn ghost" id="menuLeaveBtn">🚪 Skift eller forlad rum</button>
+    ${(isAdmin() && state.game && state.game.active) ? `<button class="sheet-btn ghost" id="menuRestartGameBtn" style="color:rgba(255,107,74,0.85);">🔄 Genstart Brokspillet</button>` : ''}
     <button class="sheet-btn ghost" id="menuCloseBtn">Luk menu</button>
   `, ()=>{
     document.querySelectorAll('[data-goto-app]').forEach(el=>{
@@ -706,6 +707,11 @@ function openAppMenuSheet(){
     if(pushBtn) pushBtn.onclick = async ()=>{ const ok = await enablePush(); if(ok){ closeSheet(); render(); } };
     document.getElementById('menuShareBtn').onclick = ()=>{ closeSheet(); setTimeout(openShareSheet, 230); };
     document.getElementById('menuLeaveBtn').onclick = ()=>{ closeSheet(); setTimeout(openLeaveRoomSheet, 230); };
+    const restartBtn = document.getElementById('menuRestartGameBtn');
+    if(restartBtn) restartBtn.onclick = async ()=>{
+      try{ await gameApi('end', {}); closeSheet(); toast('🔄 Brokspillet er nulstillet'); }
+      catch(e){ toast(e.message); }
+    };
     document.getElementById('menuCloseBtn').onclick = closeSheet;
   });
 }

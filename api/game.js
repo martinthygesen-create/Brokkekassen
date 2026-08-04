@@ -1,5 +1,6 @@
 const { getState, setState, uid } = require('./_lib/store');
 const { beginRound } = require('./_lib/game');
+const { pushToMembers } = require('./_lib/push');
 
 const TOTAL_ROUNDS = 5;
 const ROUND_POINTS = 2;
@@ -88,6 +89,16 @@ module.exports = async (req, res) => {
       state.game = { active: true, wager, players, round: 0, totalRounds: TOTAL_ROUNDS, scores, current: null };
       beginRound(state, state.members.filter(m => players.includes(m.id)));
       await setState(roomId, state);
+
+      const starter = state.members.find(m => m.id === actorId);
+      try {
+        await pushToMembers(state, [actorId], {
+          title: '🎲 Brokspillet er i gang!',
+          body: `${starter ? starter.name : 'Nogen'} startede et spil — kom med!`,
+          url: '/?r=' + roomId,
+        });
+      } catch (e) { /* push-fejl må ikke vælte selve spilstarten */ }
+
       return res.status(200).json({ state });
     }
 
