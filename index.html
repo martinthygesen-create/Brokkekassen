@@ -19,7 +19,7 @@
     --sea-deep:#073B40; --sea:#0B4F55; --sea-light:#137a7d;
     --coin:#FFC93C; --coin-dark:#E8A317; --coral:#FF6B4A;
     --cream:#FFF7E8; --ink:#052024; --ink-soft:#0b3a3f;
-    --mystery:#9B7BFF; --mystery-dark:#6B4FD6; /* MrBrok-nuance — signalerer "et andet rum" uden at bryde det fælles teal-tema */
+    --noir:#0A1416; --noir-deep:#050B0C; /* MrBrok-nuance — mørkt "efterforskningslokale", stadig i teal-familien i stedet for en fremmed farve */
   }
   *{box-sizing:border-box;}
   html,body{height:100%;}
@@ -33,6 +33,16 @@
     color:var(--cream); min-height:100dvh; overflow-x:hidden;
     -webkit-tap-highlight-color: transparent; user-select:none;
     -webkit-overflow-scrolling: touch;
+    transition:background .3s ease;
+  }
+  /* MrBrok får sit eget mørke "efterforskningslokale" i stedet for det
+     fælles teal — sat via en klasse på body, fordi baggrunden ellers er
+     fast/fælles for alle tre skærme. */
+  body.theme-mrbrok{
+    background:
+      radial-gradient(ellipse at 30% -10%, rgba(255,201,60,0.14) 0%, transparent 55%),
+      radial-gradient(ellipse at 100% 0%, rgba(255,201,60,0.06) 0%, transparent 60%),
+      linear-gradient(180deg, var(--noir) 0%, var(--noir-deep) 100%);
   }
   h1,h2,h3,.display{font-family:'Baloo 2', sans-serif;}
   button{font-family:inherit;}
@@ -53,10 +63,9 @@
     -webkit-mask-image:linear-gradient(180deg, #000 0%, transparent 100%); mask-image:linear-gradient(180deg, #000 0%, transparent 100%);
   }
   header.theme-spil::before{ background:radial-gradient(ellipse at 30% 0%, rgba(255,201,60,0.28), transparent 70%); }
-  header.theme-mrbrok::before{ background:radial-gradient(ellipse at 30% 0%, rgba(155,123,255,0.28), transparent 70%); }
-  header.theme-mrbrok .title span{ color:var(--mystery); }
-  header.theme-mrbrok #btnAppMenu, header.theme-mrbrok #btnGameAdminMenu, header.theme-mrbrok #btnMrbrokAdminMenu{ border-color:rgba(155,123,255,0.4); }
+  header.theme-mrbrok::before{ background:radial-gradient(ellipse at 30% 0%, rgba(255,201,60,0.2), transparent 70%); }
   header.theme-spil #btnAppMenu, header.theme-spil #btnGameAdminMenu{ border-color:rgba(255,201,60,0.4); }
+  header.theme-mrbrok #btnAppMenu, header.theme-mrbrok #btnGameAdminMenu, header.theme-mrbrok #btnMrbrokAdminMenu{ border-color:rgba(255,201,60,0.3); }
   .day-chip{ display:inline-block; font-size:12px; font-weight:600; background:rgba(255,247,232,0.1); border:1px solid rgba(255,247,232,0.18); padding:5px 10px; border-radius:100px; white-space:nowrap; vertical-align:middle; }
 
   .jar-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; padding:6px 20px 4px; }
@@ -680,6 +689,7 @@ function render(){
   if(activeApp === 'spil' && !state.gameEnabled) activeApp = 'kasse';
   if(activeApp === 'mrbrok' && !state.mrbrokEnabled) activeApp = 'kasse';
   if(activeApp === 'kasse' && !state.kasseEnabled) activeApp = state.gameEnabled ? 'spil' : (state.mrbrokEnabled ? 'mrbrok' : 'kasse');
+  document.body.classList.toggle('theme-mrbrok', activeApp === 'mrbrok');
   if(activeApp === 'spil') return renderGameScreen();
   if(activeApp === 'mrbrok') return renderMrbrokScreen();
   const prevMain = document.getElementById('main');
