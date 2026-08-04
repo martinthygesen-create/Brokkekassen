@@ -92,15 +92,18 @@ function generateTriviaQuestion(state) {
 }
 
 // Sætter indholdet af en ny runde op — vælger tilfældigt mellem de tre
-// rundetyper og bygger den nødvendige startdata for hver.
-function beginRound(state) {
+// rundetyper og bygger den nødvendige startdata for hver. `players` er de
+// medlemmer der reelt er med i DENNE runde af spillet (kan være en delmængde
+// af hele rummet) — trivia-spørgsmål handler stadig om hele rummets rigtige
+// brok-historik, uanset hvem der spiller med lige nu.
+function beginRound(state, players) {
   state.game.round += 1;
   const type = pickRandom(['quiplash', 'truefalse', 'trivia']);
   if (type === 'quiplash') {
-    const { prompt, targetId } = pickQuiplashPrompt(state.members);
+    const { prompt, targetId } = pickQuiplashPrompt(players);
     state.game.current = { type, phase: 'answer', prompt, targetId, answers: {} };
   } else if (type === 'truefalse') {
-    const author = pickRandom(state.members);
+    const author = pickRandom(players);
     state.game.current = { type, phase: 'write', authorId: author.id, targetId: null, statement: null, isTrue: null, guesses: {} };
   } else {
     const q = generateTriviaQuestion(state);

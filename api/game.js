@@ -6,7 +6,7 @@ const ROUND_POINTS = 2;
 
 function endGame(state) {
   const scores = state.game.scores;
-  const memberIds = state.members.map(m => m.id);
+  const memberIds = state.game.players;
   const minScore = Math.min(...memberIds.map(id => scores[id] || 0));
   const maxScore = Math.max(...memberIds.map(id => scores[id] || 0));
   const loserIds = memberIds.filter(id => (scores[id] || 0) === minScore);
@@ -42,23 +42,27 @@ module.exports = async (req, res) => {
     if (!state.game) state.game = { active: false };
 
     if (action === 'start') {
-      if (state.members.length < 2) return res.status(400).json({ error: 'kræver mindst 2 medlemmer' });
       if (state.game.active) return res.status(409).json({ error: 'spillet er allerede i gang' });
+      const requested = Array.isArray(req.body.playerIds) ? req.body.playerIds : state.members.map(m => m.id);
+      const players = state.members.map(m => m.id).filter(id => requested.includes(id));
+      if (players.length < 2) return res.status(400).json({ error: 'vælg mindst 2 spillere' });
       const wager = req.body.wager === 'euro' ? 'euro' : 'fun';
       const scores = {};
-      state.members.forEach(m => (scores[m.id] = 0));
-      state.game = { active: true, wager, round: 0, totalRounds: TOTAL_ROUNDS, scores, current: null };
-      beginRound(state);
+      players.forEach(id => (scores[id] = 0));
+      state.game = { active: true, wager, players, round: 0, totalRounds: TOTAL_ROUNDS, scores, current: null };
+      beginRound(state, state.members.filter(m => players.includes(m.id)));
       await setState(roomId, state);
       return res.status(200).json({ state });
     }
 
     if (!state.game.active) return res.status(409).json({ error: 'der er ikke noget spil i gang' });
     const cur = state.game.current;
+    const players = state.game.players || state.members.map(m => m.id);
 
     if (action === 'submit') {
       const { payload } = req.body || {};
       if (!cur || !payload) return res.status(400).json({ error: 'mangler data' });
+      if (!players.includes(actorId)) return res.status(403).json({ error: 'du er ikke med i denne runde af Brokspillet' });
 
       if (cur.type === 'quiplash' && cur.phase === 'answer') {
         const text = (payload.text || '').toString().trim().slice(0, 120);
@@ -67,7 +71,7 @@ module.exports = async (req, res) => {
         if (payload.votedFor && payload.votedFor !== actorId) cur.votes[actorId] = payload.votedFor;
       } else if (cur.type === 'truefalse' && cur.phase === 'write') {
         if (actorId !== cur.authorId) return res.status(403).json({ error: 'kun den der skriver rundens udsagn kan gøre dette' });
-        const targetId = payload.targetId && state.members.find(m => m.id === payload.targetId) ? payload.targetId : cur.authorId;
+        const targetId = payload.targetId && players.includes(payload.targetId) ? payload.targetId : cur.authorId;
         const statement = (payload.statement || '').toString().trim().slice(0, 120);
         if (!statement) return res.status(400).json({ error: 'skriv et udsagn' });
         cur.targetId = targetId;
@@ -118,7 +122,7 @@ module.exports = async (req, res) => {
         if (state.game.round >= state.game.totalRounds) {
           endGame(state);
         } else {
-          beginRound(state);
+          beginRound(state, state.members.filter(m => players.includes(m.id)));
         }
       } else {
         return res.status(400).json({ error: 'kan ikke gå videre lige nu' });

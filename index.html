@@ -183,6 +183,10 @@ let state = null;
 let activeTab = 'feed';
 let activeApp = 'kasse'; // 'kasse' | 'spil' — hvilken af de to "apps" i samme rum der vises
 let gameWager = 'fun'; // 'fun' | 'euro' — valgt i Brokspillets lobby, før spillet startes
+let gameSelectedPlayers = null; // memberId[] valgt i lobbyen — sættes til alle medlemmer første gang lobbyen vises
+let gameTimerInterval = null;
+let gameTimerDeadline = null;
+let lastCelebratedKey = null; // undgår at fyre konfetti/hån-toast flere gange for samme rundes resultat
 let brokListSubTab = 'alltime'; // 'today' | 'alltime' — undersort inde i Broklisten-fanen; alltime er det vigtigste og vises først
 let polling = null;
 let toastTimer = null;
@@ -390,6 +394,8 @@ function rememberRoom(){
   localStorage.setItem('bk_myRooms', JSON.stringify(rooms));
 }
 async function switchToRoom(rid){
+  if(gameTimerInterval){ clearInterval(gameTimerInterval); gameTimerInterval = null; }
+  activeApp = 'kasse';
   roomId = rid.toLowerCase();
   profile = JSON.parse(localStorage.getItem('bk_profile_' + roomId) || 'null');
   const u = new URL(location.href); u.search = '?r=' + roomId;
@@ -398,6 +404,7 @@ async function switchToRoom(rid){
 }
 function leaveRoom(){
   if(polling){ clearInterval(polling); polling = null; }
+  if(gameTimerInterval){ clearInterval(gameTimerInterval); gameTimerInterval = null; }
   localStorage.removeItem('bk_lastRoom');
   roomId = null; profile = null; state = null;
   const u = new URL(location.href); u.search = '';
@@ -587,7 +594,7 @@ function render(){
   app.innerHTML = `
     <header>
       <div class="title" style="font-size:30px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
-        <span>Brokke<span>kassen</span> 🏖️</span>
+        <span>Brokke<span>kassen</span></span>
         <button id="btnAppMenu" title="Menu" style="width:32px; height:32px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.85); border-radius:100px; flex:0 0 auto;">☰</button>
       </div>
       <span class="day-chip" style="align-self:flex-start; font-size:11px; color:rgba(255,247,232,0.85);">Dag ${dayCount()}</span>
@@ -663,6 +670,87 @@ async function gameApi(action, extra){
   }catch(e){ toast(e.message); }
 }
 
+// Auto-fremdrift: hvis en runde bare står stille (ingen svarer/rykker den
+// videre), tæller denne ned og trykker selv "gå videre" — så spillet aldrig
+// reelt går i stå bare fordi nogen glemmer at trykke.
+const GAME_PHASE_SECONDS = {
+  'quiplash:answer': 60, 'quiplash:vote': 30, 'quiplash:results': 15,
+  'truefalse:write': 45, 'truefalse:guess': 25, 'truefalse:results': 15,
+  'trivia:answer': 25, 'trivia:results': 15,
+};
+function startGameTimer(cur){
+  clearInterval(gameTimerInterval);
+  gameTimerInterval = null;
+  if(!cur || cur.type === 'gameover') return;
+  const secs = GAME_PHASE_SECONDS[cur.type + ':' + cur.phase];
+  if(!secs) return;
+  gameTimerDeadline = Date.now() + secs*1000;
+  const tick = ()=>{
+    const el = document.getElementById('gameTimer');
+    const left = Math.max(0, Math.ceil((gameTimerDeadline - Date.now())/1000));
+    if(el) el.textContent = '⏱️ ' + left + 's';
+    if(left <= 0){
+      clearInterval(gameTimerInterval);
+      gameTimerInterval = null;
+      gameApi('advance', {});
+    }
+  };
+  tick();
+  gameTimerInterval = setInterval(tick, 1000);
+}
+
+const GAME_TAUNTS = [
+  n => `😈 ${n} vandt runden — resten kan pakke sammen.`,
+  n => `👑 ${n} regerer denne runde. Hån frit.`,
+  n => `🔥 ${n} smadrede runden!`,
+  n => `🎯 ${n} ramte plet — de andre gjorde ikke.`,
+];
+function randomTaunt(name){ return GAME_TAUNTS[Math.floor(Math.random()*GAME_TAUNTS.length)](name); }
+
+function fireConfetti(centerEl){
+  if(typeof gsap === 'undefined') return;
+  const rect = centerEl ? centerEl.getBoundingClientRect() : { left: innerWidth/2, top: 140, width: 0 };
+  const cx = rect.left + rect.width/2, cy = rect.top + 20;
+  const layer = document.createElement('div');
+  layer.className = 'confetti';
+  document.body.appendChild(layer);
+  for(let i=0;i<28;i++){
+    const c = document.createElement('div');
+    c.textContent = ['🎉','✨','🪙','🎊','🔥'][Math.floor(Math.random()*5)];
+    c.style.cssText = `position:absolute; left:${cx}px; top:${cy}px; font-size:${14+Math.random()*14}px;`;
+    layer.appendChild(c);
+    const ang = Math.random()*Math.PI*2;
+    const dist = 70 + Math.random()*140;
+    gsap.set(c, { xPercent:-50, yPercent:-50, opacity:1 });
+    gsap.to(c, { x: Math.cos(ang)*dist, y: Math.sin(ang)*dist - 30, rotate: Math.random()*360, duration: 0.9+Math.random()*0.5, ease:'power1.out' });
+    gsap.to(c, { opacity:0, duration:0.6, delay:0.5 });
+  }
+  setTimeout(()=>layer.remove(), 1700);
+}
+
+function celebrateGameRound(g){
+  const cur = g.current;
+  if(!cur) return;
+  let winnerNames = [], key = null;
+  if(cur.phase === 'results'){
+    key = `r${g.round}-${cur.type}`;
+    const ids = cur.type === 'quiplash' ? (cur.winnerIds||[]) : (cur.correctGuessers||[]);
+    winnerNames = ids.map(id=>state.members.find(m=>m.id===id)).filter(Boolean).map(m=>m.name);
+  } else if(cur.type === 'gameover'){
+    key = 'gameover';
+    winnerNames = (cur.winnerIds||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean).map(m=>m.name);
+  }
+  if(!winnerNames.length || key === lastCelebratedKey) return;
+  lastCelebratedKey = key;
+  const card = document.getElementById('gameCard') || document.getElementById('gameoverReveal');
+  fireConfetti(card);
+  if(cur.type === 'gameover'){
+    toast(`👑 ${winnerNames.join(' & ')} vandt hele spillet! Hån frit resten af aftenen.`);
+  }else{
+    toast(randomTaunt(winnerNames.join(' & ')));
+  }
+}
+
 function renderGameScreen(){
   const g = state.game || { active:false };
   app.innerHTML = `
@@ -680,11 +768,24 @@ function renderGameScreen(){
   if(card && typeof gsap !== 'undefined'){
     gsap.fromTo(card, { opacity:0, y:14, scale:.97 }, { opacity:1, y:0, scale:1, duration:.45, ease:'power2.out' });
   }
+  if(g.active && profile && g.players && g.players.includes(profile.memberId)){
+    startGameTimer(g.current);
+  }else{
+    clearInterval(gameTimerInterval);
+    gameTimerInterval = null;
+  }
+  celebrateGameRound(g);
 }
 
 function gameBodyHtml(g){
   if(!g.active || !g.current) return gameLobbyHtml();
   const cur = g.current;
+  if(cur.type !== 'gameover' && profile && g.players && !g.players.includes(profile.memberId)){
+    return `
+      <div class="game-badge">Runde ${g.round}/${g.totalRounds} · 👀 Du kigger med</div>
+      <div class="empty-state"><span class="emoji">🍿</span><b>Du er ikke med i denne omgang</b>De andre spiller videre — du er velkommen næste spil.</div>
+    `;
+  }
   if(cur.type === 'gameover') return gameOverHtml(g, cur);
   if(cur.type === 'quiplash') return quiplashHtml(g, cur);
   if(cur.type === 'truefalse') return truefalseHtml(g, cur);
@@ -714,21 +815,26 @@ function gameProgressHtml(count, total, label){
 }
 
 function gameLobbyHtml(){
+  if(!gameSelectedPlayers) gameSelectedPlayers = state.members.map(m=>m.id);
+  const chips = state.members.map(m=>`<div class="name-pill ${gameSelectedPlayers.includes(m.id)?'selected':''}" data-player="${m.id}">${escapeHtml(m.name)}</div>`).join('');
+  const enough = gameSelectedPlayers.length >= 2;
   return `
     <div class="empty-state" style="padding-top:26px;">
       <span class="emoji">🎲</span>
       <b>Brokspillet</b>
-      Skriv-og-stem, sandt/falsk og trivia om jeres egen brok-historik. ${state.members.length} spillere klar.
+      Skriv-og-stem, sandt/falsk og trivia om jeres egen brok-historik.
     </div>
     <div class="game-card" style="margin:10px 0;">
+      <label class="field-label" style="color:rgba(255,247,232,0.7);">Hvem er med? (mindst 2)</label>
+      <div class="name-grid" id="playerGrid">${chips}</div>
       <label class="field-label" style="color:rgba(255,247,232,0.7);">Spil om</label>
       <div class="segmented" style="margin-bottom:0;">
         <div class="seg ${gameWager!=='euro'?'active':''}" data-wager="fun">😄 For sjov</div>
         <div class="seg ${gameWager==='euro'?'active':''}" data-wager="euro">💶 Om en euro</div>
       </div>
     </div>
-    <button class="game-btn" id="startGameBtn" ${state.members.length<2?'disabled':''}>🎲 Start spillet</button>
-    ${state.members.length<2?'<p class="hint" style="text-align:center;">Kræver mindst 2 medlemmer</p>':''}
+    <button class="game-btn" id="startGameBtn" ${enough?'':'disabled'}>🎲 Start spillet (${gameSelectedPlayers.length} spillere)</button>
+    ${enough?'':'<p class="hint" style="text-align:center;">Vælg mindst 2 spillere</p>'}
     ${gameHighscoreHtml()}
   `;
 }
@@ -738,13 +844,13 @@ function quiplashHtml(g, cur){
     const answered = Object.keys(cur.answers||{}).length;
     const mine = profile && cur.answers[profile.memberId];
     return `
-      <div class="game-badge">Runde ${g.round}/${g.totalRounds} · 🎭 Skriv-og-stem</div>
+      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · 🎭 Skriv-og-stem</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
       <div class="game-card" id="gameCard">
         <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:0 0 14px; line-height:1.3;">${escapeHtml(cur.prompt)}</p>
         <textarea id="quipInput" rows="2" maxlength="120" placeholder="Dit svar...">${mine?escapeHtml(mine):''}</textarea>
         <button class="game-btn" id="quipSubmitBtn" style="margin-top:10px;">${mine?'✏️ Opdatér svar':'🚀 Send svar'}</button>
       </div>
-      ${gameProgressHtml(answered, state.members.length, 'har svaret')}
+      ${gameProgressHtml(answered, g.players.length, 'har svaret')}
       <button class="game-btn ghost" id="advanceBtn">👉 Gå videre til afstemning</button>
     `;
   }
@@ -760,16 +866,16 @@ function quiplashHtml(g, cur){
       </div>
     `).join('');
     return `
-      <div class="game-badge">Runde ${g.round}/${g.totalRounds} · Stem på det bedste svar</div>
+      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Stem på det bedste svar</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
       <p class="hint" style="margin:0 0 10px; color:rgba(255,247,232,0.75);">${escapeHtml(cur.prompt)}</p>
       ${rows || '<p class="hint">Ingen andre svar at stemme på.</p>'}
-      ${gameProgressHtml(votedCount, state.members.length, 'har stemt')}
+      ${gameProgressHtml(votedCount, g.players.length, 'har stemt')}
       <button class="game-btn ghost" id="advanceBtn">👉 Afslør vinderen</button>
     `;
   }
   const winners = (cur.winnerIds||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
   return `
-    <div class="game-badge">Runde ${g.round}/${g.totalRounds} · Resultat</div>
+    <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
     <div class="game-card" id="gameCard" style="text-align:center;">
       <p style="margin:0 0 10px;">${escapeHtml(cur.prompt)}</p>
       ${Object.entries(cur.answers||{}).map(([id,text])=>{
@@ -792,13 +898,13 @@ function truefalseHtml(g, cur){
   if(cur.phase === 'write'){
     if(!isAuthor){
       return `
-        <div class="game-badge">Runde ${g.round}/${g.totalRounds} · ⚖️ Sandt eller falsk</div>
+        <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · ⚖️ Sandt eller falsk</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
         <div class="empty-state"><span class="emoji">✍️</span><b>${escapeHtml(author?author.name:'?')} skriver et udsagn...</b>Vent til det er klar, så skal I gætte.</div>
       `;
     }
-    const chips = state.members.map(m=>`<div class="name-pill ${m.id===profile.memberId?'selected':''}" data-target="${m.id}">${escapeHtml(m.name)}</div>`).join('');
+    const chips = state.members.filter(m=>g.players.includes(m.id)).map(m=>`<div class="name-pill ${m.id===profile.memberId?'selected':''}" data-target="${m.id}">${escapeHtml(m.name)}</div>`).join('');
     return `
-      <div class="game-badge">Runde ${g.round}/${g.totalRounds} · ⚖️ Det er dig der skriver!</div>
+      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · ⚖️ Det er dig der skriver!</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
       <div class="game-card" id="gameCard">
         <label class="field-label" style="color:rgba(255,247,232,0.7);">Om hvem? (kan være dig selv)</label>
         <div class="name-grid" id="ttTargetGrid">${chips}</div>
@@ -815,9 +921,9 @@ function truefalseHtml(g, cur){
   if(cur.phase === 'guess'){
     const target = state.members.find(m=>m.id===cur.targetId);
     const guessedCount = Object.keys(cur.guesses||{}).length;
-    const eligible = state.members.length - 1;
+    const eligible = g.players.length - 1;
     return `
-      <div class="game-badge">Runde ${g.round}/${g.totalRounds} · ⚖️ Sandt eller falsk</div>
+      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · ⚖️ Sandt eller falsk</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
       <div class="game-card" id="gameCard" style="text-align:center;">
         <p class="hint" style="margin:0 0 6px; color:rgba(255,247,232,0.6);">${escapeHtml(author?author.name:'?')} skriver om ${escapeHtml(target?target.name:'?')}:</p>
         <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px;">"${escapeHtml(cur.statement)}"</p>
@@ -835,7 +941,7 @@ function truefalseHtml(g, cur){
   const target = state.members.find(m=>m.id===cur.targetId);
   const correct = (cur.correctGuessers||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
   return `
-    <div class="game-badge">Runde ${g.round}/${g.totalRounds} · Resultat</div>
+    <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
     <div class="game-card" id="gameCard" style="text-align:center;">
       <p class="hint" style="color:rgba(255,247,232,0.6);">${escapeHtml(author?author.name:'?')} skrev om ${escapeHtml(target?target.name:'?')}:</p>
       <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px;">"${escapeHtml(cur.statement)}"</p>
@@ -858,18 +964,18 @@ function triviaHtml(g, cur){
       </div>
     `).join('');
     return `
-      <div class="game-badge">Runde ${g.round}/${g.totalRounds} · 🔍 Ægte Brok</div>
+      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · 🔍 Ægte Brok</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
       <div class="game-card" id="gameCard">
         <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:18px; margin:0 0 14px; line-height:1.3;">${escapeHtml(cur.question)}</p>
         ${opts}
       </div>
-      ${gameProgressHtml(answered, state.members.length, 'har svaret')}
+      ${gameProgressHtml(answered, g.players.length, 'har svaret')}
       <button class="game-btn ghost" id="advanceBtn">👉 Afslør svaret</button>
     `;
   }
   const correct = (cur.correctGuessers||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
   return `
-    <div class="game-badge">Runde ${g.round}/${g.totalRounds} · Resultat</div>
+    <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
     <div class="game-card" id="gameCard" style="text-align:center;">
       <p style="margin:0 0 8px;">${escapeHtml(cur.question)}</p>
       <p style="font-family:'Baloo 2',sans-serif; font-weight:800; color:var(--coin); font-size:18px;">✅ ${escapeHtml(cur.options[cur.correctIndex])}</p>
@@ -880,7 +986,7 @@ function triviaHtml(g, cur){
 }
 
 function gameOverHtml(g, cur){
-  const ranked = state.members.slice().sort((a,b)=>(cur.scores[b.id]||0)-(cur.scores[a.id]||0));
+  const ranked = state.members.filter(m=>g.players.includes(m.id)).sort((a,b)=>(cur.scores[b.id]||0)-(cur.scores[a.id]||0));
   const losers = (cur.loserIds||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
   const winners = (cur.winnerIds||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
   const rows = ranked.map((m,i)=>`
@@ -910,15 +1016,23 @@ function bindGameHandlers(g){
   document.querySelectorAll('[data-wager]').forEach(el=>{
     el.onclick = ()=>{ gameWager = el.dataset.wager; render(); };
   });
+  document.querySelectorAll('[data-player]').forEach(el=>{
+    el.onclick = ()=>{
+      const id = el.dataset.player;
+      if(gameSelectedPlayers.includes(id)) gameSelectedPlayers = gameSelectedPlayers.filter(x=>x!==id);
+      else gameSelectedPlayers = [...gameSelectedPlayers, id];
+      render();
+    };
+  });
   const startBtn = document.getElementById('startGameBtn');
-  if(startBtn) startBtn.onclick = ()=> gameApi('start', { wager: gameWager });
+  if(startBtn) startBtn.onclick = ()=> gameApi('start', { wager: gameWager, playerIds: gameSelectedPlayers });
 
   const advanceBtn = document.getElementById('advanceBtn');
   if(advanceBtn) advanceBtn.onclick = ()=> gameApi('advance', {});
 
   const playAgainBtn = document.getElementById('playAgainBtn');
   if(playAgainBtn) playAgainBtn.onclick = ()=>{
-    gameApi('end', {}).then(()=> gameApi('start', { wager: gameWager }));
+    gameApi('end', {}).then(()=> gameApi('start', { wager: gameWager, playerIds: gameSelectedPlayers }));
   };
   const endGameBtn = document.getElementById('endGameBtn');
   if(endGameBtn) endGameBtn.onclick = ()=> gameApi('end', {});
