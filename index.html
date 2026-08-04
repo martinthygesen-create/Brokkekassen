@@ -1178,8 +1178,9 @@ function truefalseHtml(g, cur){
         <div class="name-grid" id="ttTargetGrid">${chips}</div>
         <label class="field-label" style="color:rgba(255,247,232,0.7);">Udsagnet</label>
         <textarea id="ttStatement" rows="2" maxlength="120" placeholder="Skriv noget sandt eller opdigtet..."></textarea>
-        <div class="segmented" style="margin-top:10px;">
-          <div class="seg active" data-truth="true">✅ Det er sandt</div>
+        <label class="field-label" style="color:rgba(255,247,232,0.7);">Er det sandt eller opdigtet? (vælg en)</label>
+        <div class="segmented" id="ttTruthSeg" style="margin-top:0;">
+          <div class="seg" data-truth="true">✅ Det er sandt</div>
           <div class="seg" data-truth="false">🎭 Jeg fandt på det</div>
         </div>
         <button class="game-btn" id="ttSubmitBtn" style="margin-top:12px;" disabled>🚀 Send udsagn</button>
@@ -1191,14 +1192,16 @@ function truefalseHtml(g, cur){
     const guessedCount = Object.keys(cur.guesses||{}).length;
     const eligible = g.players.length - 1;
     const myGuess = profile && cur.guesses[profile.memberId] !== undefined;
+    const badgeLabel = isAuthor ? '⚖️ Sandt eller falsk' : (myGuess ? '⚖️ Sandt eller falsk' : '⚖️ Stem nu: sandt eller opdigtet?');
     return `
-      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · ⚖️ Sandt eller falsk</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
+      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · ${badgeLabel}</span><span id="gameTimer" style="font-size:12px; font-weight:700; opacity:.9;"></span></div>
       <div class="game-card" id="gameCard" style="text-align:center;">
         ${cur.reused ? `<p class="hint" style="margin:0 0 6px; color:rgba(255,201,60,0.85); font-weight:600;">♻️ Genbrugt udsagn fra tidligere</p>` : ''}
         <p class="hint" style="margin:0 0 6px; color:rgba(255,247,232,0.6);">${escapeHtml(author?author.name:'?')} skrev om ${escapeHtml(target?target.name:'?')}:</p>
         <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px;">"${escapeHtml(cur.statement)}"</p>
         ${isAuthor ? '<p class="hint" style="color:rgba(255,247,232,0.6);">Du skrev det — vent på de andres gæt.</p>' : (myGuess ? '' : `
-          <div style="display:flex; gap:10px; margin-top:14px;">
+          <p style="font-weight:700; margin:10px 0 0; font-size:14px;">🗳️ Din tur — stem: er det sandt eller opdigtet?</p>
+          <div style="display:flex; gap:10px; margin-top:10px;">
             <button class="game-btn" data-guess="true" style="margin-top:0; background:linear-gradient(160deg, var(--sea), var(--sea-deep)); box-shadow:0 8px 18px rgba(11,58,63,0.4);">✅ Sandt</button>
             <button class="game-btn" data-guess="false" style="margin-top:0;">🎭 Opdigtet</button>
           </div>
@@ -1328,7 +1331,10 @@ function bindGameHandlers(g){
   }
   if(cur.type === 'truefalse' && cur.phase === 'write' && profile && profile.memberId === cur.authorId){
     let chosenTarget = profile.memberId;
-    let chosenTruth = true;
+    let chosenTruth = null; // skal vælges eksplicit — ingen forudvalgt "sandt", så man ikke sender ved et uheld uden at tage stilling
+    const input = document.getElementById('ttStatement');
+    const submitBtn = document.getElementById('ttSubmitBtn');
+    const updateSubmitState = ()=>{ submitBtn.disabled = !input.value.trim() || chosenTruth === null; };
     document.querySelectorAll('#ttTargetGrid .name-pill').forEach(p=>{
       p.onclick = ()=>{
         document.querySelectorAll('#ttTargetGrid .name-pill').forEach(x=>x.classList.remove('selected'));
@@ -1339,14 +1345,13 @@ function bindGameHandlers(g){
       seg.onclick = ()=>{
         document.querySelectorAll('[data-truth]').forEach(x=>x.classList.remove('active'));
         seg.classList.add('active'); chosenTruth = seg.dataset.truth === 'true';
+        updateSubmitState();
       };
     });
-    const input = document.getElementById('ttStatement');
-    const submitBtn = document.getElementById('ttSubmitBtn');
-    input.addEventListener('input', ()=>{ submitBtn.disabled = !input.value.trim(); });
+    input.addEventListener('input', updateSubmitState);
     submitBtn.onclick = ()=>{
       const statement = input.value.trim();
-      if(!statement) return;
+      if(!statement || chosenTruth === null) return;
       gameApi('submit', { payload: { targetId: chosenTarget, statement, isTrue: chosenTruth } });
     };
   }
