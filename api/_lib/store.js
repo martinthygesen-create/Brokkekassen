@@ -206,6 +206,10 @@ async function getState(roomId) {
   if (state.lastSilenceNudgeAt === undefined) state.lastSilenceNudgeAt = null;
   if (state.lastMilestoneAt === undefined) state.lastMilestoneAt = 0;
   if (!state.game) state.game = { active: false };
+  // Selvhelbred spil der blev startet under en ældre version uden players-
+  // feltet — de kan ikke renderes korrekt, så behandl dem som opgivet i
+  // stedet for at lade klienten crashe stille når den forsøger at åbne dem.
+  if (state.game.active && !state.game.players) state.game = { active: false };
   if (!state.gameStats) state.gameStats = {};
   if (state.gameEnabled === undefined) state.gameEnabled = true;
   if (state.kasseEnabled === undefined) state.kasseEnabled = true;
