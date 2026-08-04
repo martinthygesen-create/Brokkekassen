@@ -390,6 +390,17 @@ async function enterRoom(){
   startPolling();
 }
 
+// Husker navn/e-mail lokalt på tværs af rum (ikke rum-specifikt), så man
+// slipper for at skrive det igen næste gang man opretter/joiner et nyt rum
+// på samme enhed. Ren bekvemmelighed — ingen konto, intet gemt i skyen.
+function getSavedIdentity(){
+  try{ return JSON.parse(localStorage.getItem('bk_identity') || 'null') || { name:'', email:'' }; }
+  catch(e){ return { name:'', email:'' }; }
+}
+function saveIdentity(name, email){
+  localStorage.setItem('bk_identity', JSON.stringify({ name: name||'', email: email||'' }));
+}
+
 /* ============ FLERE KASSER (gemt lokalt, ikke i skyen) ============ */
 function getMyRooms(){
   try{ return JSON.parse(localStorage.getItem('bk_myRooms') || '{}'); }catch(e){ return {}; }
@@ -550,9 +561,9 @@ function renderWhoAmI(justCreated){
       ${homeScreenTip(true)}
       <div class="onboard-card">
         <label class="field-label">Dit navn</label>
-        <input type="text" id="nameInput" placeholder="Fx Martin" maxlength="24" />
+        <input type="text" id="nameInput" placeholder="Fx Martin" maxlength="24" value="${escapeHtml(getSavedIdentity().name)}" />
         <label class="field-label">E-mail (valgfri)</label>
-        <input type="email" id="emailInput" placeholder="til fx afregning" maxlength="80" />
+        <input type="email" id="emailInput" placeholder="til fx afregning" maxlength="80" value="${escapeHtml(getSavedIdentity().email)}" />
         <button class="sheet-btn primary" id="joinBtn">Fortsæt</button>
       </div>
       ${justCreated ? `
@@ -568,6 +579,7 @@ function renderWhoAmI(justCreated){
   `;
   const nameInput = document.getElementById('nameInput');
   nameInput.focus();
+  if(nameInput.value) nameInput.select();
   const go = async ()=>{
     const name = nameInput.value.trim();
     if(!name) return;
@@ -578,6 +590,7 @@ function renderWhoAmI(justCreated){
       profile = { memberId: r.memberId, name };
       localStorage.setItem('bk_profile_' + roomId, JSON.stringify(profile));
       localStorage.setItem('bk_lastRoom', roomId);
+      saveIdentity(name, email);
       rememberRoom();
       state = r.state;
       if(!state.kasseEnabled && state.gameEnabled) activeApp = 'spil';
