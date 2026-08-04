@@ -697,7 +697,6 @@ function openAppMenuSheet(){
     ${showPushBell ? `<button class="sheet-btn ghost" id="menuPushBtn">🔔 Slå push-beskeder til</button>` : ''}
     <button class="sheet-btn ghost" id="menuShareBtn">📤 Del invite-link</button>
     <button class="sheet-btn ghost" id="menuLeaveBtn">🚪 Skift eller forlad rum</button>
-    ${(isAdmin() && state.game && state.game.active) ? `<button class="sheet-btn ghost" id="menuRestartGameBtn" style="color:rgba(255,107,74,0.85);">🔄 Genstart Brokspillet</button>` : ''}
     <button class="sheet-btn ghost" id="menuCloseBtn">Luk menu</button>
   `, ()=>{
     document.querySelectorAll('[data-goto-app]').forEach(el=>{
@@ -707,11 +706,6 @@ function openAppMenuSheet(){
     if(pushBtn) pushBtn.onclick = async ()=>{ const ok = await enablePush(); if(ok){ closeSheet(); render(); } };
     document.getElementById('menuShareBtn').onclick = ()=>{ closeSheet(); setTimeout(openShareSheet, 230); };
     document.getElementById('menuLeaveBtn').onclick = ()=>{ closeSheet(); setTimeout(openLeaveRoomSheet, 230); };
-    const restartBtn = document.getElementById('menuRestartGameBtn');
-    if(restartBtn) restartBtn.onclick = async ()=>{
-      try{ await gameApi('end', {}); closeSheet(); toast('🔄 Brokspillet er nulstillet'); }
-      catch(e){ toast(e.message); }
-    };
     document.getElementById('menuCloseBtn').onclick = closeSheet;
   });
 }
@@ -723,6 +717,24 @@ async function gameApi(action, extra){
     state = r.state;
     render();
   }catch(e){ toast(e.message); }
+}
+
+function openGameAdminMenuSheet(){
+  const active = state.game && state.game.active;
+  openSheet(`
+    <h2>Brokspil-admin ⚙️</h2>
+    <p class="hint">${active ? 'Der er et spil i gang lige nu.' : 'Der er ikke noget spil i gang lige nu.'}</p>
+    ${active ? `<button class="sheet-btn danger" id="gameAdminRestartBtn">🔄 Genstart Brokspillet</button>` : ''}
+    <button class="sheet-btn ghost" id="gameAdminCloseBtn">Luk menu</button>
+  `, ()=>{
+    const restartBtn = document.getElementById('gameAdminRestartBtn');
+    if(restartBtn) restartBtn.onclick = async ()=>{
+      closeSheet();
+      await gameApi('end', {});
+      toast('🔄 Brokspillet er nulstillet — klar til en ny omgang');
+    };
+    document.getElementById('gameAdminCloseBtn').onclick = closeSheet;
+  });
 }
 
 // Auto-fremdrift: hvis en runde bare står stille (ingen svarer/rykker den
@@ -838,12 +850,17 @@ function renderGameScreen(){
     <header>
       <div class="title" style="font-size:30px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
         <span>Brok<span>spillet</span> 🎲</span>
-        <button id="btnAppMenu" title="Menu" style="width:32px; height:32px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.85); border-radius:100px; flex:0 0 auto;">☰</button>
+        <div style="display:flex; align-items:center; gap:8px;">
+          ${isAdmin() ? `<button id="btnGameAdminMenu" title="Admin" style="width:32px; height:32px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.85); border-radius:100px; flex:0 0 auto;">⋯</button>` : ''}
+          <button id="btnAppMenu" title="Menu" style="width:32px; height:32px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.85); border-radius:100px; flex:0 0 auto;">☰</button>
+        </div>
       </div>
     </header>
     <main id="main" style="padding:0 16px 40px;">${gameBodyHtml(g)}</main>
   `;
   document.getElementById('btnAppMenu').onclick = openAppMenuSheet;
+  const btnGameAdminMenu = document.getElementById('btnGameAdminMenu');
+  if(btnGameAdminMenu) btnGameAdminMenu.onclick = openGameAdminMenuSheet;
   bindGameHandlers(g);
   const card = document.getElementById('gameCard') || document.getElementById('gameoverReveal');
   if(card && typeof gsap !== 'undefined'){
@@ -1768,20 +1785,33 @@ function pushDebugInfo(){
 }
 
 function openAdminMenuSheet(){
+  const hintStyle = 'font-size:11.5px; color:rgba(5,32,36,0.45); margin:-8px 4px 6px;';
   openSheet(`
     <h2>Admin ⚙️</h2>
     <p class="hint">Du oprettede denne brokkekasse, så det er dig der styrer den. Streaks og gratis brok opdateres automatisk hver dag kl. 04 — men puljen tømmer sig kun når du selv gør op.</p>
     <p class="hint" style="font-size:11px; color:rgba(5,32,36,0.4); word-break:break-word;">🔧 Push-status: ${pushDebugInfo()}</p>
+
     <button class="sheet-btn primary" id="adminGoalBtn">🎯 Sæt mål for potten</button>
     <button class="sheet-btn primary" id="adminBroadcastBtn">📣 Send besked til alle</button>
-    <button class="sheet-btn primary" id="adminSettleBtn">💶 Gør op (tøm puljen)</button>
     ${state.events.length ? `<button class="sheet-btn ghost" id="adminRemoveEventBtn">🫤 Markér mistænkt snyd</button>` : ''}
     <button class="sheet-btn ghost" id="adminTestDrawBtn">🎰 Test spillemaskinen</button>
-    ${state.history.length ? `<button class="sheet-btn ghost" id="adminUndoBtn">↩️ Fortryd seneste opgørelse</button>` : ''}
+
+    <div class="divider">afregning</div>
+    <button class="sheet-btn primary" id="adminSettleBtn">💶 Gør op (tøm puljen)</button>
+    <p class="hint" style="${hintStyle}">Arkiverer den aktive pulje til historikken og tømmer den. Kan fortrydes lige bagefter.</p>
+    ${state.history.length ? `<button class="sheet-btn ghost" id="adminUndoBtn">↩️ Fortryd seneste opgørelse</button>
+    <p class="hint" style="${hintStyle}">Lægger sidste "Gør op" tilbage — kun til at rette en fejl, brug ikke bare fordi nogen fortrød.</p>` : ''}
     <button class="sheet-btn ghost" id="adminBackdateBtn">⏪ Ryk dagstæller én dag tilbage</button>
+    <p class="hint" style="${hintStyle}">Justerer kun "Dag X"-tallet — rører ikke puljen eller historikken.</p>
+
+    <div class="divider">kan ikke fortrydes</div>
     <button class="sheet-btn danger" id="adminResetBtn">🧹 Nulstil alt</button>
+    <p class="hint" style="${hintStyle}">Sletter regnskab OG historik, men rummet og medlemmerne består — som at starte forfra i samme rum.</p>
     <button class="sheet-btn danger" id="adminFinalCloseBtn">🔒 Luk denne brokkekasse for altid</button>
+    <p class="hint" style="${hintStyle}">Gør evt. op først, arkiverer, og lukker for nye brok — men I kan stadig se historikken bagefter.</p>
     <button class="sheet-btn danger" id="adminDeleteRoomBtn">🗑️ Slet dette rum permanent</button>
+    <p class="hint" style="${hintStyle}">Sletter rummet fuldstændigt, med det samme — ingen historik tilbage, koden virker ikke mere. Kun til fejloprettede rum.</p>
+
     <button class="sheet-btn ghost" id="adminMenuCloseBtn">Luk menu</button>
   `, ()=>{
     document.getElementById('adminGoalBtn').onclick = ()=>{ closeSheet(); setTimeout(openGoalSheet, 230); };
