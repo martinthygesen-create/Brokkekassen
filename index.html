@@ -156,6 +156,7 @@
   .onboard h1{font-size:28px; margin:10px 0 6px;}
   .onboard p{font-size:14.5px; color:rgba(255,247,232,0.7); line-height:1.5; margin-bottom:26px;}
   .onboard-card{ background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); border-radius:20px; padding:20px; text-align:left; }
+  .onboard-pick:not(.selected){ opacity:.35; }
   .onboard-card input{ background:rgba(255,247,232,0.95); }
   .divider{ display:flex; align-items:center; gap:10px; color:rgba(255,247,232,0.4); font-size:12px; margin:22px 0; }
   .divider::before, .divider::after{ content:''; flex:1; height:1px; background:rgba(255,247,232,0.15); }
@@ -378,6 +379,8 @@ async function enterRoom(){
     renderWhoAmI();
     return;
   }
+  if(!state.kasseEnabled && state.gameEnabled) activeApp = 'spil';
+  else if(state.kasseEnabled) activeApp = 'kasse';
   rememberRoom();
   render();
   startPolling();
@@ -457,10 +460,21 @@ function renderCreateOrJoin(errorMsg){
     <div class="onboard">
       <div class="emoji">🍯</div>
       <h1>Brokkekassen</h1>
-      <p>Ferie-reglen: brokker du dig, koster det 1€. Opret jeres egen brokkekasse, eller gå med i en du har fået et link til.</p>
+      <p>Ferie-reglen: brokker du dig, koster det 1€. Opret jeres eget rum, eller gå med i et du har fået et link til.</p>
       ${errorMsg ? `<p style="color:var(--coral); font-weight:600; margin-top:-14px;">${errorMsg}</p>` : ''}
       <div class="onboard-card">
-        <button class="sheet-btn primary" id="createBtn" style="margin-top:0;">Opret ny brokkekasse</button>
+        <label class="field-label" style="color:rgba(255,247,232,0.6);">Hvad vil I have med? (vælg en eller begge)</label>
+        <div style="display:flex; gap:10px; margin:10px 0 16px;">
+          <div class="onboard-pick selected" data-pick="kasse" style="flex:1; cursor:pointer; text-align:center; padding:18px 8px; border-radius:16px; background:var(--sea); color:#fff; transition:opacity .15s;">
+            <div style="font-size:26px;">🫙</div>
+            <div style="font-weight:700; margin-top:4px; font-size:13px;">Brokkekassen</div>
+          </div>
+          <div class="onboard-pick selected" data-pick="spil" style="flex:1; cursor:pointer; text-align:center; padding:18px 8px; border-radius:16px; background:var(--sea); color:#fff; transition:opacity .15s;">
+            <div style="font-size:26px;">🎲</div>
+            <div style="font-weight:700; margin-top:4px; font-size:13px;">Brokspillet</div>
+          </div>
+        </div>
+        <button class="sheet-btn primary" id="createBtn" style="margin-top:0;">Opret nyt rum</button>
       </div>
       <div class="divider">eller</div>
       <div class="onboard-card">
@@ -474,6 +488,16 @@ function renderCreateOrJoin(errorMsg){
   `;
   document.querySelectorAll('[data-goto-room]').forEach(el=>{
     el.onclick = ()=>switchToRoom(el.dataset.gotoRoom);
+  });
+  document.querySelectorAll('.onboard-pick').forEach(el=>{
+    el.onclick = ()=>{
+      const willSelect = !el.classList.contains('selected');
+      if(!willSelect){
+        const otherSelected = document.querySelectorAll('.onboard-pick.selected').length > 1;
+        if(!otherSelected) return; // mindst én skal altid være valgt
+      }
+      el.classList.toggle('selected');
+    };
   });
   const joinInput = document.getElementById('joinInput');
   const goJoin = async ()=>{
@@ -500,7 +524,9 @@ function renderCreateOrJoin(errorMsg){
     const btn = document.getElementById('createBtn');
     btn.innerHTML = '<span class="spinner"></span>';
     try{
-      const r = await api('room', {});
+      const kasseEnabled = document.querySelector('[data-pick="kasse"]').classList.contains('selected');
+      const gameEnabled = document.querySelector('[data-pick="spil"]').classList.contains('selected');
+      const r = await api('room', { kasseEnabled, gameEnabled });
       roomId = r.roomId;
       const u = new URL(location.href); u.search = '?r=' + roomId;
       history.replaceState(null,'',u.toString());
@@ -550,6 +576,8 @@ function renderWhoAmI(justCreated){
       localStorage.setItem('bk_lastRoom', roomId);
       rememberRoom();
       state = r.state;
+      if(!state.kasseEnabled && state.gameEnabled) activeApp = 'spil';
+      else if(state.kasseEnabled) activeApp = 'kasse';
       render();
       startPolling();
     }catch(e){ toast('Kunne ikke fortsætte: ' + e.message); document.getElementById('joinBtn').textContent = 'Fortsæt'; }
@@ -580,6 +608,9 @@ function todayBalances(){
 }
 
 function render(){
+  // Forsvar mod at stå i en visning der er slået fra i dette rum.
+  if(activeApp === 'spil' && !state.gameEnabled) activeApp = 'kasse';
+  if(activeApp === 'kasse' && !state.kasseEnabled) activeApp = state.gameEnabled ? 'spil' : 'kasse';
   if(activeApp === 'spil') return renderGameScreen();
   const prevMain = document.getElementById('main');
   const savedMainScroll = prevMain ? prevMain.scrollTop : 0;
@@ -635,14 +666,14 @@ function openAppMenuSheet(){
   openSheet(`
     <h2>Menu</h2>
     <div style="display:flex; gap:10px; margin:6px 0 4px;">
-      <div data-goto-app="kasse" style="flex:1; cursor:pointer; text-align:center; padding:20px 10px; border-radius:18px; background:${activeApp==='kasse'?'var(--sea)':'rgba(5,32,36,0.06)'}; color:${activeApp==='kasse'?'#fff':'var(--ink)'};">
+      ${state.kasseEnabled ? `<div data-goto-app="kasse" style="flex:1; cursor:pointer; text-align:center; padding:20px 10px; border-radius:18px; background:${activeApp==='kasse'?'var(--sea)':'rgba(5,32,36,0.06)'}; color:${activeApp==='kasse'?'#fff':'var(--ink)'};">
         <div style="font-size:30px;">🫙</div>
         <div style="font-weight:700; margin-top:6px;">Brokkekassen</div>
-      </div>
-      <div data-goto-app="spil" style="flex:1; cursor:pointer; text-align:center; padding:20px 10px; border-radius:18px; background:${activeApp==='spil'?'var(--sea)':'rgba(5,32,36,0.06)'}; color:${activeApp==='spil'?'#fff':'var(--ink)'};">
+      </div>` : ''}
+      ${state.gameEnabled ? `<div data-goto-app="spil" style="flex:1; cursor:pointer; text-align:center; padding:20px 10px; border-radius:18px; background:${activeApp==='spil'?'var(--sea)':'rgba(5,32,36,0.06)'}; color:${activeApp==='spil'?'#fff':'var(--ink)'};">
         <div style="font-size:30px;">🎲</div>
         <div style="font-weight:700; margin-top:6px;">Brokspillet</div>
-      </div>
+      </div>` : ''}
     </div>
     <div class="divider">rum</div>
     ${showPushBell ? `<button class="sheet-btn ghost" id="menuPushBtn">🔔 Slå push-beskeder til</button>` : ''}

@@ -32,6 +32,10 @@ function emptyState() {
     lastMilestoneAt: 0, // højeste rundetal (10, 20, 30...) puljen allerede er fejret ved
     game: { active: false }, // Brokspillet — se api/game.js + api/_lib/game.js
     gameStats: {}, // memberId -> {played, wins} — highscore på tværs af afsluttede Brokspil-runder
+    // Sat én gang ved oprettelse — Brokkekassen og Brokspillet er ligestillede
+    // valg, man kan vælge begge eller kun ét. Styrer kun hvad der vises.
+    kasseEnabled: true,
+    gameEnabled: true,
   };
 }
 
@@ -203,6 +207,8 @@ async function getState(roomId) {
   if (state.lastMilestoneAt === undefined) state.lastMilestoneAt = 0;
   if (!state.game) state.game = { active: false };
   if (!state.gameStats) state.gameStats = {};
+  if (state.gameEnabled === undefined) state.gameEnabled = true;
+  if (state.kasseEnabled === undefined) state.kasseEnabled = true;
   if (!state.pendingList) {
     // migrering fra det gamle enkelt-pending-felt til en liste
     state.pendingList = state.pending ? [state.pending] : [];
@@ -217,10 +223,12 @@ async function setState(roomId, state) {
   return state;
 }
 
-async function createRoom(roomId) {
+async function createRoom(roomId, opts) {
   const existing = await getState(roomId);
   if (existing) return existing;
   const state = emptyState();
+  if (opts && opts.kasseEnabled === false) state.kasseEnabled = false;
+  if (opts && opts.gameEnabled === false) state.gameEnabled = false;
   await setState(roomId, state);
   return state;
 }
