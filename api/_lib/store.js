@@ -1,5 +1,16 @@
 const { redis } = require('./redis');
 
+// Fejl med en HTTP-statuskode knyttet til sig — kastes inde fra en
+// mutateState-mutator for at afbryde MED DET SAMME (ingen retry, en
+// valideringsfejl retter sig ikke af at prøve igen) og give det rigtige
+// statuskode/besked tilbage til klienten.
+class ApiError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
+
 // Normaliseret til små bogstaver, så det ikke betyder noget om telefonens
 // tastatur autokapitaliserede første bogstav i koden (fx "Skygge-ophy").
 const KEY = (roomId) => `brokkekassen:room:${(roomId || '').toString().trim().toLowerCase()}`;
@@ -195,11 +206,11 @@ function settleRound(state) {
   return state;
 }
 
-async function getState(roomId) {
-  const raw = await redis().get(KEY(roomId));
-  if (!raw) return null;
-  // upstash client auto-parses JSON if it was set as an object; handle both cases
-  const state = typeof raw === 'string' ? JSON.parse(raw) : raw;
+// Bringer en rå indlæst state op til den nyeste form (nye felter med
+// standardværdier, selvhelbredelse af ældre/ufuldstændige spil-objekter).
+// Delt mellem den almindelige læsevej (getState) og den CAS-baserede
+// skrivevej (mutateState), så begge altid ser samme migrerede facon.
+function applyMigrations(state) {
   if (state.closed === undefined) state.closed = false;
   if (!state.pushSubs) state.pushSubs = {};
   if (!state.streaks) state.streaks = {};
@@ -227,8 +238,66 @@ async function getState(roomId) {
     state.pendingList = state.pending ? [state.pending] : [];
   }
   delete state.pending;
+  return state;
+}
+
+async function getState(roomId) {
+  const raw = await redis().get(KEY(roomId));
+  if (!raw) return null;
+  // upstash client auto-parses JSON if it was set as an object; handle both cases
+  const state = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  applyMigrations(state);
   if (autoSettleIfDue(state)) await setState(roomId, state);
   return state;
+}
+
+// Atomisk "check-and-set": skriver kun hvis værdien i Redis stadig er
+// PRÆCIS den samme som da vi læste den (oldRaw). Kører som ét Lua-script
+// direkte på Redis-serveren, så der ikke er noget tidsrum mellem tjek og
+// skriv hvor en anden samtidig forespørgsel kan nå at skrive ind imellem.
+const CAS_SCRIPT = `
+  local current = redis.call('GET', KEYS[1])
+  if current == ARGV[1] then
+    redis.call('SET', KEYS[1], ARGV[2])
+    return 1
+  else
+    return 0
+  end
+`;
+async function casSetState(roomId, oldRaw, newState) {
+  const ok = await redis().eval(CAS_SCRIPT, [KEY(roomId)], [oldRaw, JSON.stringify(newState)]);
+  return !!ok;
+}
+
+// Læs-mutér-skriv der er sikker mod samtidige skriv fra flere spillere der
+// trykker på samme tid (fx alle stemmer i samme sekund i Brokspillet/
+// MrBrok). Uden dette kan to samtidige forespørgsler begge læse den samme
+// "gamle" state, og den sidste der skriver overskriver stille den førstes
+// ændring — et klassisk lost-update-problem, bekræftet i praksis ved at
+// simulere realistisk netværks-latenstid mod Redis. `fn` kan mutere
+// `state` frit og må gerne kaste en fejl (fx en valideringsfejl) — det
+// stopper med det samme uden at forsøge igen, da et nyt forsøg alligevel
+// ikke ville rette en valideringsfejl.
+async function mutateState(roomId, fn) {
+  const MAX_ATTEMPTS = 8;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const raw = await redis().get(KEY(roomId));
+    if (raw === null || raw === undefined) return null;
+    const oldRaw = typeof raw === 'string' ? raw : JSON.stringify(raw);
+    const state = typeof raw === 'string' ? JSON.parse(raw) : JSON.parse(JSON.stringify(raw));
+    applyMigrations(state);
+    const result = await fn(state);
+    const ok = await casSetState(roomId, oldRaw, state);
+    if (ok) return { state, result };
+    // Nogen andre nåede at skrive imellem vores læsning og skrivning —
+    // vent kort (med lidt tilfældighed så flere samtidige forsøg ikke bare
+    // rammer hinanden igen og igen) og prøv hele mutationen forfra mod
+    // frisk data.
+    await new Promise(r => setTimeout(r, 15 + Math.random() * 35 * (attempt + 1)));
+  }
+  const err = new Error('Kunne ikke gemme — for mange forsøgte samtidig, prøv igen om lidt');
+  err.isConflict = true;
+  throw err;
 }
 
 async function setState(roomId, state) {
@@ -294,4 +363,4 @@ function redactStateFor(state, viewerId) {
   return { ...state, mrbrok: safe };
 }
 
-module.exports = { getState, setState, deleteRoom, createRoom, genRoomId, uid, emptyState, neededVotes, isAdmin, settleRound, updateStreaksAndDrawLottery, processPendingExpiry, checkSilenceNudge, checkPoolMilestone, redactStateFor };
+module.exports = { getState, setState, mutateState, ApiError, deleteRoom, createRoom, genRoomId, uid, emptyState, neededVotes, isAdmin, settleRound, updateStreaksAndDrawLottery, processPendingExpiry, checkSilenceNudge, checkPoolMilestone, redactStateFor };

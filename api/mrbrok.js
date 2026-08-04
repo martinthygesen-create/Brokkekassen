@@ -1,4 +1,4 @@
-const { getState, setState, uid, redactStateFor } = require('./_lib/store');
+const { mutateState, uid, redactStateFor, ApiError } = require('./_lib/store');
 const { pickRandom } = require('./_lib/game');
 const { pickTopic, beginMrbrokRound, advanceTurn } = require('./_lib/mrbrok');
 const { pushToMembers } = require('./_lib/push');
@@ -89,118 +89,122 @@ module.exports = async (req, res) => {
   try {
     const { action, roomId, actorId } = req.body || {};
     if (!roomId || !actorId) return res.status(400).json({ error: 'mangler data' });
-    const state = await getState(roomId);
-    if (!state) return res.status(404).json({ error: 'ukendt brokkekasse' });
-    if (!state.members.find(m => m.id === actorId)) return res.status(400).json({ error: 'ukendt medlem' });
-    if (!state.mrbrok) state.mrbrok = { active: false };
 
-    if (action === 'start') {
-      if (state.mrbrok.active) return res.status(409).json({ error: 'MrBrok er allerede i gang' });
-      if (state.game && state.game.active) return res.status(409).json({ error: 'Brokspillet er i gang — afslut det først' });
-      const requested = Array.isArray(req.body.playerIds) ? req.body.playerIds : state.members.map(m => m.id);
-      const playerObjs = state.members.filter(m => requested.includes(m.id));
-      if (playerObjs.length < MIN_PLAYERS) return res.status(400).json({ error: `vælg mindst ${MIN_PLAYERS} spillere` });
-      const wager = req.body.wager === 'euro' ? 'euro' : 'fun';
-      const totalRounds = ALLOWED_ROUNDS.includes(req.body.totalRounds) ? req.body.totalRounds : DEFAULT_ROUNDS;
-      const players = playerObjs.map(m => m.id);
-      const mrBrokId = pickRandom(playerObjs).id;
-      const scores = {};
-      players.forEach(id => { if (id !== mrBrokId) scores[id] = 0; });
+    // Se api/game.js for hvorfor mutateState (CAS + retry) bruges her i
+    // stedet for almindelig getState+setState: uden det kan to samtidige
+    // spillere (fx alle der gætter i samme sekund) stille overskrive
+    // hinandens svar.
+    let pushInfo = null;
+    const mutated = await mutateState(roomId, async (state) => {
+      if (!state.members.find(mm => mm.id === actorId)) throw new ApiError(400, 'ukendt medlem');
+      if (!state.mrbrok) state.mrbrok = { active: false };
 
-      state.mrbrok = {
-        active: true, wager, players, mrBrokId, topic: pickTopic(state),
-        round: 0, totalRounds, scores, caught: false, history: [], current: null, startedAt: Date.now(),
-      };
-      beginMrbrokRound(state, playerObjs);
-      await setState(roomId, state);
+      if (action === 'start') {
+        if (state.mrbrok.active) throw new ApiError(409, 'MrBrok er allerede i gang');
+        if (state.game && state.game.active) throw new ApiError(409, 'Brokspillet er i gang — afslut det først');
+        const requested = Array.isArray(req.body.playerIds) ? req.body.playerIds : state.members.map(mm => mm.id);
+        const playerObjs = state.members.filter(mm => requested.includes(mm.id));
+        if (playerObjs.length < MIN_PLAYERS) throw new ApiError(400, `vælg mindst ${MIN_PLAYERS} spillere`);
+        const wager = req.body.wager === 'euro' ? 'euro' : 'fun';
+        const totalRounds = ALLOWED_ROUNDS.includes(req.body.totalRounds) ? req.body.totalRounds : DEFAULT_ROUNDS;
+        const players = playerObjs.map(mm => mm.id);
+        const mrBrokId = pickRandom(playerObjs).id;
+        const scores = {};
+        players.forEach(id => { if (id !== mrBrokId) scores[id] = 0; });
 
-      const starter = state.members.find(m => m.id === actorId);
-      try {
-        await pushToMembers(state, [actorId], {
-          title: '🕵️ MrBrok er i gang!',
-          body: `${starter ? starter.name : 'Nogen'} startede et spil — kom med!`,
-          url: '/?r=' + roomId,
-        });
-      } catch (e) { /* push-fejl må ikke vælte selve spilstarten */ }
+        state.mrbrok = {
+          active: true, wager, players, mrBrokId, topic: pickTopic(state),
+          round: 0, totalRounds, scores, caught: false, history: [], current: null, startedAt: Date.now(),
+        };
+        beginMrbrokRound(state, playerObjs);
 
-      return res.status(200).json({ state: redactStateFor(state, actorId) });
-    }
-
-    if (!state.mrbrok.active) return res.status(409).json({ error: 'der er ikke noget MrBrok-spil i gang' });
-    const m = state.mrbrok;
-    const cur = m.current;
-    const players = m.players;
-
-    if (action === 'submit') {
-      const { payload } = req.body || {};
-      if (!cur || !payload) return res.status(400).json({ error: 'mangler data' });
-      if (!players.includes(actorId)) return res.status(403).json({ error: 'du er ikke med i dette spil af MrBrok' });
-
-      if (cur.type === 'turn' && cur.phase === 'ask') {
-        if (actorId !== cur.askerId) return res.status(403).json({ error: 'det er ikke din tur til at spørge' });
-        const text = (payload.question || '').toString().trim().slice(0, 140);
-        if (!text) return res.status(400).json({ error: 'skriv et spørgsmål' });
-        cur.question = text;
-        cur.phase = 'answer';
-      } else if (cur.type === 'turn' && cur.phase === 'answer') {
-        if (actorId !== cur.targetId) return res.status(403).json({ error: 'det er ikke dig der skal svare lige nu' });
-        const text = (payload.answer || '').toString().trim().slice(0, 140);
-        if (!text) return res.status(400).json({ error: 'skriv et svar' });
-        cur.answer = text;
-        advanceTurn(state);
-      } else if (cur.type === 'guess') {
-        if (actorId === m.mrBrokId) return res.status(403).json({ error: 'du kan ikke gætte på dig selv' });
-        if (!players.includes(payload.guessedId)) return res.status(400).json({ error: 'ukendt spiller' });
-        cur.guesses[actorId] = payload.guessedId;
-        if (Object.keys(cur.guesses).length >= players.length - 1) resolveGuessPhase(state, state.members.filter(mm => players.includes(mm.id)));
-      } else if (cur.type === 'steal' && !cur.guess) {
-        if (actorId !== m.mrBrokId) return res.status(403).json({ error: 'kun MrBrok kan gætte emnet' });
-        const text = (payload.guess || '').toString().trim().slice(0, 140);
-        if (!text) return res.status(400).json({ error: 'skriv dit gæt' });
-        cur.guess = text;
-      } else if (cur.type === 'steal' && cur.guess) {
-        if (actorId === m.mrBrokId) return res.status(403).json({ error: 'du kan ikke stemme om dit eget gæt' });
-        cur.votes[actorId] = !!payload.closeEnough;
-        if (Object.keys(cur.votes).length >= players.length - 1) resolveSteal(state);
-      } else {
-        return res.status(400).json({ error: 'ugyldig handling lige nu' });
+        const starter = state.members.find(mm => mm.id === actorId);
+        pushInfo = { excludeIds: [actorId], title: '🕵️ MrBrok er i gang!', body: `${starter ? starter.name : 'Nogen'} startede et spil — kom med!`, url: '/?r=' + roomId };
+        return;
       }
-      await setState(roomId, state);
-      return res.status(200).json({ state: redactStateFor(state, actorId) });
-    }
 
-    // "advance" er nødbremsen klientens nedtællings-timer bruger hvis nogen
-    // ikke når at svare/gætte/stemme til tiden — spring bare videre.
-    if (action === 'advance') {
-      if (!cur) return res.status(400).json({ error: 'ingen aktiv runde' });
+      if (!state.mrbrok.active) throw new ApiError(409, 'der er ikke noget MrBrok-spil i gang');
+      const m = state.mrbrok;
+      const cur = m.current;
+      const players = m.players;
 
-      if (cur.type === 'turn' && cur.phase === 'ask') {
-        cur.question = cur.question || '(intet spørgsmål — tiden løb ud)';
-        advanceTurn(state);
-      } else if (cur.type === 'turn' && cur.phase === 'answer') {
-        cur.answer = cur.answer || '(intet svar — tiden løb ud)';
-        advanceTurn(state);
-      } else if (cur.type === 'guess') {
-        resolveGuessPhase(state, state.members.filter(mm => players.includes(mm.id)));
-      } else if (cur.type === 'steal' && !cur.guess) {
-        endMrbrokGame(state, false);
-      } else if (cur.type === 'steal' && cur.guess) {
-        resolveSteal(state);
-      } else {
-        return res.status(400).json({ error: 'kan ikke gå videre lige nu' });
+      if (action === 'submit') {
+        const { payload } = req.body || {};
+        if (!cur || !payload) throw new ApiError(400, 'mangler data');
+        if (!players.includes(actorId)) throw new ApiError(403, 'du er ikke med i dette spil af MrBrok');
+
+        if (cur.type === 'turn' && cur.phase === 'ask') {
+          if (actorId !== cur.askerId) throw new ApiError(403, 'det er ikke din tur til at spørge');
+          const text = (payload.question || '').toString().trim().slice(0, 140);
+          if (!text) throw new ApiError(400, 'skriv et spørgsmål');
+          cur.question = text;
+          cur.phase = 'answer';
+        } else if (cur.type === 'turn' && cur.phase === 'answer') {
+          if (actorId !== cur.targetId) throw new ApiError(403, 'det er ikke dig der skal svare lige nu');
+          const text = (payload.answer || '').toString().trim().slice(0, 140);
+          if (!text) throw new ApiError(400, 'skriv et svar');
+          cur.answer = text;
+          advanceTurn(state);
+        } else if (cur.type === 'guess') {
+          if (actorId === m.mrBrokId) throw new ApiError(403, 'du kan ikke gætte på dig selv');
+          if (!players.includes(payload.guessedId)) throw new ApiError(400, 'ukendt spiller');
+          cur.guesses[actorId] = payload.guessedId;
+          if (Object.keys(cur.guesses).length >= players.length - 1) resolveGuessPhase(state, state.members.filter(mm => players.includes(mm.id)));
+        } else if (cur.type === 'steal' && !cur.guess) {
+          if (actorId !== m.mrBrokId) throw new ApiError(403, 'kun MrBrok kan gætte emnet');
+          const text = (payload.guess || '').toString().trim().slice(0, 140);
+          if (!text) throw new ApiError(400, 'skriv dit gæt');
+          cur.guess = text;
+        } else if (cur.type === 'steal' && cur.guess) {
+          if (actorId === m.mrBrokId) throw new ApiError(403, 'du kan ikke stemme om dit eget gæt');
+          cur.votes[actorId] = !!payload.closeEnough;
+          if (Object.keys(cur.votes).length >= players.length - 1) resolveSteal(state);
+        } else {
+          throw new ApiError(400, 'ugyldig handling lige nu');
+        }
+        return;
       }
-      await setState(roomId, state);
-      return res.status(200).json({ state: redactStateFor(state, actorId) });
+
+      // "advance" er nødbremsen klientens nedtællings-timer bruger hvis nogen
+      // ikke når at svare/gætte/stemme til tiden — spring bare videre.
+      if (action === 'advance') {
+        if (!cur) throw new ApiError(400, 'ingen aktiv runde');
+
+        if (cur.type === 'turn' && cur.phase === 'ask') {
+          cur.question = cur.question || '(intet spørgsmål — tiden løb ud)';
+          advanceTurn(state);
+        } else if (cur.type === 'turn' && cur.phase === 'answer') {
+          cur.answer = cur.answer || '(intet svar — tiden løb ud)';
+          advanceTurn(state);
+        } else if (cur.type === 'guess') {
+          resolveGuessPhase(state, state.members.filter(mm => players.includes(mm.id)));
+        } else if (cur.type === 'steal' && !cur.guess) {
+          endMrbrokGame(state, false);
+        } else if (cur.type === 'steal' && cur.guess) {
+          resolveSteal(state);
+        } else {
+          throw new ApiError(400, 'kan ikke gå videre lige nu');
+        }
+        return;
+      }
+
+      if (action === 'end') {
+        state.mrbrok = { active: false };
+        return;
+      }
+
+      throw new ApiError(400, 'ukendt handling');
+    });
+    if (!mutated) return res.status(404).json({ error: 'ukendt brokkekasse' });
+    const { state } = mutated;
+
+    if (pushInfo) {
+      try { await pushToMembers(state, pushInfo.excludeIds, { title: pushInfo.title, body: pushInfo.body, url: pushInfo.url }); }
+      catch (e) { /* push-fejl må ikke vælte selve spilstarten */ }
     }
 
-    if (action === 'end') {
-      state.mrbrok = { active: false };
-      await setState(roomId, state);
-      return res.status(200).json({ state: redactStateFor(state, actorId) });
-    }
-
-    return res.status(400).json({ error: 'ukendt handling' });
+    return res.status(200).json({ state: redactStateFor(state, actorId) });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(e.status || 500).json({ error: e.message });
   }
 };

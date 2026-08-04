@@ -242,6 +242,8 @@ let gameTimerInterval = null;
 let gameTimerDeadline = null;
 let lastCelebratedKey = null; // undgår at fyre konfetti/hån-toast flere gange for samme rundes resultat
 let lastCountdownRound = null; // undgår at afspille 3-2-1-nedtællingen flere gange for samme runde
+let lastAnimatedGameKey = null; // undgår at gen-afspille kortets indgangs-animation ved hvert stille poll-opdatering (så det ikke "flimrer")
+let lastAnimatedMrbrokKey = null;
 
 let mrbrokWager = 'fun';
 let mrbrokRounds = 4; // 3 | 4 | 5
@@ -886,9 +888,9 @@ function openGameAdminMenuSheet(){
 // videre), tæller denne ned og trykker selv "gå videre" — så spillet aldrig
 // reelt går i stå bare fordi nogen glemmer at trykke.
 const GAME_PHASE_SECONDS = {
-  'quiplash:answer': 60, 'quiplash:vote': 30, 'quiplash:results': 15,
-  'truefalse:write': 45, 'truefalse:guess': 25, 'truefalse:results': 15,
-  'trivia:answer': 25, 'trivia:results': 15,
+  'quiplash:answer': 60, 'quiplash:vote': 35, 'quiplash:results': 20,
+  'truefalse:write': 45, 'truefalse:guess': 35, 'truefalse:results': 20,
+  'trivia:answer': 35, 'trivia:results': 20,
 };
 function startGameTimer(cur){
   clearInterval(gameTimerInterval);
@@ -1003,11 +1005,18 @@ function renderGameScreen(){
   document.getElementById('btnAppMenu').onclick = openAppMenuSheet;
   bindGameHandlers(g);
   const card = document.getElementById('gameCard') || document.getElementById('gameoverReveal');
-  if(card && typeof gsap !== 'undefined'){
+  // Kun afspil kort-animationen OG genstarte nedtællingen når runde/fase
+  // RENT FAKTISK skifter — ellers sker begge dele ved hvert stille poll (fx
+  // når en anden spiller svarer), hvilket så ud som flimren og fik uret til
+  // at hoppe tilbage til fuld tid igen og igen i stedet for at tælle ned.
+  const animKey = g.active && g.current ? (g.round + ':' + g.current.type + ':' + g.current.phase) : 'lobby';
+  const isNewGamePhase = animKey !== lastAnimatedGameKey;
+  lastAnimatedGameKey = animKey;
+  if(card && typeof gsap !== 'undefined' && isNewGamePhase){
     gsap.fromTo(card, { opacity:0, y:14, scale:.97 }, { opacity:1, y:0, scale:1, duration:.45, ease:'power2.out' });
   }
   if(g.active && profile && g.players && g.players.includes(profile.memberId)){
-    startGameTimer(g.current);
+    if(isNewGamePhase || !gameTimerInterval) startGameTimer(g.current);
   }else{
     clearInterval(gameTimerInterval);
     gameTimerInterval = null;
@@ -1439,11 +1448,17 @@ function renderMrbrokScreen(){
   document.getElementById('btnAppMenu').onclick = openAppMenuSheet;
   bindMrbrokHandlers(m);
   const card = document.getElementById('mrbrokCard') || document.getElementById('mrbrokReveal');
-  if(card && typeof gsap !== 'undefined'){
+  // Samme fix som Brokspillet: kun animér/genstart nedtællingen ved et
+  // rigtigt fase-skift, ikke ved hvert stille poll — ellers flimrer kortet
+  // og uret hopper tilbage til fuld tid hver gang en anden spiller reagerer.
+  const mrbrokAnimKey = m.active && m.current ? (m.round + ':' + mrbrokTimerKey(m.current)) : 'lobby';
+  const isNewMrbrokPhase = mrbrokAnimKey !== lastAnimatedMrbrokKey;
+  lastAnimatedMrbrokKey = mrbrokAnimKey;
+  if(card && typeof gsap !== 'undefined' && isNewMrbrokPhase){
     gsap.fromTo(card, { opacity:0, y:14, scale:.97 }, { opacity:1, y:0, scale:1, duration:.45, ease:'power2.out' });
   }
   if(m.active && profile && m.players && m.players.includes(profile.memberId)){
-    startMrbrokTimer(m.current);
+    if(isNewMrbrokPhase || !mrbrokTimerInterval) startMrbrokTimer(m.current);
   }else{
     clearInterval(mrbrokTimerInterval);
     mrbrokTimerInterval = null;

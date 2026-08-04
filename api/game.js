@@ -1,4 +1,4 @@
-const { getState, setState, uid, redactStateFor } = require('./_lib/store');
+const { mutateState, uid, redactStateFor, ApiError } = require('./_lib/store');
 const { beginRound } = require('./_lib/game');
 const { pushToMembers } = require('./_lib/push');
 
@@ -80,135 +80,138 @@ module.exports = async (req, res) => {
   try {
     const { action, roomId, actorId } = req.body || {};
     if (!roomId || !actorId) return res.status(400).json({ error: 'mangler data' });
-    const state = await getState(roomId);
-    if (!state) return res.status(404).json({ error: 'ukendt brokkekasse' });
-    if (!state.members.find(m => m.id === actorId)) return res.status(400).json({ error: 'ukendt medlem' });
-    if (!state.game) state.game = { active: false };
 
-    if (action === 'start') {
-      if (state.game.active) return res.status(409).json({ error: 'spillet er allerede i gang' });
-      if (state.mrbrok && state.mrbrok.active) return res.status(409).json({ error: 'MrBrok er i gang — afslut det først' });
-      const requested = Array.isArray(req.body.playerIds) ? req.body.playerIds : state.members.map(m => m.id);
-      const players = state.members.map(m => m.id).filter(id => requested.includes(id));
-      if (players.length < 2) return res.status(400).json({ error: 'vælg mindst 2 spillere' });
-      const wager = req.body.wager === 'euro' ? 'euro' : 'fun';
-      const totalRounds = ALLOWED_ROUNDS.includes(req.body.totalRounds) ? req.body.totalRounds : DEFAULT_ROUNDS;
-      const scores = {};
-      players.forEach(id => (scores[id] = 0));
-      state.game = { active: true, wager, players, round: 0, totalRounds, scores, current: null, startedAt: Date.now() };
-      beginRound(state, state.members.filter(m => players.includes(m.id)));
-      await setState(roomId, state);
+    // Al læsning+mutation+skrivning sker inde i mutateState, som automatisk
+    // prøver igen mod frisk data hvis en anden spiller nåede at skrive
+    // først (fx alle der stemmer i samme sekund) — ellers ville den sidste
+    // skrivning stille overskrive den forrige, og en spillers svar kunne gå
+    // helt tabt uden nogen fejl at se.
+    let pushInfo = null;
+    const mutated = await mutateState(roomId, async (state) => {
+      if (!state.members.find(m => m.id === actorId)) throw new ApiError(400, 'ukendt medlem');
+      if (!state.game) state.game = { active: false };
 
-      const starter = state.members.find(m => m.id === actorId);
-      try {
-        await pushToMembers(state, [actorId], {
-          title: '🎲 Brokspillet er i gang!',
-          body: `${starter ? starter.name : 'Nogen'} startede et spil — kom med!`,
-          url: '/?r=' + roomId,
-        });
-      } catch (e) { /* push-fejl må ikke vælte selve spilstarten */ }
-
-      return res.status(200).json({ state: redactStateFor(state, actorId) });
-    }
-
-    if (!state.game.active) return res.status(409).json({ error: 'der er ikke noget spil i gang' });
-    const cur = state.game.current;
-    const players = state.game.players || state.members.map(m => m.id);
-
-    if (action === 'submit') {
-      const { payload } = req.body || {};
-      if (!cur || !payload) return res.status(400).json({ error: 'mangler data' });
-      if (!players.includes(actorId)) return res.status(403).json({ error: 'du er ikke med i denne runde af Brokspillet' });
-
-      if (cur.type === 'quiplash' && cur.phase === 'answer') {
-        const text = (payload.text || '').toString().trim().slice(0, 120);
-        if (text) cur.answers[actorId] = text;
-        if (Object.keys(cur.answers).length >= players.length) { cur.phase = 'vote'; cur.votes = {}; }
-      } else if (cur.type === 'quiplash' && cur.phase === 'vote') {
-        if (payload.votedFor && payload.votedFor !== actorId) cur.votes[actorId] = payload.votedFor;
-        if (Object.keys(cur.votes).length >= players.length) resolveQuiplashVote(state, cur);
-      } else if (cur.type === 'truefalse' && cur.phase === 'write') {
-        if (actorId !== cur.authorId) return res.status(403).json({ error: 'kun den der skriver rundens udsagn kan gøre dette' });
-        const targetId = payload.targetId && players.includes(payload.targetId) ? payload.targetId : cur.authorId;
-        const statement = (payload.statement || '').toString().trim().slice(0, 120);
-        if (!statement) return res.status(400).json({ error: 'skriv et udsagn' });
-        cur.targetId = targetId;
-        cur.statement = statement;
-        cur.isTrue = !!payload.isTrue;
-        cur.phase = 'guess';
-        // Gemmes til senere spil — content skal ikke gå til spilde.
-        if (!state.gameContentBank) state.gameContentBank = { truefalse: [] };
-        if (!state.gameContentBank.truefalse) state.gameContentBank.truefalse = [];
-        state.gameContentBank.truefalse.push({ authorId: cur.authorId, targetId, statement, isTrue: cur.isTrue, ts: Date.now() });
-        if (state.gameContentBank.truefalse.length > 60) state.gameContentBank.truefalse.shift();
-      } else if (cur.type === 'truefalse' && cur.phase === 'guess') {
-        if (actorId === cur.authorId) return res.status(403).json({ error: 'du kan ikke gætte på dit eget udsagn' });
-        cur.guesses[actorId] = !!payload.guess;
-        if (Object.keys(cur.guesses).length >= players.length - 1) resolveTrueFalseGuess(state, cur);
-      } else if (cur.type === 'trivia' && cur.phase === 'answer') {
-        if (Number.isInteger(payload.choiceIndex)) cur.choices[actorId] = payload.choiceIndex;
-        if (Object.keys(cur.choices).length >= players.length) resolveTriviaAnswer(state, cur);
-      } else {
-        return res.status(400).json({ error: 'ugyldig handling lige nu' });
+      if (action === 'start') {
+        if (state.game.active) throw new ApiError(409, 'spillet er allerede i gang');
+        if (state.mrbrok && state.mrbrok.active) throw new ApiError(409, 'MrBrok er i gang — afslut det først');
+        const requested = Array.isArray(req.body.playerIds) ? req.body.playerIds : state.members.map(m => m.id);
+        const players = state.members.map(m => m.id).filter(id => requested.includes(id));
+        if (players.length < 2) throw new ApiError(400, 'vælg mindst 2 spillere');
+        const wager = req.body.wager === 'euro' ? 'euro' : 'fun';
+        const totalRounds = ALLOWED_ROUNDS.includes(req.body.totalRounds) ? req.body.totalRounds : DEFAULT_ROUNDS;
+        const scores = {};
+        players.forEach(id => (scores[id] = 0));
+        state.game = { active: true, wager, players, round: 0, totalRounds, scores, current: null, startedAt: Date.now() };
+        beginRound(state, state.members.filter(m => players.includes(m.id)));
+        const starter = state.members.find(m => m.id === actorId);
+        pushInfo = { excludeIds: [actorId], title: '🎲 Brokspillet er i gang!', body: `${starter ? starter.name : 'Nogen'} startede et spil — kom med!`, url: '/?r=' + roomId };
+        return;
       }
-      await setState(roomId, state);
-      return res.status(200).json({ state: redactStateFor(state, actorId) });
-    }
 
-    // "ready" er spillerens EGET valg om at gå videre — bruges i resultat-
-    // pausen mellem runder, hvor der ikke er noget at indsende. Runden går
-    // først videre når alle er klar (eller når nedtællingen løber ud, se
-    // 'advance' herunder som stadig er den fælles nødbremse).
-    if (action === 'ready') {
-      if (!cur || cur.phase !== 'results') return res.status(400).json({ error: 'kan ikke gøres klar lige nu' });
-      if (!players.includes(actorId)) return res.status(403).json({ error: 'du er ikke med i denne runde af Brokspillet' });
-      if (!cur.readyIds) cur.readyIds = [];
-      if (!cur.readyIds.includes(actorId)) cur.readyIds.push(actorId);
-      if (cur.readyIds.length >= players.length) goToNextRoundOrEnd(state, players);
-      await setState(roomId, state);
-      return res.status(200).json({ state: redactStateFor(state, actorId) });
-    }
+      if (!state.game.active) throw new ApiError(409, 'der er ikke noget spil i gang');
+      const cur = state.game.current;
+      const players = state.game.players || state.members.map(m => m.id);
 
-    // "advance" er nu kun nødbremsen som klientens nedtællings-timer bruger
-    // hvis nogen ikke når at svare/blive klar til tiden — ikke længere en
-    // knap nogen trykker for at afbryde de andre.
-    if (action === 'advance') {
-      if (!cur) return res.status(400).json({ error: 'ingen aktiv runde' });
+      if (action === 'submit') {
+        const { payload } = req.body || {};
+        if (!cur || !payload) throw new ApiError(400, 'mangler data');
+        if (!players.includes(actorId)) throw new ApiError(403, 'du er ikke med i denne runde af Brokspillet');
 
-      if (cur.type === 'quiplash' && cur.phase === 'answer') {
-        cur.votes = {};
-        if (Object.keys(cur.answers).length < 2) {
-          // For få nåede at svare inden tiden løb ud — der er intet
-          // meningsfyldt at stemme om (hver spiller ville se "ingen andre
-          // svar at stemme på"), så spring stemme-fasen over og gå direkte
-          // til et resultat uden vinder i stedet for at gå i stå der.
-          resolveQuiplashVote(state, cur);
+        if (cur.type === 'quiplash' && cur.phase === 'answer') {
+          const text = (payload.text || '').toString().trim().slice(0, 120);
+          if (text) cur.answers[actorId] = text;
+          if (Object.keys(cur.answers).length >= players.length) { cur.phase = 'vote'; cur.votes = {}; }
+        } else if (cur.type === 'quiplash' && cur.phase === 'vote') {
+          if (payload.votedFor && payload.votedFor !== actorId) cur.votes[actorId] = payload.votedFor;
+          if (Object.keys(cur.votes).length >= players.length) resolveQuiplashVote(state, cur);
+        } else if (cur.type === 'truefalse' && cur.phase === 'write') {
+          if (actorId !== cur.authorId) throw new ApiError(403, 'kun den der skriver rundens udsagn kan gøre dette');
+          const targetId = payload.targetId && players.includes(payload.targetId) ? payload.targetId : cur.authorId;
+          const statement = (payload.statement || '').toString().trim().slice(0, 120);
+          if (!statement) throw new ApiError(400, 'skriv et udsagn');
+          cur.targetId = targetId;
+          cur.statement = statement;
+          cur.isTrue = !!payload.isTrue;
+          cur.phase = 'guess';
+          // Gemmes til senere spil — content skal ikke gå til spilde.
+          if (!state.gameContentBank) state.gameContentBank = { truefalse: [] };
+          if (!state.gameContentBank.truefalse) state.gameContentBank.truefalse = [];
+          state.gameContentBank.truefalse.push({ authorId: cur.authorId, targetId, statement, isTrue: cur.isTrue, ts: Date.now() });
+          if (state.gameContentBank.truefalse.length > 60) state.gameContentBank.truefalse.shift();
+        } else if (cur.type === 'truefalse' && cur.phase === 'guess') {
+          if (actorId === cur.authorId) throw new ApiError(403, 'du kan ikke gætte på dit eget udsagn');
+          cur.guesses[actorId] = !!payload.guess;
+          if (Object.keys(cur.guesses).length >= players.length - 1) resolveTrueFalseGuess(state, cur);
+        } else if (cur.type === 'trivia' && cur.phase === 'answer') {
+          if (Number.isInteger(payload.choiceIndex)) cur.choices[actorId] = payload.choiceIndex;
+          if (Object.keys(cur.choices).length >= players.length) resolveTriviaAnswer(state, cur);
         } else {
-          cur.phase = 'vote';
+          throw new ApiError(400, 'ugyldig handling lige nu');
         }
-      } else if (cur.type === 'quiplash' && cur.phase === 'vote') {
-        resolveQuiplashVote(state, cur);
-      } else if (cur.type === 'truefalse' && cur.phase === 'guess') {
-        resolveTrueFalseGuess(state, cur);
-      } else if (cur.type === 'trivia' && cur.phase === 'answer') {
-        resolveTriviaAnswer(state, cur);
-      } else if (cur.phase === 'results') {
-        goToNextRoundOrEnd(state, players);
-      } else {
-        return res.status(400).json({ error: 'kan ikke gå videre lige nu' });
+        return;
       }
-      await setState(roomId, state);
-      return res.status(200).json({ state: redactStateFor(state, actorId) });
+
+      // "ready" er spillerens EGET valg om at gå videre — bruges i resultat-
+      // pausen mellem runder, hvor der ikke er noget at indsende. Runden går
+      // først videre når alle er klar (eller når nedtællingen løber ud, se
+      // 'advance' herunder som stadig er den fælles nødbremse).
+      if (action === 'ready') {
+        if (!cur || cur.phase !== 'results') throw new ApiError(400, 'kan ikke gøres klar lige nu');
+        if (!players.includes(actorId)) throw new ApiError(403, 'du er ikke med i denne runde af Brokspillet');
+        if (!cur.readyIds) cur.readyIds = [];
+        if (!cur.readyIds.includes(actorId)) cur.readyIds.push(actorId);
+        if (cur.readyIds.length >= players.length) goToNextRoundOrEnd(state, players);
+        return;
+      }
+
+      // "advance" er nu kun nødbremsen som klientens nedtællings-timer bruger
+      // hvis nogen ikke når at svare/blive klar til tiden — ikke længere en
+      // knap nogen trykker for at afbryde de andre.
+      if (action === 'advance') {
+        if (!cur) throw new ApiError(400, 'ingen aktiv runde');
+
+        if (cur.type === 'quiplash' && cur.phase === 'answer') {
+          cur.votes = {};
+          if (Object.keys(cur.answers).length < 2) {
+            // For få nåede at svare inden tiden løb ud — der er intet
+            // meningsfyldt at stemme om (hver spiller ville se "ingen andre
+            // svar at stemme på"), så spring stemme-fasen over og gå direkte
+            // til et resultat uden vinder i stedet for at gå i stå der.
+            resolveQuiplashVote(state, cur);
+          } else {
+            cur.phase = 'vote';
+          }
+        } else if (cur.type === 'quiplash' && cur.phase === 'vote') {
+          resolveQuiplashVote(state, cur);
+        } else if (cur.type === 'truefalse' && cur.phase === 'guess') {
+          resolveTrueFalseGuess(state, cur);
+        } else if (cur.type === 'trivia' && cur.phase === 'answer') {
+          resolveTriviaAnswer(state, cur);
+        } else if (cur.phase === 'results') {
+          goToNextRoundOrEnd(state, players);
+        } else {
+          throw new ApiError(400, 'kan ikke gå videre lige nu');
+        }
+        return;
+      }
+
+      if (action === 'end') {
+        state.game = { active: false };
+        return;
+      }
+
+      throw new ApiError(400, 'ukendt handling');
+    });
+    if (!mutated) return res.status(404).json({ error: 'ukendt brokkekasse' });
+    const { state } = mutated;
+
+    if (pushInfo) {
+      try { await pushToMembers(state, pushInfo.excludeIds, { title: pushInfo.title, body: pushInfo.body, url: pushInfo.url }); }
+      catch (e) { /* push-fejl må ikke vælte selve handlingen */ }
     }
 
-    if (action === 'end') {
-      state.game = { active: false };
-      await setState(roomId, state);
-      return res.status(200).json({ state: redactStateFor(state, actorId) });
-    }
-
-    return res.status(400).json({ error: 'ukendt handling' });
+    return res.status(200).json({ state: redactStateFor(state, actorId) });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(e.status || 500).json({ error: e.message });
   }
 };
