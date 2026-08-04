@@ -170,6 +170,8 @@ let profile = JSON.parse(localStorage.getItem('bk_profile_' + roomId) || 'null')
 
 let state = null;
 let activeTab = 'feed';
+let activeApp = 'kasse'; // 'kasse' | 'spil' — hvilken af de to "apps" i samme rum der vises
+let gameWager = 'fun'; // 'fun' | 'euro' — valgt i Brokspillets lobby, før spillet startes
 let brokListSubTab = 'alltime'; // 'today' | 'alltime' — undersort inde i Broklisten-fanen; alltime er det vigtigste og vises først
 let polling = null;
 let toastTimer = null;
@@ -315,6 +317,8 @@ async function refreshState(silent){
     if(silent && json === lastStateJSON) return; // intet nyt — undgå at afbryde en igangværende scroll unødigt
     lastStateJSON = json;
     state = s;
+    const typingTag = document.activeElement && document.activeElement.tagName;
+    if(silent && activeApp === 'spil' && (typingTag === 'TEXTAREA' || typingTag === 'INPUT')) return; // undgå at nulstille et svar man er ved at skrive i Brokspillet
     render();
   }catch(e){
     if(!silent) toast('Kunne ikke hente data: ' + e.message);
@@ -558,6 +562,7 @@ function todayBalances(){
 }
 
 function render(){
+  if(activeApp === 'spil') return renderGameScreen();
   const prevMain = document.getElementById('main');
   const savedMainScroll = prevMain ? prevMain.scrollTop : 0;
   const savedWindowScroll = window.scrollY;
@@ -568,18 +573,13 @@ function render(){
     try{ unvoted ? navigator.setAppBadge(unvoted) : navigator.clearAppBadge(); }catch(e){}
   }
   checkFreeBrokReveal();
-  const showPushBell = pushSupported() && typeof Notification !== 'undefined' && Notification.permission !== 'denied' && !pushEnabledLocally();
   app.innerHTML = `
     <header>
-      <div class="title" style="font-size:30px;">Brokke<span>kassen</span> 🏖️</div>
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-        <span class="day-chip" style="font-size:11px; color:rgba(255,247,232,0.85);">Dag ${dayCount()}</span>
-        <div style="display:flex; align-items:center; gap:8px;">
-          ${showPushBell ? `<button id="btnPush" title="Få besked når nogen brokker sig" style="width:26px; height:26px; padding:0; display:flex; align-items:center; justify-content:center; font-size:12px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.55); border-radius:100px;">🔔</button>` : ''}
-          <button id="btnShare" title="Del invite-link" style="width:26px; height:26px; padding:0; display:flex; align-items:center; justify-content:center; font-size:12px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.55); border-radius:100px;">🔗</button>
-          <button id="btnLeave" title="Skift eller forlad rum" style="width:26px; height:26px; padding:0; display:flex; align-items:center; justify-content:center; font-size:12px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.55); border-radius:100px;">🚪</button>
-        </div>
+      <div class="title" style="font-size:30px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+        <span>Brokke<span>kassen</span> 🏖️</span>
+        <button id="btnAppMenu" title="Menu" style="width:32px; height:32px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.85); border-radius:100px; flex:0 0 auto;">☰</button>
       </div>
+      <span class="day-chip" style="font-size:11px; color:rgba(255,247,232,0.85);">Dag ${dayCount()}</span>
     </header>
     <div class="jar-wrap" id="jarWrap" style="cursor:pointer;">
       ${jarSVG(fillPct)}
@@ -600,19 +600,338 @@ function render(){
   `;
   document.querySelectorAll('.tab').forEach(t=>{ t.onclick = ()=>{ activeTab = t.dataset.tab; renderMain(); document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active', x===t)); }; });
   if(!state.closed) document.getElementById('btnBrok').onclick = openBrokSheet;
-  document.getElementById('btnShare').onclick = openShareSheet;
-  document.getElementById('btnLeave').onclick = openLeaveRoomSheet;
+  document.getElementById('btnAppMenu').onclick = openAppMenuSheet;
   const jarWrap = document.getElementById('jarWrap');
   if(jarWrap) jarWrap.onclick = bounceJar;
   startJarIdleWave();
-  const btnPush = document.getElementById('btnPush');
-  if(btnPush) btnPush.onclick = async ()=>{ const ok = await enablePush(); if(ok) render(); };
   const btnAdminMenu = document.getElementById('btnAdminMenu');
   if(btnAdminMenu) btnAdminMenu.onclick = openAdminMenuSheet;
   renderMain();
   const newMain = document.getElementById('main');
   if(newMain && savedMainScroll) newMain.scrollTop = savedMainScroll;
   if(savedWindowScroll) window.scrollTo(0, savedWindowScroll);
+}
+
+function openAppMenuSheet(){
+  const showPushBell = pushSupported() && typeof Notification !== 'undefined' && Notification.permission !== 'denied' && !pushEnabledLocally();
+  openSheet(`
+    <h2>Menu</h2>
+    <div style="display:flex; gap:10px; margin:6px 0 4px;">
+      <div data-goto-app="kasse" style="flex:1; cursor:pointer; text-align:center; padding:20px 10px; border-radius:18px; background:${activeApp==='kasse'?'var(--sea)':'rgba(5,32,36,0.06)'}; color:${activeApp==='kasse'?'#fff':'var(--ink)'};">
+        <div style="font-size:30px;">🫙</div>
+        <div style="font-weight:700; margin-top:6px;">Brokkekassen</div>
+      </div>
+      <div data-goto-app="spil" style="flex:1; cursor:pointer; text-align:center; padding:20px 10px; border-radius:18px; background:${activeApp==='spil'?'var(--sea)':'rgba(5,32,36,0.06)'}; color:${activeApp==='spil'?'#fff':'var(--ink)'};">
+        <div style="font-size:30px;">🎲</div>
+        <div style="font-weight:700; margin-top:6px;">Brokspillet</div>
+      </div>
+    </div>
+    <div class="divider">rum</div>
+    ${showPushBell ? `<button class="sheet-btn ghost" id="menuPushBtn">🔔 Slå push-beskeder til</button>` : ''}
+    <button class="sheet-btn ghost" id="menuShareBtn">📤 Del invite-link</button>
+    <button class="sheet-btn ghost" id="menuLeaveBtn">🚪 Skift eller forlad rum</button>
+    <button class="sheet-btn ghost" id="menuCloseBtn">Luk menu</button>
+  `, ()=>{
+    document.querySelectorAll('[data-goto-app]').forEach(el=>{
+      el.onclick = ()=>{ activeApp = el.dataset.gotoApp; closeSheet(); render(); };
+    });
+    const pushBtn = document.getElementById('menuPushBtn');
+    if(pushBtn) pushBtn.onclick = async ()=>{ const ok = await enablePush(); if(ok){ closeSheet(); render(); } };
+    document.getElementById('menuShareBtn').onclick = ()=>{ closeSheet(); setTimeout(openShareSheet, 230); };
+    document.getElementById('menuLeaveBtn').onclick = ()=>{ closeSheet(); setTimeout(openLeaveRoomSheet, 230); };
+    document.getElementById('menuCloseBtn').onclick = closeSheet;
+  });
+}
+
+/* ============ BROKSPILLET ============ */
+async function gameApi(action, extra){
+  try{
+    const r = await api('game', Object.assign({ action, roomId, actorId: profile.memberId }, extra||{}));
+    state = r.state;
+    render();
+  }catch(e){ toast(e.message); }
+}
+
+function renderGameScreen(){
+  const g = state.game || { active:false };
+  app.innerHTML = `
+    <header>
+      <div class="title" style="font-size:30px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+        <span>Brok<span>spillet</span> 🎲</span>
+        <button id="btnAppMenu" title="Menu" style="width:32px; height:32px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.85); border-radius:100px; flex:0 0 auto;">☰</button>
+      </div>
+    </header>
+    <main id="main" style="padding:0 16px 40px;">${gameBodyHtml(g)}</main>
+  `;
+  document.getElementById('btnAppMenu').onclick = openAppMenuSheet;
+  bindGameHandlers(g);
+}
+
+function gameBodyHtml(g){
+  if(!g.active || !g.current) return gameLobbyHtml();
+  const cur = g.current;
+  if(cur.type === 'gameover') return gameOverHtml(g, cur);
+  if(cur.type === 'quiplash') return quiplashHtml(g, cur);
+  if(cur.type === 'truefalse') return truefalseHtml(g, cur);
+  if(cur.type === 'trivia') return triviaHtml(g, cur);
+  return '';
+}
+
+function gameLobbyHtml(){
+  return `
+    <div class="empty-state" style="padding-top:26px;">
+      <span class="emoji">🎲</span>
+      <b>Brokspillet</b>
+      Skriv-og-stem, sandt/falsk og trivia om jeres egen brok-historik. ${state.members.length} spillere klar.
+    </div>
+    <div class="onboard-card" style="margin:10px 0;">
+      <label class="field-label">Spil om</label>
+      <div class="segmented" style="margin-bottom:0;">
+        <div class="seg ${gameWager!=='euro'?'active':''}" data-wager="fun">😄 For sjov</div>
+        <div class="seg ${gameWager==='euro'?'active':''}" data-wager="euro">💶 Om en euro</div>
+      </div>
+    </div>
+    <button class="sheet-btn primary" id="startGameBtn" ${state.members.length<2?'disabled':''} style="margin-top:16px;">🎲 Start spillet</button>
+    ${state.members.length<2?'<p class="hint" style="text-align:center;">Kræver mindst 2 medlemmer</p>':''}
+  `;
+}
+
+function quiplashHtml(g, cur){
+  if(cur.phase === 'answer'){
+    const answered = Object.keys(cur.answers||{}).length;
+    const mine = profile && cur.answers[profile.memberId];
+    return `
+      <div class="section-label">Runde ${g.round}/${g.totalRounds} · 🎭 Skriv-og-stem</div>
+      <div class="onboard-card">
+        <p style="font-weight:700; font-size:16px; margin:0 0 14px;">${escapeHtml(cur.prompt)}</p>
+        <textarea id="quipInput" rows="2" maxlength="120" placeholder="Dit svar...">${mine?escapeHtml(mine):''}</textarea>
+        <button class="sheet-btn primary" id="quipSubmitBtn" style="margin-top:10px;">${mine?'Opdatér svar':'Send svar'}</button>
+      </div>
+      <p class="hint" style="text-align:center;">${answered}/${state.members.length} har svaret</p>
+      <button class="sheet-btn ghost" id="advanceBtn">👉 Gå videre til afstemning</button>
+    `;
+  }
+  if(cur.phase === 'vote'){
+    const entries = Object.entries(cur.answers||{}).filter(([id])=>id!==(profile&&profile.memberId));
+    const myVote = profile && cur.votes[profile.memberId];
+    const votedCount = Object.keys(cur.votes||{}).length;
+    const rows = entries.map(([id,text],i)=>`
+      <div class="bal-row" data-vote-for="${id}" style="cursor:pointer; ${myVote===id?'outline:2px solid var(--sea);':''}">
+        <div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${i+1}</div>
+        <div class="feed-body"><div class="bal-name">"${escapeHtml(text)}"</div></div>
+        ${myVote===id?'<span style="font-size:18px;">✓</span>':''}
+      </div>
+    `).join('');
+    return `
+      <div class="section-label">Runde ${g.round}/${g.totalRounds} · Stem på det bedste svar</div>
+      <p class="hint" style="margin:0 0 10px;">${escapeHtml(cur.prompt)}</p>
+      ${rows || '<p class="hint">Ingen andre svar at stemme på.</p>'}
+      <p class="hint" style="text-align:center;">${votedCount}/${state.members.length} har stemt</p>
+      <button class="sheet-btn ghost" id="advanceBtn">👉 Afslør vinderen</button>
+    `;
+  }
+  const winners = (cur.winnerIds||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
+  return `
+    <div class="section-label">Runde ${g.round}/${g.totalRounds} · Resultat</div>
+    <div class="onboard-card" style="text-align:center;">
+      <p style="margin:0 0 10px;">${escapeHtml(cur.prompt)}</p>
+      ${Object.entries(cur.answers||{}).map(([id,text])=>{
+        const m = state.members.find(x=>x.id===id);
+        const won = (cur.winnerIds||[]).includes(id);
+        return `<div class="feed-item" style="${won?'border-color:var(--coin); background:rgba(255,201,60,0.1);':''}">
+          <div class="avatar">${initials(m?m.name:'?')}</div>
+          <div class="feed-body"><div class="feed-name">${escapeHtml(m?m.name:'?')} ${won?'🏆':''}</div><div class="feed-msg">"${escapeHtml(text)}"</div></div>
+        </div>`;
+      }).join('')}
+      <p style="font-weight:700; margin-top:10px;">${winners.length ? '🏆 ' + winners.map(w=>escapeHtml(w.name)).join(' & ') + ' vandt runden!' : 'Ingen stemmer denne gang.'}</p>
+    </div>
+    <button class="sheet-btn primary" id="advanceBtn">👉 Næste runde</button>
+  `;
+}
+
+function truefalseHtml(g, cur){
+  const author = state.members.find(m=>m.id===cur.authorId);
+  const isAuthor = profile && profile.memberId === cur.authorId;
+  if(cur.phase === 'write'){
+    if(!isAuthor){
+      return `
+        <div class="section-label">Runde ${g.round}/${g.totalRounds} · ⚖️ Sandt eller falsk</div>
+        <div class="empty-state"><span class="emoji">✍️</span><b>${escapeHtml(author?author.name:'?')} skriver et udsagn...</b>Vent til det er klar, så skal I gætte.</div>
+      `;
+    }
+    const chips = state.members.map(m=>`<div class="name-pill ${m.id===profile.memberId?'selected':''}" data-target="${m.id}">${escapeHtml(m.name)}</div>`).join('');
+    return `
+      <div class="section-label">Runde ${g.round}/${g.totalRounds} · ⚖️ Sandt eller falsk — det er dig der skriver!</div>
+      <div class="onboard-card">
+        <label class="field-label">Om hvem? (kan være dig selv)</label>
+        <div class="name-grid" id="ttTargetGrid">${chips}</div>
+        <label class="field-label">Udsagnet</label>
+        <textarea id="ttStatement" rows="2" maxlength="120" placeholder="Skriv noget sandt eller opdigtet..."></textarea>
+        <div class="segmented" style="margin-top:10px;">
+          <div class="seg active" data-truth="true">✅ Det er sandt</div>
+          <div class="seg" data-truth="false">🎭 Jeg fandt på det</div>
+        </div>
+        <button class="sheet-btn primary" id="ttSubmitBtn" style="margin-top:12px;" disabled>Send udsagn</button>
+      </div>
+    `;
+  }
+  if(cur.phase === 'guess'){
+    const target = state.members.find(m=>m.id===cur.targetId);
+    const guessedCount = Object.keys(cur.guesses||{}).length;
+    const eligible = state.members.length - 1;
+    return `
+      <div class="section-label">Runde ${g.round}/${g.totalRounds} · ⚖️ Sandt eller falsk</div>
+      <div class="onboard-card" style="text-align:center;">
+        <p class="hint" style="margin:0 0 6px;">${escapeHtml(author?author.name:'?')} skriver om ${escapeHtml(target?target.name:'?')}:</p>
+        <p style="font-weight:700; font-size:17px;">"${escapeHtml(cur.statement)}"</p>
+        ${isAuthor ? '<p class="hint">Du skrev det — vent på de andres gæt.</p>' : `
+          <div style="display:flex; gap:10px; margin-top:14px;">
+            <button class="sheet-btn primary" data-guess="true" style="margin-top:0;">✅ Sandt</button>
+            <button class="sheet-btn danger" data-guess="false" style="margin-top:0;">🎭 Opdigtet</button>
+          </div>
+        `}
+      </div>
+      <p class="hint" style="text-align:center;">${guessedCount}/${eligible} har gættet</p>
+      <button class="sheet-btn ghost" id="advanceBtn">👉 Afslør sandheden</button>
+    `;
+  }
+  const target = state.members.find(m=>m.id===cur.targetId);
+  const correct = (cur.correctGuessers||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
+  return `
+    <div class="section-label">Runde ${g.round}/${g.totalRounds} · Resultat</div>
+    <div class="onboard-card" style="text-align:center;">
+      <p class="hint">${escapeHtml(author?author.name:'?')} skrev om ${escapeHtml(target?target.name:'?')}:</p>
+      <p style="font-weight:700; font-size:17px;">"${escapeHtml(cur.statement)}"</p>
+      <p style="margin-top:10px; font-weight:800; color:${cur.isTrue?'var(--sea)':'var(--coral)'};">${cur.isTrue ? '✅ Det var faktisk SANDT' : '🎭 Det var OPDIGTET'}</p>
+      <p class="hint" style="margin-top:8px;">${correct.length ? '🏆 ' + correct.map(m=>escapeHtml(m.name)).join(', ') + ' gættede rigtigt' : (Object.keys(cur.guesses||{}).length ? 'Ingen gættede rigtigt — point til ' + escapeHtml(author?author.name:'?') + '!' : 'Ingen nåede at gætte.')}</p>
+    </div>
+    <button class="sheet-btn primary" id="advanceBtn">👉 Næste runde</button>
+  `;
+}
+
+function triviaHtml(g, cur){
+  if(cur.phase === 'answer'){
+    const mine = profile ? cur.choices[profile.memberId] : undefined;
+    const answered = Object.keys(cur.choices||{}).length;
+    const opts = cur.options.map((label,i)=>`
+      <div class="bal-row" data-choice="${i}" style="cursor:pointer; ${mine===i?'outline:2px solid var(--sea);':''}">
+        <div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${String.fromCharCode(65+i)}</div>
+        <div class="feed-body"><div class="bal-name">${escapeHtml(label)}</div></div>
+        ${mine===i?'<span style="font-size:18px;">✓</span>':''}
+      </div>
+    `).join('');
+    return `
+      <div class="section-label">Runde ${g.round}/${g.totalRounds} · 🔍 Ægte Brok</div>
+      <div class="onboard-card">
+        <p style="font-weight:700; font-size:16px; margin:0 0 14px;">${escapeHtml(cur.question)}</p>
+        ${opts}
+      </div>
+      <p class="hint" style="text-align:center;">${answered}/${state.members.length} har svaret</p>
+      <button class="sheet-btn ghost" id="advanceBtn">👉 Afslør svaret</button>
+    `;
+  }
+  const correct = (cur.correctGuessers||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
+  return `
+    <div class="section-label">Runde ${g.round}/${g.totalRounds} · Resultat</div>
+    <div class="onboard-card" style="text-align:center;">
+      <p style="margin:0 0 8px;">${escapeHtml(cur.question)}</p>
+      <p style="font-weight:800; color:var(--sea); font-size:17px;">✅ ${escapeHtml(cur.options[cur.correctIndex])}</p>
+      <p class="hint" style="margin-top:8px;">${correct.length ? '🏆 ' + correct.map(m=>escapeHtml(m.name)).join(', ') + ' fik den rigtige' : 'Ingen gættede rigtigt denne gang.'}</p>
+    </div>
+    <button class="sheet-btn primary" id="advanceBtn">👉 Næste runde</button>
+  `;
+}
+
+function gameOverHtml(g, cur){
+  const ranked = state.members.slice().sort((a,b)=>(cur.scores[b.id]||0)-(cur.scores[a.id]||0));
+  const losers = (cur.loserIds||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
+  const rows = ranked.map((m,i)=>`
+    <div class="bal-row">
+      <div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${i===0?'🏆':(i+1)}</div>
+      <div class="feed-body"><div class="bal-name">${escapeHtml(m.name)}</div></div>
+      <div class="bal-amt">${cur.scores[m.id]||0} point</div>
+    </div>
+  `).join('');
+  return `
+    <div class="section-label">Spillet er slut!</div>
+    ${rows}
+    <div class="onboard-card" id="gameoverReveal" style="text-align:center; margin-top:16px;">
+      <div style="font-size:34px;">🫵</div>
+      <p style="font-weight:800; font-size:19px; margin:6px 0;">Taberen er... ${losers.map(m=>escapeHtml(m.name)).join(' & ')}!</p>
+      ${g.wager==='euro' ? '<p class="hint">1€ lagt i Brokkekassens pulje.</p>' : '<p class="hint">Kun for sjov denne gang.</p>'}
+    </div>
+    <button class="sheet-btn primary" id="playAgainBtn" style="margin-top:16px;">🎲 Spil igen</button>
+    <button class="sheet-btn ghost" id="endGameBtn">Tilbage til lobbyen</button>
+  `;
+}
+
+function bindGameHandlers(g){
+  const cur = g.current;
+  document.querySelectorAll('[data-wager]').forEach(el=>{
+    el.onclick = ()=>{ gameWager = el.dataset.wager; render(); };
+  });
+  const startBtn = document.getElementById('startGameBtn');
+  if(startBtn) startBtn.onclick = ()=> gameApi('start', { wager: gameWager });
+
+  const advanceBtn = document.getElementById('advanceBtn');
+  if(advanceBtn) advanceBtn.onclick = ()=> gameApi('advance', {});
+
+  const playAgainBtn = document.getElementById('playAgainBtn');
+  if(playAgainBtn) playAgainBtn.onclick = ()=>{
+    gameApi('end', {}).then(()=> gameApi('start', { wager: gameWager }));
+  };
+  const endGameBtn = document.getElementById('endGameBtn');
+  if(endGameBtn) endGameBtn.onclick = ()=> gameApi('end', {});
+
+  if(!cur) return;
+
+  if(cur.type === 'quiplash' && cur.phase === 'answer'){
+    const btn = document.getElementById('quipSubmitBtn');
+    if(btn) btn.onclick = ()=>{
+      const text = document.getElementById('quipInput').value.trim();
+      if(!text) return;
+      gameApi('submit', { payload: { text } });
+    };
+  }
+  if(cur.type === 'quiplash' && cur.phase === 'vote'){
+    document.querySelectorAll('[data-vote-for]').forEach(el=>{
+      el.onclick = ()=> gameApi('submit', { payload: { votedFor: el.dataset.voteFor } });
+    });
+  }
+  if(cur.type === 'truefalse' && cur.phase === 'write' && profile && profile.memberId === cur.authorId){
+    let chosenTarget = profile.memberId;
+    let chosenTruth = true;
+    document.querySelectorAll('#ttTargetGrid .name-pill').forEach(p=>{
+      p.onclick = ()=>{
+        document.querySelectorAll('#ttTargetGrid .name-pill').forEach(x=>x.classList.remove('selected'));
+        p.classList.add('selected'); chosenTarget = p.dataset.target;
+      };
+    });
+    document.querySelectorAll('[data-truth]').forEach(seg=>{
+      seg.onclick = ()=>{
+        document.querySelectorAll('[data-truth]').forEach(x=>x.classList.remove('active'));
+        seg.classList.add('active'); chosenTruth = seg.dataset.truth === 'true';
+      };
+    });
+    const input = document.getElementById('ttStatement');
+    const submitBtn = document.getElementById('ttSubmitBtn');
+    input.addEventListener('input', ()=>{ submitBtn.disabled = !input.value.trim(); });
+    submitBtn.onclick = ()=>{
+      const statement = input.value.trim();
+      if(!statement) return;
+      gameApi('submit', { payload: { targetId: chosenTarget, statement, isTrue: chosenTruth } });
+    };
+  }
+  if(cur.type === 'truefalse' && cur.phase === 'guess' && profile && profile.memberId !== cur.authorId){
+    document.querySelectorAll('[data-guess]').forEach(btn=>{
+      btn.onclick = ()=> gameApi('submit', { payload: { guess: btn.dataset.guess === 'true' } });
+    });
+  }
+  if(cur.type === 'trivia' && cur.phase === 'answer'){
+    document.querySelectorAll('[data-choice]').forEach(el=>{
+      el.onclick = ()=> gameApi('submit', { payload: { choiceIndex: parseInt(el.dataset.choice,10) } });
+    });
+  }
 }
 
 function jarSVG(fillPct){
@@ -722,7 +1041,7 @@ function feedItemHtml(e, old){
   return `<div class="feed-item" style="opacity:${opacity};">
     <div class="avatar" style="${e.voided?'filter:grayscale(1);':''}">${initials(name)}</div>
     <div class="feed-body">
-    <div class="feed-name">${escapeHtml(name)} <span class="amt">${e.voided ? '🫤 talt fra' : (e.free ? '🎫 gratis' : '+1€')}</span></div>
+    <div class="feed-name">${escapeHtml(name)} <span class="amt">${e.voided ? '🫤 talt fra' : (e.gameLoss ? '🎲 +1€' : (e.free ? '🎫 gratis' : '+1€'))}</span></div>
     ${e.message ? `<div class="feed-msg" style="${e.voided?'text-decoration:line-through;':''}">"${escapeHtml(e.message)}"</div>` : ''}
     ${e.voided ? `<div class="feed-msg" style="color:rgba(255,201,60,0.85); font-weight:600;">🫤 Mistanke om snyd — tæller ikke med</div>` : ''}
     <div class="feed-time">${fmtTime(e.ts)}</div></div></div>`;
