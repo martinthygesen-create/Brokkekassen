@@ -122,7 +122,6 @@
   .btn-brok{ flex:1; background:linear-gradient(160deg, var(--coral), #e14d2e); color:#fff; border:none; border-radius:100px; padding:16px 10px; font-family:'Baloo 2',sans-serif; font-weight:700; font-size:18px; box-shadow:0 8px 18px rgba(255,107,74,0.35); display:flex; align-items:center; justify-content:center; gap:8px; }
   .btn-brok:active{transform:scale(0.97);}
   .btn-brok:disabled{opacity:.5;}
-  .btn-settle{ flex:0 0 auto; width:52px; background:rgba(255,247,232,0.1); border:1px solid rgba(255,247,232,0.2); color:var(--cream); border-radius:100px; font-size:20px; }
   .btn-share{ flex:0 0 auto; width:52px; background:rgba(255,247,232,0.1); border:1px solid rgba(255,247,232,0.2); color:var(--cream); border-radius:100px; font-size:20px; }
 
   .sheet-backdrop{ position:fixed; inset:0; background:rgba(3,20,22,0.68); backdrop-filter: blur(2px); display:flex; align-items:flex-end; z-index:50; opacity:0; pointer-events:none; transition:opacity .2s ease; }
@@ -698,7 +697,6 @@ function render(){
       ${state.closed
         ? `<button class="btn-brok" id="btnBrok" disabled style="opacity:.6;">🔒 Brokkekassen er lukket</button>`
         : `<button class="btn-brok" id="btnBrok">📢 Nogen brokker sig…</button>`}
-      ${isAdmin() && !state.closed ? `<button class="btn-settle" id="btnAdminMenu" title="Admin">⋯</button>` : ''}
     </div>
   `;
   document.querySelectorAll('.tab').forEach(t=>{ t.onclick = ()=>{ activeTab = t.dataset.tab; renderMain(); document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active', x===t)); }; });
@@ -707,8 +705,6 @@ function render(){
   const jarWrap = document.getElementById('jarWrap');
   if(jarWrap) jarWrap.onclick = bounceJar;
   startJarIdleWave();
-  const btnAdminMenu = document.getElementById('btnAdminMenu');
-  if(btnAdminMenu) btnAdminMenu.onclick = openAdminMenuSheet;
   renderMain();
   const newMain = document.getElementById('main');
   if(newMain && savedMainScroll) newMain.scrollTop = savedMainScroll;
@@ -738,6 +734,12 @@ function openAppMenuSheet(){
       <div class="menu-row" id="menuShareBtn"><div class="menu-row-icon">📤</div><div class="menu-row-label">Del link</div><span class="menu-row-chevron">›</span></div>
       <div class="menu-row" id="menuLeaveBtn"><div class="menu-row-icon">🚪</div><div class="menu-row-label">Skift/forlad rum</div><span class="menu-row-chevron">›</span></div>
     </div>
+    ${isAdmin() ? `
+      <div class="divider">admin</div>
+      <div class="menu-row-list">
+        <div class="menu-row" id="menuAdminBtn"><div class="menu-row-icon">⚙️</div><div class="menu-row-label">Admin for ${activeApp==='spil'?'Brokspillet':(activeApp==='mrbrok'?'MrBrok':'Brokkekassen')}</div><span class="menu-row-chevron">›</span></div>
+      </div>
+    ` : ''}
   `, ()=>{
     document.querySelectorAll('[data-goto-app]').forEach(el=>{
       el.onclick = ()=>{ activeApp = el.dataset.gotoApp; closeSheet(); render(); };
@@ -746,6 +748,12 @@ function openAppMenuSheet(){
     if(pushBtn) pushBtn.onclick = async ()=>{ const ok = await enablePush(); if(ok){ closeSheet(); render(); } };
     document.getElementById('menuShareBtn').onclick = ()=>{ closeSheet(); setTimeout(openShareSheet, 230); };
     document.getElementById('menuLeaveBtn').onclick = ()=>{ closeSheet(); setTimeout(openLeaveRoomSheet, 230); };
+    const adminBtn = document.getElementById('menuAdminBtn');
+    if(adminBtn) adminBtn.onclick = ()=>{
+      closeSheet();
+      const openFn = activeApp==='spil' ? openGameAdminMenuSheet : (activeApp==='mrbrok' ? openMrbrokAdminMenuSheet : openAdminMenuSheet);
+      setTimeout(openFn, 230);
+    };
   });
 }
 
@@ -889,17 +897,12 @@ function renderGameScreen(){
     <header>
       <div class="title" style="font-size:30px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
         <span>Brok<span>spillet</span> 👉</span>
-        <div style="display:flex; align-items:center; gap:8px;">
-          ${isAdmin() ? `<button id="btnGameAdminMenu" title="Admin" style="width:32px; height:32px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.85); border-radius:100px; flex:0 0 auto;">⋯</button>` : ''}
-          <button id="btnAppMenu" title="Menu" style="width:32px; height:32px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.85); border-radius:100px; flex:0 0 auto;">☰</button>
-        </div>
+        <button id="btnAppMenu" title="Menu" style="width:32px; height:32px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.85); border-radius:100px; flex:0 0 auto;">☰</button>
       </div>
     </header>
     <main id="main" style="padding:0 16px 40px;">${gameBodyHtml(g)}</main>
   `;
   document.getElementById('btnAppMenu').onclick = openAppMenuSheet;
-  const btnGameAdminMenu = document.getElementById('btnGameAdminMenu');
-  if(btnGameAdminMenu) btnGameAdminMenu.onclick = openGameAdminMenuSheet;
   bindGameHandlers(g);
   const card = document.getElementById('gameCard') || document.getElementById('gameoverReveal');
   if(card && typeof gsap !== 'undefined'){
@@ -1325,17 +1328,12 @@ function renderMrbrokScreen(){
     <header>
       <div class="title" style="font-size:30px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
         <span>Mr<span>Brok</span> 🕵️</span>
-        <div style="display:flex; align-items:center; gap:8px;">
-          ${isAdmin() ? `<button id="btnMrbrokAdminMenu" title="Admin" style="width:32px; height:32px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.85); border-radius:100px; flex:0 0 auto;">⋯</button>` : ''}
-          <button id="btnAppMenu" title="Menu" style="width:32px; height:32px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.85); border-radius:100px; flex:0 0 auto;">☰</button>
-        </div>
+        <button id="btnAppMenu" title="Menu" style="width:32px; height:32px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.85); border-radius:100px; flex:0 0 auto;">☰</button>
       </div>
     </header>
     <main id="main" style="padding:0 16px 40px;">${mrbrokBodyHtml(m)}</main>
   `;
   document.getElementById('btnAppMenu').onclick = openAppMenuSheet;
-  const btnMrbrokAdminMenu = document.getElementById('btnMrbrokAdminMenu');
-  if(btnMrbrokAdminMenu) btnMrbrokAdminMenu.onclick = openMrbrokAdminMenuSheet;
   bindMrbrokHandlers(m);
   const card = document.getElementById('mrbrokCard') || document.getElementById('mrbrokReveal');
   if(card && typeof gsap !== 'undefined'){
