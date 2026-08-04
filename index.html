@@ -185,6 +185,7 @@ let activeTab = 'feed';
 let activeApp = 'kasse'; // 'kasse' | 'spil' — hvilken af de to "apps" i samme rum der vises
 let gameWager = 'fun'; // 'fun' | 'euro' — valgt i Brokspillets lobby, før spillet startes
 let gameSelectedPlayers = null; // memberId[] valgt i lobbyen — sættes til alle medlemmer første gang lobbyen vises
+let gameKnownMemberIds = null; // holder styr på hvem der allerede er set, så nytilkomne medlemmer auto-vælges uden at overskrive en bevidst fravalgt
 let gameTimerInterval = null;
 let gameTimerDeadline = null;
 let lastCelebratedKey = null; // undgår at fyre konfetti/hån-toast flere gange for samme rundes resultat
@@ -846,7 +847,14 @@ function gameProgressHtml(count, total, label){
 }
 
 function gameLobbyHtml(){
-  if(!gameSelectedPlayers) gameSelectedPlayers = state.members.map(m=>m.id);
+  const allIds = state.members.map(m=>m.id);
+  if(!gameSelectedPlayers || !gameKnownMemberIds){
+    gameSelectedPlayers = allIds.slice();
+  }else{
+    const newcomers = allIds.filter(id=>!gameKnownMemberIds.includes(id));
+    if(newcomers.length) gameSelectedPlayers = [...gameSelectedPlayers, ...newcomers];
+  }
+  gameKnownMemberIds = allIds.slice();
   const chips = state.members.map(m=>`<div class="name-pill ${gameSelectedPlayers.includes(m.id)?'selected':''}" data-player="${m.id}">${escapeHtml(m.name)}</div>`).join('');
   const enough = gameSelectedPlayers.length >= 2;
   return `
