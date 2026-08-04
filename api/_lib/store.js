@@ -227,6 +227,12 @@ async function setState(roomId, state) {
   return state;
 }
 
+// Sletter rummet fuldstændigt — til fx en brokkekasse oprettet ved en fejl.
+// Anderledes end "Luk for altid", som bevarer rummet og dets historik.
+async function deleteRoom(roomId) {
+  await redis().del(KEY(roomId));
+}
+
 async function createRoom(roomId, opts) {
   const existing = await getState(roomId);
   if (existing) return existing;
@@ -253,4 +259,4 @@ function neededVotes(totalMembers) {
   return Math.min(others, Math.max(2, Math.ceil((others * 2) / 3)));
 }
 
-module.exports = { getState, setState, createRoom, genRoomId, uid, emptyState, neededVotes, isAdmin, settleRound, updateStreaksAndDrawLottery, processPendingExpiry, checkSilenceNudge, checkPoolMilestone };
+module.exports = { getState, setState, deleteRoom, createRoom, genRoomId, uid, emptyState, neededVotes, isAdmin, settleRound, updateStreaksAndDrawLottery, processPendingExpiry, checkSilenceNudge, checkPoolMilestone };

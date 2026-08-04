@@ -1761,6 +1761,7 @@ function openAdminMenuSheet(){
     <button class="sheet-btn ghost" id="adminBackdateBtn">⏪ Ryk dagstæller én dag tilbage</button>
     <button class="sheet-btn danger" id="adminResetBtn">🧹 Nulstil alt</button>
     <button class="sheet-btn danger" id="adminFinalCloseBtn">🔒 Luk denne brokkekasse for altid</button>
+    <button class="sheet-btn danger" id="adminDeleteRoomBtn">🗑️ Slet dette rum permanent</button>
     <button class="sheet-btn ghost" id="adminMenuCloseBtn">Luk menu</button>
   `, ()=>{
     document.getElementById('adminGoalBtn').onclick = ()=>{ closeSheet(); setTimeout(openGoalSheet, 230); };
@@ -1786,6 +1787,7 @@ function openAdminMenuSheet(){
     };
     document.getElementById('adminResetBtn').onclick = ()=>{ closeSheet(); setTimeout(openResetSheet, 230); };
     document.getElementById('adminFinalCloseBtn').onclick = ()=>{ closeSheet(); setTimeout(openFinalCloseSheet, 230); };
+    document.getElementById('adminDeleteRoomBtn').onclick = ()=>{ closeSheet(); setTimeout(openDeleteRoomSheet, 230); };
     document.getElementById('adminMenuCloseBtn').onclick = closeSheet;
   });
 }
@@ -1938,6 +1940,29 @@ function openFinalCloseSheet(){
     document.getElementById('doFinalClose').onclick = async ()=>{
       try{ const r = await api('admin', { action: 'close', roomId, actorId: profile.memberId }); state = r.state; closeSheet(); toast('🔒 Brokkekassen er lukket — tak for turen!'); activeTab='broklisten'; brokListSubTab='alltime'; render(); }
       catch(e){ toast(e.message); }
+    };
+  });
+}
+
+function openDeleteRoomSheet(){
+  openSheet(`
+    <h2>Slet dette rum permanent 🗑️</h2>
+    <p class="hint">Sletter HELE rummet med det samme — regnskab, historik, medlemmer, alt. Koden <b>${roomId}</b> virker ikke mere for nogen. Kan ikke fortrydes. Brug det kun hvis rummet reelt blev oprettet ved en fejl (fx en dublet).</p>
+    <button class="sheet-btn danger" id="doDeleteRoom">Ja, slet permanent</button>
+    <button class="sheet-btn ghost" id="cancelDeleteRoom">Annuller</button>
+  `, ()=>{
+    document.getElementById('cancelDeleteRoom').onclick = closeSheet;
+    document.getElementById('doDeleteRoom').onclick = async ()=>{
+      try{
+        await api('admin', { action: 'deleteRoom', roomId, actorId: profile.memberId });
+        const rooms = getMyRooms();
+        delete rooms[roomId];
+        localStorage.setItem('bk_myRooms', JSON.stringify(rooms));
+        localStorage.removeItem('bk_profile_' + roomId);
+        closeSheet();
+        leaveRoom();
+        toast('🗑️ Rummet er slettet');
+      }catch(e){ toast(e.message); }
     };
   });
 }

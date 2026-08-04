@@ -1,4 +1,4 @@
-const { getState, setState, emptyState, isAdmin, settleRound } = require('./_lib/store');
+const { getState, setState, deleteRoom, emptyState, isAdmin, settleRound } = require('./_lib/store');
 const { pushToMembers } = require('./_lib/push');
 
 // Samler admin-handlingerne (gør op, luk, nulstil, besked, mål) i én
@@ -62,6 +62,15 @@ module.exports = async (req, res) => {
       ev.voided = !!voided;
       await setState(roomId, state);
       return res.status(200).json({ state });
+    }
+
+    if (action === 'deleteRoom') {
+      // Sletter rummet helt — fx en brokkekasse der blev oprettet ved en
+      // fejl. Anderledes end "Luk for altid": her forsvinder ALT, ingen
+      // historik bevares, og koden holder op med at virke for altid.
+      if (!isAdmin(state, actorId)) return res.status(403).json({ error: 'kun den der oprettede brokkekassen kan slette den' });
+      await deleteRoom(roomId);
+      return res.status(200).json({ deleted: true });
     }
 
     if (action === 'reset') {
