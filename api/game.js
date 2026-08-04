@@ -156,7 +156,7 @@ module.exports = async (req, res) => {
       // først videre når alle er klar (eller når nedtællingen løber ud, se
       // 'advance' herunder som stadig er den fælles nødbremse).
       if (action === 'ready') {
-        if (!cur || cur.phase !== 'results') throw new ApiError(400, 'kan ikke gøres klar lige nu');
+        if (!cur || (cur.phase !== 'results' && cur.phase !== 'skipped')) throw new ApiError(400, 'kan ikke gøres klar lige nu');
         if (!players.includes(actorId)) throw new ApiError(403, 'du er ikke med i denne runde af Brokspillet');
         if (!cur.readyIds) cur.readyIds = [];
         if (!cur.readyIds.includes(actorId)) cur.readyIds.push(actorId);
@@ -185,15 +185,17 @@ module.exports = async (req, res) => {
           resolveQuiplashVote(state, cur);
         } else if (cur.type === 'truefalse' && cur.phase === 'write') {
           // Forfatteren nåede aldrig at skrive et udsagn inden tiden løb ud
-          // — der er intet at gætte på, så spring hele runden over i stedet
-          // for at spillet går permanent i stå (dette var tidligere slet
-          // ikke håndteret her, så en tavs forfatter låste hele spillet fast).
-          goToNextRoundOrEnd(state, players);
+          // — der er intet at gætte på, så runden springes over. Vis det
+          // tydeligt i stedet for bare stille at hoppe videre (dette var
+          // tidligere slet ikke håndteret her, så en tavs forfatter låste
+          // hele spillet fast uden nogen besked om hvorfor).
+          cur.phase = 'skipped';
+          cur.readyIds = [];
         } else if (cur.type === 'truefalse' && cur.phase === 'guess') {
           resolveTrueFalseGuess(state, cur);
         } else if (cur.type === 'trivia' && cur.phase === 'answer') {
           resolveTriviaAnswer(state, cur);
-        } else if (cur.phase === 'results') {
+        } else if (cur.phase === 'results' || cur.phase === 'skipped') {
           goToNextRoundOrEnd(state, players);
         } else {
           throw new ApiError(400, 'kan ikke gå videre lige nu');

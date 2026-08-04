@@ -81,6 +81,16 @@ module.exports = async (req, res) => {
       return res.status(200).json({ state: fresh });
     }
 
+    if (action === 'resetGameStats') {
+      // Nulstiller kun Brokspillets highscore (sejre/spillede runder på
+      // tværs af afsluttede spil) — rører hverken selve puljen, et
+      // eventuelt spil i gang, eller MrBroks egen highscore.
+      if (!isAdmin(state, actorId)) return res.status(403).json({ error: 'kun den der oprettede brokkekassen kan nulstille highscore' });
+      state.gameStats = {};
+      await setState(roomId, state);
+      return res.status(200).json({ state });
+    }
+
     if (action === 'broadcast') {
       const { message } = req.body || {};
       if (!message || !message.trim()) return res.status(400).json({ error: 'mangler besked' });

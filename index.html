@@ -262,6 +262,7 @@ let mrbrokWager = 'fun';
 let mrbrokRounds = 4; // 3 | 4 | 5
 let mrbrokSelectedPlayers = null;
 let mrbrokInstructionsOpen = null; // null = ikke afgjort endnu denne session — "sådan foregår det" foldes automatisk ud første gang, sammen efterfølgende
+let gameInstructionsOpen = null; // samme mønster for Brokspillets egen lobby
 let mrbrokKnownMemberIds = null;
 let mrbrokTimerInterval = null;
 let mrbrokTimerDeadline = null;
@@ -889,10 +890,12 @@ async function gameApi(action, extra){
 
 function openGameAdminMenuSheet(){
   const active = state.game && state.game.active;
+  const hasHighscore = state.gameStats && Object.keys(state.gameStats).length > 0;
   openSheet(`
     <h2>Brokspil-admin ⚙️</h2>
     <p class="hint">${active ? 'Der er et spil i gang lige nu.' : 'Der er ikke noget spil i gang lige nu.'}</p>
     ${active ? `<button class="sheet-btn danger" id="gameAdminRestartBtn">🔄 Genstart Brokspillet</button>` : ''}
+    ${hasHighscore ? `<button class="sheet-btn danger" id="gameAdminResetStatsBtn">🏆 Nulstil highscore</button>` : ''}
     <button class="sheet-btn ghost" id="gameAdminCloseBtn">Luk menu</button>
   `, ()=>{
     const restartBtn = document.getElementById('gameAdminRestartBtn');
@@ -900,6 +903,16 @@ function openGameAdminMenuSheet(){
       closeSheet();
       await gameApi('end', {});
       toast('🔄 Brokspillet er nulstillet — klar til en ny omgang');
+    };
+    const resetStatsBtn = document.getElementById('gameAdminResetStatsBtn');
+    if(resetStatsBtn) resetStatsBtn.onclick = async ()=>{
+      closeSheet();
+      try{
+        const r = await api('admin', { action: 'resetGameStats', roomId, actorId: profile.memberId });
+        state = r.state;
+        toast('🏆 Highscore nulstillet');
+        render();
+      }catch(e){ toast(e.message); }
     };
     document.getElementById('gameAdminCloseBtn').onclick = closeSheet;
   });
@@ -1116,11 +1129,31 @@ function gameLobbyHtml(){
     return `<div class="name-pill ${on?'selected':''}" data-player="${m.id}" style="${on?'':'opacity:.5;'}">${on?'✅':'➖'} ${escapeHtml(m.name)}</div>`;
   }).join('');
   const enough = gameSelectedPlayers.length >= 2;
+  const gameSteps = [
+    ['🎭', 'Skriv-og-stem: alle skriver et sjovt svar, så stemmer I på det bedste'],
+    ['⚖️', 'Sandt/falsk: én skriver et udsagn om en anden — resten gætter'],
+    ['🔍', 'Trivia om jeres egen brok-historik (og lidt verdens-brok ind imellem)'],
+    ['🏆', 'Point tælles på tværs af alle runder — flest point vinder'],
+  ];
+  if(gameInstructionsOpen === null) gameInstructionsOpen = !localStorage.getItem('bk_game_seen_instructions');
+  localStorage.setItem('bk_game_seen_instructions', '1');
   return `
     <div class="empty-state" style="padding-top:26px;">
       <span class="emoji">👉</span>
       <b>Brokspillet</b>
       Skriv-og-stem, sandt/falsk og trivia om jeres egen brok-historik.
+    </div>
+    <div class="game-card" style="margin:10px 0 10px;">
+      <div id="gameInstructionsToggle" style="display:flex; align-items:center; justify-content:space-between; cursor:pointer; ${gameInstructionsOpen?'margin-bottom:8px;':''}">
+        <label class="field-label" style="color:rgba(255,247,232,0.7); margin:0;">Sådan foregår det</label>
+        <span style="color:rgba(255,247,232,0.5); font-size:13px; transition:transform .2s; display:inline-block; ${gameInstructionsOpen?'transform:rotate(180deg);':''}">⌄</span>
+      </div>
+      ${gameInstructionsOpen ? gameSteps.map(([icon,text])=>`
+        <div style="display:flex; gap:10px; align-items:flex-start; margin-bottom:9px;">
+          <span style="font-size:16px; line-height:1.4;">${icon}</span>
+          <p style="margin:0; font-size:13px; line-height:1.4; color:rgba(255,247,232,0.8);">${text}</p>
+        </div>
+      `).join('') : ''}
     </div>
     <div class="game-card" style="margin:10px 0;">
       <label class="field-label" style="color:rgba(255,247,232,0.7);">Hvem er med? (mindst 2)</label>
@@ -1199,6 +1232,13 @@ function quiplashHtml(g, cur){
 function truefalseHtml(g, cur){
   const author = state.members.find(m=>m.id===cur.authorId);
   const isAuthor = profile && profile.memberId === cur.authorId;
+  if(cur.phase === 'skipped'){
+    return `
+      <div class="game-badge">Runde ${g.round}/${g.totalRounds} · ⚖️ Sandt eller falsk</div>
+      <div class="empty-state"><span class="emoji">😴</span><b>${escapeHtml(author?author.name:'?')} nåede ikke at skrive et udsagn</b>Ingen sag denne gang — vi går videre til næste spørgsmål.</div>
+      ${gameReadyHtml(g, cur)}
+    `;
+  }
   if(cur.phase === 'write'){
     if(!isAuthor){
       return `
@@ -1323,6 +1363,8 @@ function gameOverHtml(g, cur){
 
 function bindGameHandlers(g){
   const cur = g.current;
+  const gameInstrToggle = document.getElementById('gameInstructionsToggle');
+  if(gameInstrToggle) gameInstrToggle.onclick = ()=>{ gameInstructionsOpen = !gameInstructionsOpen; render(); };
   document.querySelectorAll('[data-wager]').forEach(el=>{
     el.onclick = ()=>{ gameWager = el.dataset.wager; render(); };
   });

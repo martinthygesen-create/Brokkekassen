@@ -8,6 +8,22 @@ function shuffle(arr) {
   return arr.map(v => [Math.random(), v]).sort((a, b) => a[0] - b[0]).map(([, v]) => v);
 }
 
+// Vægtet tilfældigt valg blandt kandidater: færre tidligere valg giver
+// højere chance, men ALDRIG nul chance — så en gentagelse fra gang til
+// gang sagtens kan ske (ligesom i Mr. White), det er kun over mange gange
+// det skal jævne sig ud, ikke fra spil til spil. `counts` er id -> antal
+// gange tidligere valgt.
+function pickWeighted(candidates, counts) {
+  const weights = candidates.map(c => 1 / ((counts[c.id] || 0) + 1));
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < candidates.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return candidates[i];
+  }
+  return candidates[candidates.length - 1];
+}
+
 function buildOptions(correctLabel, distractorLabels) {
   const pool = [correctLabel, ...distractorLabels].slice(0, 4);
   const options = shuffle(pool);
@@ -137,21 +153,19 @@ function generateTriviaQuestion(state) {
   return pickRandom(candidates)();
 }
 
-// Vælger hvem der skal skrive næste sandt/falsk-udsagn: den der har skrevet
-// mindst for nylig (eller aldrig), ikke rent tilfældigt — ellers kan samme
-// person ved uheld rammes flere gange i træk. Gemt på RUM-niveau (samme sted
-// som resten af indholds-rotationen), IKKE på selve spillet — en pose der
-// nulstilles ved hvert nyt spil ville kun give fair fordeling INDEN FOR én
-// omgang, ikke på tværs af flere spil samme aften, som var hele pointen.
-// Uafgjort (fx alle aldrig skrevet endnu) brydes tilfældigt.
+// Vælger hvem der skal skrive næste sandt/falsk-udsagn: vægtet tilfældigt
+// efter hvor mange gange man har gjort det før — færre gange giver højere
+// chance, men man kan sagtens rammes to gange i træk (bare ikke ofte over
+// mange runder). Gemt på RUM-niveau (samme sted som resten af indholds-
+// rotationen), IKKE på selve spillet — en tæller der nulstilles ved hvert
+// nyt spil ville kun give fair fordeling INDEN FOR én omgang, ikke på
+// tværs af flere spil samme aften, som var hele pointen.
 function pickAuthor(state, players) {
   if (!state.gameContentBank) state.gameContentBank = {};
-  if (!state.gameContentBank.authorLastPicked) state.gameContentBank.authorLastPicked = {};
-  const lastPicked = state.gameContentBank.authorLastPicked;
-  const oldestTs = Math.min(...players.map(p => lastPicked[p.id] || 0));
-  const candidates = players.filter(p => (lastPicked[p.id] || 0) === oldestTs);
-  const author = pickRandom(candidates);
-  lastPicked[author.id] = Date.now();
+  if (!state.gameContentBank.authorPickCounts) state.gameContentBank.authorPickCounts = {};
+  const counts = state.gameContentBank.authorPickCounts;
+  const author = pickWeighted(players, counts);
+  counts[author.id] = (counts[author.id] || 0) + 1;
   return author;
 }
 
@@ -198,4 +212,4 @@ function beginRound(state, players) {
   }
 }
 
-module.exports = { pickRandom, shuffle, buildOptions, pickFromBag, pickQuiplashPrompt, pickWorldTrivia, generateTriviaQuestion, beginRound };
+module.exports = { pickRandom, shuffle, pickWeighted, buildOptions, pickFromBag, pickQuiplashPrompt, pickWorldTrivia, generateTriviaQuestion, beginRound };

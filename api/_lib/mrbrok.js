@@ -3,7 +3,22 @@
 // ligesom Brokspillets endGame() ligger i api/game.js og ikke her). Ligger
 // under _lib/ så den IKKE tæller med i Vercels 12-serverless-function-loft.
 
-const { shuffle, pickFromBag } = require('./game');
+const { shuffle, pickFromBag, pickWeighted } = require('./game');
+
+// Vælger hvem der bliver MrBrok: vægtet tilfældigt efter hvor mange gange
+// man har haft rollen før — færre gange giver højere chance, men man kan
+// sagtens blive det to gange i træk (ligesom i rigtig Mr. White), det er
+// kun over mange spil det skal jævne sig ud. Gemt på RUM-niveau (samme sted
+// som resten af indholds-rotationen), så det holder på tværs af flere spil
+// i stedet for at nulstille sig selv ved hvert nyt MrBrok-spil.
+function pickMrBrok(state, players) {
+  if (!state.gameContentBank) state.gameContentBank = {};
+  if (!state.gameContentBank.mrBrokPickCounts) state.gameContentBank.mrBrokPickCounts = {};
+  const counts = state.gameContentBank.mrBrokPickCounts;
+  const chosen = pickWeighted(players, counts);
+  counts[chosen.id] = (counts[chosen.id] || 0) + 1;
+  return chosen;
+}
 
 // Brede brok-scenarier — bevidst ikke for specifikke, så både MrBrok kan
 // bluffe plausibelt OG de der reelt kender emnet skal svare vagt for ikke
@@ -97,4 +112,4 @@ function advanceTurn(state) {
   }
 }
 
-module.exports = { MRBROK_TOPICS, pickTopic, buildRoundPairing, beginMrbrokRound, advanceTurn };
+module.exports = { MRBROK_TOPICS, pickTopic, pickMrBrok, buildRoundPairing, beginMrbrokRound, advanceTurn };

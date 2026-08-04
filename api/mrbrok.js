@@ -1,6 +1,5 @@
 const { mutateState, uid, redactStateFor, ApiError } = require('./_lib/store');
-const { pickRandom } = require('./_lib/game');
-const { pickTopic, beginMrbrokRound, advanceTurn } = require('./_lib/mrbrok');
+const { pickTopic, pickMrBrok, beginMrbrokRound, advanceTurn } = require('./_lib/mrbrok');
 const { pushToMembers } = require('./_lib/push');
 
 const MIN_PLAYERS = 3;
@@ -108,7 +107,7 @@ module.exports = async (req, res) => {
         const wager = req.body.wager === 'euro' ? 'euro' : 'fun';
         const totalRounds = ALLOWED_ROUNDS.includes(req.body.totalRounds) ? req.body.totalRounds : DEFAULT_ROUNDS;
         const players = playerObjs.map(mm => mm.id);
-        const mrBrokId = pickRandom(playerObjs).id;
+        const mrBrokId = pickMrBrok(state, playerObjs).id;
         const scores = {};
         players.forEach(id => { if (id !== mrBrokId) scores[id] = 0; });
 
