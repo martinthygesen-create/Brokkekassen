@@ -29,6 +29,7 @@ function emptyState() {
     goal: '',      // fri tekst sat af admin: hvad potten går til, fx "Fælles middag"
     acquittals: [], // {id, memberId, message, openedAt, expiredAt} — anklager der udløb uden nok stemmer
     lastSilenceNudgeAt: null, // sidste gang alle fik en "her er stille" push, til at undgå at spamme
+    lastMilestoneAt: 0, // højeste rundetal (10, 20, 30...) puljen allerede er fejret ved
   };
 }
 
@@ -84,6 +85,21 @@ function checkSilenceNudge(state) {
   if (hour >= QUIET_HOURS_START || hour < QUIET_HOURS_END) return false;
   state.lastSilenceNudgeAt = now;
   return true;
+}
+
+const MILESTONE_STEP = 10; // fejrer hver 10€ i den aktive pulje
+
+// Har puljen lige rundet et nyt 10€-mærke? Returnerer det nye mærke (eller
+// null), og opdaterer state så det samme mærke ikke fejres to gange. Nulstilles
+// ved "Gør op" (se settleRound), så en ny runde igen kan fejre fra 10€.
+function checkPoolMilestone(state) {
+  const total = state.events.filter(e => !e.free && !e.voided).length;
+  const milestone = Math.floor(total / MILESTONE_STEP) * MILESTONE_STEP;
+  if (milestone > 0 && milestone > (state.lastMilestoneAt || 0)) {
+    state.lastMilestoneAt = milestone;
+    return milestone;
+  }
+  return null;
 }
 
 // Finder Copenhagen-tidszonens offset (minutter) for et givent tidspunkt.
@@ -165,6 +181,7 @@ function settleRound(state) {
 
   state.events = [];
   state.pendingList = [];
+  state.lastMilestoneAt = 0; // ny runde, ny chance for at fejre 10€ igen
   return state;
 }
 
@@ -181,6 +198,7 @@ async function getState(roomId) {
   if (state.freeBrokDrawnAt === undefined) state.freeBrokDrawnAt = null;
   if (!state.acquittals) state.acquittals = [];
   if (state.lastSilenceNudgeAt === undefined) state.lastSilenceNudgeAt = null;
+  if (state.lastMilestoneAt === undefined) state.lastMilestoneAt = 0;
   if (!state.pendingList) {
     // migrering fra det gamle enkelt-pending-felt til en liste
     state.pendingList = state.pending ? [state.pending] : [];
@@ -219,4 +237,4 @@ function neededVotes(totalMembers) {
   return Math.min(others, Math.max(2, Math.ceil((others * 2) / 3)));
 }
 
-module.exports = { getState, setState, createRoom, genRoomId, uid, emptyState, neededVotes, isAdmin, settleRound, updateStreaksAndDrawLottery, processPendingExpiry, checkSilenceNudge };
+module.exports = { getState, setState, createRoom, genRoomId, uid, emptyState, neededVotes, isAdmin, settleRound, updateStreaksAndDrawLottery, processPendingExpiry, checkSilenceNudge, checkPoolMilestone };

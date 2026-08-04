@@ -1,4 +1,11 @@
-const { getState, setState } = require('./_lib/store');
+const { getState, setState, checkPoolMilestone } = require('./_lib/store');
+const { pushToMembers } = require('./_lib/push');
+
+const MILESTONE_LINES = [
+  m => `🎉 Puljen har rundet ${m}€! Det bliver et godt indkøb.`,
+  m => `🥳 ${m}€ i Brokkekassen. I er godt i gang!`,
+  m => `💰 Ding ding — ${m}€ nået. Fortsæt endelig sådan (eller lad være).`,
+];
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' });
@@ -31,7 +38,16 @@ module.exports = async (req, res) => {
       state.pendingList = state.pendingList.filter(p => p.id !== pendingId);
       confirmed = true;
     }
+    const milestone = confirmed ? checkPoolMilestone(state) : null;
     await setState(roomId, state);
+
+    if (milestone) {
+      try {
+        const line = MILESTONE_LINES[Math.floor(Math.random() * MILESTONE_LINES.length)](milestone);
+        await pushToMembers(state, [], { title: '🏖️ Brokkekassen', body: line, url: '/?r=' + roomId });
+      } catch (e) { /* push-fejl må ikke vælte selve stemmen */ }
+    }
+
     res.status(200).json({ state, confirmed, free });
   } catch (e) {
     res.status(500).json({ error: e.message });
