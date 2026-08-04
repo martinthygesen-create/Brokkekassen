@@ -137,6 +137,20 @@ function generateTriviaQuestion(state) {
   return pickRandom(candidates)();
 }
 
+// Vælger hvem der skal skrive næste sandt/falsk-udsagn — ikke rent
+// tilfældigt hver gang (kunne ved uheld ramme samme person 3 gange i træk),
+// men fra en "pose" der blandes og tømmes helt før den blandes igen, så alle
+// spillere kommer igennem lige ofte inden nogen gentages. Sessionsbundet
+// (ligger på selve spillet, ikke rummet), da det kun giver mening for de
+// spillere der faktisk er med i DENNE omgang.
+function pickAuthor(state, players) {
+  if (!state.game.authorBag || !state.game.authorBag.length) {
+    state.game.authorBag = shuffle(players.map(p => p.id));
+  }
+  const id = state.game.authorBag.pop();
+  return players.find(p => p.id === id) || pickRandom(players);
+}
+
 // Sætter indholdet af en ny runde op — vælger tilfældigt mellem de tre
 // rundetyper og bygger den nødvendige startdata for hver. `players` er de
 // medlemmer der reelt er med i DENNE runde af spillet (kan være en delmængde
@@ -168,7 +182,7 @@ function beginRound(state, players) {
       old.lastUsedTs = Date.now();
       state.game.current = { type, phase: 'guess', authorId: old.authorId, targetId: old.targetId, statement: old.statement, isTrue: old.isTrue, guesses: {}, reused: true };
     } else {
-      const author = pickRandom(players);
+      const author = pickAuthor(state, players);
       state.game.current = { type, phase: 'write', authorId: author.id, targetId: null, statement: null, isTrue: null, guesses: {} };
     }
   } else {
