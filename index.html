@@ -98,6 +98,8 @@
   .waiting-pill{ display:flex; align-items:center; justify-content:center; gap:9px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.18); border-radius:100px; padding:11px 18px; margin-top:12px; font-size:14.5px; font-weight:700; color:rgba(255,247,232,0.85); }
   .waiting-pill .waiting-dot{ width:8px; height:8px; flex:0 0 auto; border-radius:50%; background:var(--coin); animation:waitingBlink 1.1s ease-in-out infinite; }
   @keyframes waitingBlink{ 0%,100%{opacity:.25;} 50%{opacity:1;} }
+  @keyframes slotWinPop{ 0%{ transform:scale(1) rotate(0deg); } 30%{ transform:scale(1.06) rotate(-1.5deg); } 55%{ transform:scale(1.03) rotate(1.5deg); } 100%{ transform:scale(1) rotate(0deg); } }
+  .quip-slot-win{ animation:slotWinPop .5s ease-out; }
   .game-card{ background:linear-gradient(160deg, rgba(255,201,60,0.18), rgba(255,107,74,0.10)); border:1px solid rgba(255,201,60,0.35); border-radius:22px; padding:20px; box-shadow:0 10px 24px rgba(0,0,0,.18); }
   .game-card p{ color:var(--cream); }
   .game-btn{ display:block; width:100%; background:linear-gradient(160deg, var(--coral), #e14d2e); color:#fff; border:none; border-radius:100px; padding:15px; font-family:'Baloo 2',sans-serif; font-weight:700; font-size:16px; box-shadow:0 8px 18px rgba(255,107,74,0.35); cursor:pointer; margin-top:14px; }
@@ -926,12 +928,28 @@ const GAME_PHASE_SECONDS = {
   'truefalse:write': 60, 'truefalse:guess': 35, 'truefalse:results': 20,
   'trivia:answer': 35, 'trivia:results': 20,
 };
+function paintGameTimerNow(){
+  // Hvert stille poll-opdatering (fx en anden spiller der svarer) erstatter
+  // HELE main-DOM'en, inkl. #gameTimer-badgen, som i markup'et starter tom.
+  // Uden dette blinker uret tomt i op til et helt sekund efter hver sådan
+  // gen-render, indtil den GAMLE intervals næste tick tilfældigvis rammer —
+  // det er den "flimren" der ellers ses hele tiden på nedtællingen. Ved at
+  // male den friske DOM-node med det samme (samme deadline, ingen ny timer)
+  // undgås det tomme mellemrum helt.
+  if(!gameTimerDeadline) return;
+  const el = document.getElementById('gameTimer');
+  if(!el) return;
+  const left = Math.max(0, Math.ceil((gameTimerDeadline - Date.now())/1000));
+  el.textContent = '⏱️ ' + left + 's';
+  el.style.color = left <= 10 ? '#FFD9CC' : '';
+  el.classList.toggle('game-timer-urgent', left <= 10 && left > 0);
+}
 function startGameTimer(cur){
   clearInterval(gameTimerInterval);
   gameTimerInterval = null;
   if(!cur || cur.type === 'gameover') return;
   const secs = GAME_PHASE_SECONDS[cur.type + ':' + cur.phase];
-  if(!secs) return;
+  if(!secs){ gameTimerDeadline = null; return; }
   gameTimerDeadline = Date.now() + secs*1000;
   const tick = ()=>{
     const el = document.getElementById('gameTimer');
@@ -1057,6 +1075,7 @@ function renderGameScreen(){
   }
   if(g.active && profile && g.players && g.players.includes(profile.memberId)){
     if(isNewGamePhase || !gameTimerInterval) startGameTimer(g.current);
+    else paintGameTimerNow();
   }else{
     clearInterval(gameTimerInterval);
     gameTimerInterval = null;
@@ -1215,10 +1234,11 @@ function quiplashHtml(g, cur){
     <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
     <div class="game-card" id="gameCard" style="text-align:center;">
       <p style="margin:0 0 10px;">${escapeHtml(cur.prompt)}</p>
+      ${cur.randomPick ? `<p class="hint" style="margin:0 0 10px;">🎰 Kun 2 spillere — I stemmer ikke, vinderen trækkes tilfældigt</p>` : ''}
       ${Object.entries(cur.answers||{}).map(([id,text])=>{
         const m = state.members.find(x=>x.id===id);
         const won = (cur.winnerIds||[]).includes(id);
-        return `<div class="feed-item" style="${won?'border-color:var(--coin); background:rgba(255,201,60,0.16);':''}">
+        return `<div class="feed-item${won && cur.randomPick ? ' quip-slot-win' : ''}" style="${won?'border-color:var(--coin); background:rgba(255,201,60,0.16);':''}">
           <div class="avatar">${initials(m?m.name:'?')}</div>
           <div class="feed-body"><div class="feed-name">${escapeHtml(m?m.name:'?')} ${won?'🏆':''}</div><div class="feed-msg">"${escapeHtml(text)}"</div></div>
         </div>`;
@@ -1484,13 +1504,25 @@ function mrbrokTimerKey(cur){
   if(cur.type === 'guess') return 'guess:guess';
   return null;
 }
+function paintMrbrokTimerNow(){
+  // Samme flimmer-fix som paintGameTimerNow(): mal den friske #mrbrokTimer-
+  // node med det samme efter et stille poll, i stedet for at lade den stå
+  // tom indtil den gamle intervals næste tick (op til 1 sekund senere).
+  if(!mrbrokTimerDeadline) return;
+  const el = document.getElementById('mrbrokTimer');
+  if(!el) return;
+  const left = Math.max(0, Math.ceil((mrbrokTimerDeadline - Date.now())/1000));
+  el.textContent = '⏱️ ' + left + 's';
+  el.style.color = left <= 10 ? '#FFD9CC' : '';
+  el.classList.toggle('game-timer-urgent', left <= 10 && left > 0);
+}
 function startMrbrokTimer(cur){
   clearInterval(mrbrokTimerInterval);
   mrbrokTimerInterval = null;
   if(!cur || cur.type === 'gameover') return;
   const key = mrbrokTimerKey(cur);
   const secs = key ? MRBROK_PHASE_SECONDS[key] : null;
-  if(!secs) return;
+  if(!secs){ mrbrokTimerDeadline = null; return; }
   mrbrokTimerDeadline = Date.now() + secs*1000;
   const tick = ()=>{
     const el = document.getElementById('mrbrokTimer');
@@ -1535,6 +1567,7 @@ function renderMrbrokScreen(){
   }
   if(m.active && profile && m.players && m.players.includes(profile.memberId)){
     if(isNewMrbrokPhase || !mrbrokTimerInterval) startMrbrokTimer(m.current);
+    else paintMrbrokTimerNow();
   }else{
     clearInterval(mrbrokTimerInterval);
     mrbrokTimerInterval = null;

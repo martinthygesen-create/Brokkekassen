@@ -17,6 +17,24 @@ function resolveQuiplashVote(state, cur) {
   cur.readyIds = [];
 }
 
+// Med kun 2 spillere giver afstemning ingen mening — den ENESTE mulige
+// stemme er på modpartens svar, så begge stemmer på den anden og det
+// bliver en tvungen uafgjort hver eneste gang (og lader man dem stemme på
+// sig selv i stedet, stemmer begge rationelt på sig selv, samme uafgjorte
+// resultat). Løsningen er at springe afstemningen helt over ved præcis 2
+// spillere og i stedet lade en tilfældig "spillemaskine" kåre en vinder.
+function resolveQuiplashRandom(state, cur) {
+  const ids = Object.keys(cur.answers || {});
+  const winnerId = ids.length ? ids[Math.floor(Math.random() * ids.length)] : null;
+  const winnerIds = winnerId ? [winnerId] : [];
+  winnerIds.forEach(id => { state.game.scores[id] = (state.game.scores[id] || 0) + ROUND_POINTS; });
+  cur.phase = 'results';
+  cur.winnerIds = winnerIds;
+  cur.readyIds = [];
+  cur.votes = {};
+  cur.randomPick = true;
+}
+
 // Point-fordeling: gæt rigtigt = 1 point. Narrer forfatteren FLERTALLET af
 // gætterne = 1 point til forfatteren. Simpelt og loftbelagt, så det ikke kan
 // løbe løbsk hvis man narrer alle på én gang.
@@ -120,7 +138,10 @@ module.exports = async (req, res) => {
         if (cur.type === 'quiplash' && cur.phase === 'answer') {
           const text = (payload.text || '').toString().trim().slice(0, 120);
           if (text) cur.answers[actorId] = text;
-          if (Object.keys(cur.answers).length >= players.length) { cur.phase = 'vote'; cur.votes = {}; }
+          if (Object.keys(cur.answers).length >= players.length) {
+            if (players.length === 2) resolveQuiplashRandom(state, cur);
+            else { cur.phase = 'vote'; cur.votes = {}; }
+          }
         } else if (cur.type === 'quiplash' && cur.phase === 'vote') {
           if (payload.votedFor && payload.votedFor !== actorId) cur.votes[actorId] = payload.votedFor;
           if (Object.keys(cur.votes).length >= players.length) resolveQuiplashVote(state, cur);
@@ -172,7 +193,10 @@ module.exports = async (req, res) => {
 
         if (cur.type === 'quiplash' && cur.phase === 'answer') {
           cur.votes = {};
-          if (Object.keys(cur.answers).length < 2) {
+          if (players.length === 2) {
+            // Ved præcis 2 spillere stemmes der aldrig — se resolveQuiplashRandom.
+            resolveQuiplashRandom(state, cur);
+          } else if (Object.keys(cur.answers).length < 2) {
             // For få nåede at svare inden tiden løb ud — der er intet
             // meningsfyldt at stemme om (hver spiller ville se "ingen andre
             // svar at stemme på"), så spring stemme-fasen over og gå direkte
