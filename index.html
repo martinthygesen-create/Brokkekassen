@@ -677,6 +677,22 @@ function gameBodyHtml(g){
   return '';
 }
 
+function gameHighscoreHtml(){
+  const stats = state.gameStats || {};
+  const ranked = state.members
+    .filter(m => stats[m.id] && stats[m.id].played > 0)
+    .sort((a,b) => (stats[b.id].wins - stats[a.id].wins) || (stats[b.id].played - stats[a.id].played));
+  if(!ranked.length) return '';
+  const rows = ranked.map((m,i)=>`
+    <div class="bal-row">
+      <div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${i===0?'🏆':(i+1)}</div>
+      <div class="feed-body"><div class="bal-name">${escapeHtml(m.name)}</div><div style="font-size:12px; color:rgba(255,247,232,0.68);">${stats[m.id].played} spillet</div></div>
+      <div class="bal-amt">${stats[m.id].wins} sejre</div>
+    </div>
+  `).join('');
+  return `<div class="section-label">🏆 Highscore</div>${rows}`;
+}
+
 function gameLobbyHtml(){
   return `
     <div class="empty-state" style="padding-top:26px;">
@@ -693,6 +709,7 @@ function gameLobbyHtml(){
     </div>
     <button class="sheet-btn primary" id="startGameBtn" ${state.members.length<2?'disabled':''} style="margin-top:16px;">🎲 Start spillet</button>
     ${state.members.length<2?'<p class="hint" style="text-align:center;">Kræver mindst 2 medlemmer</p>':''}
+    ${gameHighscoreHtml()}
   `;
 }
 
@@ -845,6 +862,7 @@ function triviaHtml(g, cur){
 function gameOverHtml(g, cur){
   const ranked = state.members.slice().sort((a,b)=>(cur.scores[b.id]||0)-(cur.scores[a.id]||0));
   const losers = (cur.loserIds||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
+  const winners = (cur.winnerIds||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
   const rows = ranked.map((m,i)=>`
     <div class="bal-row">
       <div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${i===0?'🏆':(i+1)}</div>
@@ -855,11 +873,13 @@ function gameOverHtml(g, cur){
   return `
     <div class="section-label">Spillet er slut!</div>
     ${rows}
+    ${winners.length ? `<p class="hint" style="text-align:center; margin-top:10px;">👑 Vinder: ${winners.map(m=>escapeHtml(m.name)).join(' & ')}</p>` : ''}
     <div class="onboard-card" id="gameoverReveal" style="text-align:center; margin-top:16px;">
       <div style="font-size:34px;">🫵</div>
       <p style="font-weight:800; font-size:19px; margin:6px 0;">Taberen er... ${losers.map(m=>escapeHtml(m.name)).join(' & ')}!</p>
       ${g.wager==='euro' ? '<p class="hint">1€ lagt i Brokkekassens pulje.</p>' : '<p class="hint">Kun for sjov denne gang.</p>'}
     </div>
+    ${gameHighscoreHtml()}
     <button class="sheet-btn primary" id="playAgainBtn" style="margin-top:16px;">🎲 Spil igen</button>
     <button class="sheet-btn ghost" id="endGameBtn">Tilbage til lobbyen</button>
   `;

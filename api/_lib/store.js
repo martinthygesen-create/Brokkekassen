@@ -31,6 +31,7 @@ function emptyState() {
     lastSilenceNudgeAt: null, // sidste gang alle fik en "her er stille" push, til at undgå at spamme
     lastMilestoneAt: 0, // højeste rundetal (10, 20, 30...) puljen allerede er fejret ved
     game: { active: false }, // Brokspillet — se api/game.js + api/_lib/game.js
+    gameStats: {}, // memberId -> {played, wins} — highscore på tværs af afsluttede Brokspil-runder
   };
 }
 
@@ -201,6 +202,7 @@ async function getState(roomId) {
   if (state.lastSilenceNudgeAt === undefined) state.lastSilenceNudgeAt = null;
   if (state.lastMilestoneAt === undefined) state.lastMilestoneAt = 0;
   if (!state.game) state.game = { active: false };
+  if (!state.gameStats) state.gameStats = {};
   if (!state.pendingList) {
     // migrering fra det gamle enkelt-pending-felt til en liste
     state.pendingList = state.pending ? [state.pending] : [];

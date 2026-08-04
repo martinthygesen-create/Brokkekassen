@@ -8,13 +8,27 @@ function endGame(state) {
   const scores = state.game.scores;
   const memberIds = state.members.map(m => m.id);
   const minScore = Math.min(...memberIds.map(id => scores[id] || 0));
+  const maxScore = Math.max(...memberIds.map(id => scores[id] || 0));
   const loserIds = memberIds.filter(id => (scores[id] || 0) === minScore);
+  const winnerIds = memberIds.filter(id => (scores[id] || 0) === maxScore);
   if (state.game.wager === 'euro') {
     loserIds.forEach(id => {
       state.events.push({ id: uid(), memberId: id, message: 'Tabte Brokspillet', ts: Date.now(), votes: [], free: false, gameLoss: true });
     });
   }
-  state.game.current = { type: 'gameover', scores, loserIds };
+
+  // Highscore på tværs af afsluttede spil — kun optalt hvis der reelt var en
+  // vinder (dvs. ikke alle sluttede på 0 point, hvilket ville gøre alle til "vindere").
+  if (!state.gameStats) state.gameStats = {};
+  memberIds.forEach(id => {
+    if (!state.gameStats[id]) state.gameStats[id] = { played: 0, wins: 0 };
+    state.gameStats[id].played += 1;
+  });
+  if (maxScore > 0) {
+    winnerIds.forEach(id => { state.gameStats[id].wins += 1; });
+  }
+
+  state.game.current = { type: 'gameover', scores, loserIds, winnerIds };
 }
 
 module.exports = async (req, res) => {
