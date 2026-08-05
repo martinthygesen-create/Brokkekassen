@@ -193,6 +193,7 @@
   .sheet-btn.ghost{background:transparent; color:rgba(5,32,36,0.5); font-weight:600; font-size:14px; padding:8px;}
   .sheet-btn.danger{background:var(--coral); color:#fff;}
   .sheet-btn.gold{background:linear-gradient(160deg, var(--coin), var(--coin-dark)); color:var(--ink);}
+  .sheet-btn.test{background:rgba(5,32,36,0.14); color:var(--ink); font-weight:700;}
 
   /* Grupperet handlings-liste i sheets (fx ☰-menuen) — en samlet kortflade
      med ikon-chip + label pr. række, i stedet for løstflydende ghost-knapper
@@ -261,7 +262,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-04-5';
+const BUILD_TAG = 'build-2026-08-04-6';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -2637,17 +2638,17 @@ function openAdminMenuSheet(){
     <h2>Admin ⚙️</h2>
     <p class="hint">Kun du styrer puljen og historikken herfra.</p>
 
-    <div class="divider">værktøjer</div>
+    <div class="divider">admin</div>
     <button class="sheet-btn primary" id="adminGoalBtn">🎯 Sæt mål for potten</button>
     <button class="sheet-btn primary" id="adminBroadcastBtn">📣 Send besked til alle</button>
-    ${state.events.length ? `<button class="sheet-btn ghost" id="adminRemoveEventBtn">🫤 Markér mistænkt snyd</button>` : ''}
-    <button class="sheet-btn gold" id="adminTestDrawBtn">🎰 Test spillemaskinen</button>
-
-    <div class="divider">afregning</div>
     <button class="sheet-btn primary" id="adminSettleBtn">💶 Gør op (tøm puljen)</button>
     <p class="hint" style="${hintStyle}">Arkiverer og tømmer puljen. Kan fortrydes bagefter.</p>
-    ${state.history.length ? `<button class="sheet-btn ghost" id="adminUndoBtn">↩️ Fortryd seneste opgørelse</button>` : ''}
-    <button class="sheet-btn ghost" id="adminBackdateBtn">⏪ Ryk dagstæller én dag tilbage</button>
+
+    <div class="divider">test &amp; mindre ændringer</div>
+    ${state.events.length ? `<button class="sheet-btn test" id="adminRemoveEventBtn">🫤 Markér mistænkt snyd</button>` : ''}
+    <button class="sheet-btn test" id="adminTestDrawBtn">🎰 Test spillemaskinen</button>
+    ${state.history.length ? `<button class="sheet-btn test" id="adminUndoBtn">↩️ Fortryd seneste opgørelse</button>` : ''}
+    <button class="sheet-btn test" id="adminBackdateBtn">⏪ Ryk dagstæller én dag tilbage</button>
 
     <div class="divider">kan ikke fortrydes</div>
     <button class="sheet-btn danger" id="adminResetBtn">🧹 Nulstil alt</button>
