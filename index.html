@@ -260,7 +260,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-04-2';
+const BUILD_TAG = 'build-2026-08-04-3';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -2621,7 +2621,11 @@ function pushDebugInfo(){
 }
 
 function openAdminMenuSheet(){
-  const hintStyle = 'font-size:11.5px; color:rgba(5,32,36,0.45); margin:-8px 4px 6px;';
+  // NB: margin-top skal ALDRIG være negativ her — det trak tidligere
+  // teksten op OVER/IND I den runde knap ovenover (piller har ikke ekstra
+  // luft ved bunden, så en negativ margin lagde teksten oveni knappens
+  // farvede baggrund i stedet for under den).
+  const hintStyle = 'font-size:11.5px; color:rgba(5,32,36,0.45); margin:8px 4px 6px;';
   openSheet(`
     <h2>Admin ⚙️</h2>
     <p class="hint">Du oprettede denne brokkekasse, så det er dig der styrer den. Streaks og gratis brok opdateres automatisk hver dag kl. 04 — men puljen tømmer sig kun når du selv gør op.</p>
