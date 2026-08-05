@@ -37,16 +37,26 @@
       radial-gradient(ellipse at 20% -10%, #12666b 0%, transparent 100%),
       radial-gradient(ellipse at 100% 0%, #0e5a5f 0%, transparent 100%),
       linear-gradient(180deg, var(--sea) 0%, var(--sea-deep) 100%);
+    /* `background` er en shorthand og nulstiller ALT den ikke selv nævner
+       — inkl. attachment/repeat. Uden disse to linjer bliver attachment
+       "scroll" og repeat "repeat", så gradienten FLISER (gentager sig)
+       med en hård søm så snart siden er højere end én skærm (fx et langt
+       brok-feed) — præcis samme sømfejl som tidligere er set og rettet på
+       både Brokkekassen og MrBrok, nu genopstået fordi den blev glemt da
+       gradienten flyttede fra body til html. */
+    background-attachment:fixed; background-repeat:no-repeat;
     transition:background .7s ease;
   }
   /* MrBrok får sit eget mørke "efterforskningslokale" i stedet for det
      fælles teal — klassen sættes på <html> (ikke body), netop fordi det
-     er html's baggrund der tæller for canvas'en. */
+     er html's baggrund der tæller for canvas'en. Samme shorthand-fælde
+     gælder her, så attachment/repeat gentages eksplicit. */
   html.theme-mrbrok{
     background:
       radial-gradient(ellipse at 30% -10%, rgba(255,201,60,0.14) 0%, transparent 55%),
       radial-gradient(ellipse at 100% 0%, rgba(255,201,60,0.06) 0%, transparent 60%),
       linear-gradient(180deg, var(--noir) 0%, var(--noir-deep) 100%);
+    background-attachment:fixed; background-repeat:no-repeat;
   }
   body{
     margin:0; font-family:'Work Sans', system-ui, sans-serif;
@@ -284,7 +294,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-04-10';
+const BUILD_TAG = 'build-2026-08-04-11';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
