@@ -261,7 +261,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-04-4';
+const BUILD_TAG = 'build-2026-08-04-5';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1218,7 +1218,7 @@ function gameLobbyHtml(){
       <div class="name-grid" id="playerGrid">${chips}</div>
       <label class="field-label" style="color:rgba(255,247,232,0.7);">Spil om</label>
       <div class="segmented" style="margin-bottom:14px;">
-        <div class="seg ${gameWager!=='euro'?'active':''}" data-wager="fun">😄 For sjov</div>
+        <div class="seg ${gameWager!=='euro'?'active':''}" data-wager="fun">🏅 Æren</div>
         <div class="seg ${gameWager==='euro'?'active':''}" data-wager="euro">💶 1 euro i kassen</div>
       </div>
       <label class="field-label" style="color:rgba(255,247,232,0.7);">Antal runder</label>
@@ -1787,7 +1787,7 @@ function mrbrokLobbyHtml(){
       <div class="name-grid" id="mrbrokPlayerGrid">${chips}</div>
       <label class="field-label" style="color:rgba(255,247,232,0.7);">Spil om</label>
       <div class="segmented" style="margin-bottom:14px;">
-        <div class="seg ${mrbrokWager!=='euro'?'active':''}" data-mrbrok-wager="fun">😄 For sjov</div>
+        <div class="seg ${mrbrokWager!=='euro'?'active':''}" data-mrbrok-wager="fun">🏅 Æren</div>
         <div class="seg ${mrbrokWager==='euro'?'active':''}" data-mrbrok-wager="euro">💶 1 euro i kassen</div>
       </div>
       <label class="field-label" style="color:rgba(255,247,232,0.7); display:flex; align-items:center; justify-content:space-between;"><span>Antal omgange</span><span style="opacity:.7; font-weight:400; text-transform:none; letter-spacing:normal;">~15 min for 4</span></label>
@@ -2281,7 +2281,13 @@ function renderAllTimeHistory(main){
   ) : '';
 
   if(!state.history.length){
-    main.innerHTML = chart + `<div class="empty-state"><span class="emoji">📜</span><b>Ingen opgjorte perioder endnu</b>Puljen arkiveres kun når I selv trykker 💶 "Gør op" — det sker ikke automatisk, så I kan samle brok op så længe I vil, inden I gør endeligt op.</div>`;
+    // Kun vis den STORE tomme-tilstand hvis der reelt intet er at vise
+    // overhovedet (heller ikke et igangværende regnskab) — ellers virkede
+    // det modsigende at vise et rigtigt regnskab foroven og "ingen data
+    // endnu" lige nedenunder. Med data foroven er en lille fodnote nok.
+    main.innerHTML = anyTotal
+      ? chart + `<p class="hint" style="text-align:center; margin-top:14px;">📜 Det er den aktive pulje ovenfor — der kommer en "dag for dag"-historik her, når I trykker 💶 "Gør op" første gang.</p>`
+      : chart + `<div class="empty-state"><span class="emoji">📜</span><b>Ingen brok registreret endnu</b>Så snart nogen brokker sig, vises regnskabet her.</div>`;
     return;
   }
   const days = `<div class="section-label" style="margin-top:${anyTotal?22:0}px;">🗓️ Dag for dag</div>` + [...state.history].reverse().map(r=>{
