@@ -23,13 +23,14 @@
   }
   *{box-sizing:border-box;}
   html,body{height:100%;}
+  html{ background: var(--sea-deep); }
   body{
     margin:0; font-family:'Work Sans', system-ui, sans-serif;
     background: var(--sea-deep);
     color:var(--cream); min-height:100dvh; overflow-x:hidden;
     -webkit-tap-highlight-color: transparent; user-select:none;
     -webkit-overflow-scrolling: touch;
-    position:relative;
+    position:relative; isolation:isolate;
   }
   /* Selve gradienten ligger på et EGET fast lag i stedet for på body's
      `background-attachment:fixed` — iOS' WebKit er kendt for slet ikke at
@@ -38,9 +39,15 @@
      vise bodyens rå baggrundsfarve i stedet for selve gradienten — den
      søm brugerne så øverst på skærmen. Et separat `position:fixed; inset:0`
      lag dækker HELE viewportet inkl. safe area uafhængigt af scroll og af
-     WebKits særheder med `background-attachment`. */
+     WebKits særheder med `background-attachment`.
+     NB: bevidst IKKE negativ z-index — iOS' WKWebView (standalone/PWA-
+     tilstand specifikt) er kendt for at gengive `position:fixed` + negativ
+     z-index + safe-area-insets inkonsistent (virkede i almindelig Safari,
+     men ikke i den installerede PWA). `isolation:isolate` på body + en
+     ikke-negativ z-index-rækkefølge er langt mere pålideligt på tværs af
+     WebKit-versioner. */
   #bgLayer{
-    position:fixed; inset:0; z-index:-1;
+    position:fixed; inset:0; z-index:0;
     background:
       radial-gradient(ellipse at 20% -10%, #12666b 0%, transparent 100%),
       radial-gradient(ellipse at 100% 0%, #0e5a5f 0%, transparent 100%),
@@ -58,7 +65,7 @@
   }
   h1,h2,h3,.display{font-family:'Baloo 2', sans-serif;}
   button{font-family:inherit;}
-  #app{ max-width:480px; margin:0 auto; min-height:100dvh; display:flex; flex-direction:column; position:relative; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+  #app{ max-width:480px; margin:0 auto; min-height:100dvh; display:flex; flex-direction:column; position:relative; z-index:1; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
 
   header{ padding:20px 20px 6px; display:flex; flex-direction:column; gap:4px; position:relative; }
   header .title{ font-size:26px; font-weight:800; letter-spacing:-0.02em; white-space:nowrap; }
@@ -223,6 +230,13 @@
   .app-pick:active{ transform:scale(.96); }
   .app-pick .app-pick-icon{ height:40px; display:flex; align-items:center; justify-content:center; font-size:34px; line-height:1; }
   .app-pick .app-pick-label{ font-family:'Baloo 2',sans-serif; font-weight:800; font-size:13px; line-height:1.25; margin-top:8px; letter-spacing:.01em; }
+  /* Rækken af app-vælger-kort kan blive bredere end skærmen (fx alle 3 apps
+     aktive på en smal skærm) — i stedet for at klippe det sidste kort af
+     eller mase kortene sammen til de bliver ulæselige, scroller rækken
+     vandret, med et lille kig ind til næste kort som scroll-hint. */
+  .app-pick-row{ display:flex; gap:10px; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+  .app-pick-row::-webkit-scrollbar{ display:none; }
+  .app-pick-row .app-pick{ flex:0 0 auto; min-width:104px; }
   .onboard-card input{ background:rgba(255,247,232,0.95); }
   .divider{ display:flex; align-items:center; gap:10px; color:rgba(255,247,232,0.4); font-size:12px; margin:22px 0; }
   .divider::before, .divider::after{ content:''; flex:1; height:1px; background:rgba(255,247,232,0.15); }
@@ -262,7 +276,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-04-6';
+const BUILD_TAG = 'build-2026-08-04-7';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -647,8 +661,15 @@ function renderCreateOrJoin(errorMsg){
       <p>Ferie-reglen: brokker du dig, koster det 1€. Opret jeres eget rum, eller gå med i et du har fået et link til.</p>
       ${errorMsg ? `<p style="color:var(--coral); font-weight:600; margin-top:-14px;">${errorMsg}</p>` : ''}
       <div class="onboard-card">
+        <label class="field-label" style="color:rgba(255,247,232,0.6);">Har du fået et link?</label>
+        <input type="text" id="joinInput" placeholder="Indsæt link eller kode her" autocapitalize="off" autocorrect="off" spellcheck="false" />
+        <button class="sheet-btn primary" id="joinRoomBtn" style="margin-top:0;">Gå til brokkekassen</button>
+        <p style="margin:10px 0 0; font-size:11.5px; color:rgba(255,247,232,0.45); text-align:center;">Glemt dit rum? Bed et medlem af rummet om koden eller linket igen.</p>
+      </div>
+      <div class="divider">eller</div>
+      <div class="onboard-card">
         <label class="field-label" style="color:rgba(255,247,232,0.6);">Hvad vil I have med? (vælg en eller begge)</label>
-        <div style="display:flex; gap:10px; margin:10px 0 16px;">
+        <div class="app-pick-row" style="margin:10px 0 16px;">
           <div class="onboard-pick app-pick selected" data-pick="kasse" style="background:var(--sea); color:#fff;">
             <div class="app-pick-icon">🫙</div>
             <div class="app-pick-label">Brokkekassen</div>
@@ -663,13 +684,6 @@ function renderCreateOrJoin(errorMsg){
           </div>
         </div>
         <button class="sheet-btn primary" id="createBtn" style="margin-top:0;">Opret nyt rum</button>
-      </div>
-      <div class="divider">eller</div>
-      <div class="onboard-card">
-        <label class="field-label">Har du fået et link?</label>
-        <input type="text" id="joinInput" placeholder="Indsæt link eller kode her" autocapitalize="off" autocorrect="off" spellcheck="false" />
-        <button class="sheet-btn primary" id="joinRoomBtn" style="margin-top:0;">Gå til brokkekassen</button>
-        <p style="margin:10px 0 0; font-size:11.5px; color:rgba(255,247,232,0.45); text-align:center;">Glemt dit rum? Bed et medlem af rummet om koden eller linket igen.</p>
       </div>
       ${myRoomsList}
       ${homeScreenTip(false)}
@@ -735,9 +749,9 @@ function renderWhoAmI(justCreated){
       <p>${justCreated ? 'Brokkekassen er oprettet! Skriv dit navn, så er du med.' : 'Skriv dit navn for at komme ind i brokkekassen.'} Ingen adgangskode nødvendig.</p>
       ${homeScreenTip(true)}
       <div class="onboard-card">
-        <label class="field-label">Dit navn</label>
+        <label class="field-label" style="color:rgba(255,247,232,0.6);">Dit navn</label>
         <input type="text" id="nameInput" placeholder="Fx Martin" maxlength="24" value="${escapeHtml(getSavedIdentity().name)}" />
-        <label class="field-label">E-mail (valgfri)</label>
+        <label class="field-label" style="color:rgba(255,247,232,0.6);">E-mail (valgfri)</label>
         <input type="email" id="emailInput" placeholder="til fx afregning" maxlength="80" value="${escapeHtml(getSavedIdentity().email)}" />
         <button class="sheet-btn primary" id="joinBtn">Fortsæt</button>
       </div>
@@ -871,7 +885,7 @@ function openAppMenuSheet(){
   const showPushBell = pushSupported() && typeof Notification !== 'undefined' && Notification.permission !== 'denied' && !pushEnabledLocally();
   openSheet(`
     <h2>Menu</h2>
-    <div style="display:flex; gap:10px; margin:6px 0 4px;">
+    <div class="app-pick-row" style="margin:6px 0 4px;">
       ${state.kasseEnabled ? `<div class="app-pick" data-goto-app="kasse" style="background:${activeApp==='kasse'?'var(--sea)':'rgba(5,32,36,0.06)'}; color:${activeApp==='kasse'?'#fff':'var(--ink)'};">
         <div class="app-pick-icon">🫙</div>
         <div class="app-pick-label">Brokkekassen</div>
