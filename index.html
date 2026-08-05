@@ -25,32 +25,36 @@
   html,body{height:100%;}
   body{
     margin:0; font-family:'Work Sans', system-ui, sans-serif;
+    background: var(--sea-deep);
+    color:var(--cream); min-height:100dvh; overflow-x:hidden;
+    -webkit-tap-highlight-color: transparent; user-select:none;
+    -webkit-overflow-scrolling: touch;
+    position:relative;
+  }
+  /* Selve gradienten ligger på et EGET fast lag i stedet for på body's
+     `background-attachment:fixed` — iOS' WebKit er kendt for slet ikke at
+     male en `fixed`-baggrund korrekt ind under statusbaren/hakket i en
+     installeret ("Føj til hjemmeskærm") PWA, så det område endte med at
+     vise bodyens rå baggrundsfarve i stedet for selve gradienten — den
+     søm brugerne så øverst på skærmen. Et separat `position:fixed; inset:0`
+     lag dækker HELE viewportet inkl. safe area uafhængigt af scroll og af
+     WebKits særheder med `background-attachment`. */
+  #bgLayer{
+    position:fixed; inset:0; z-index:-1;
     background:
       radial-gradient(ellipse at 20% -10%, #12666b 0%, transparent 100%),
       radial-gradient(ellipse at 100% 0%, #0e5a5f 0%, transparent 100%),
       linear-gradient(180deg, var(--sea) 0%, var(--sea-deep) 100%);
-    background-attachment: fixed;
-    color:var(--cream); min-height:100dvh; overflow-x:hidden;
-    -webkit-tap-highlight-color: transparent; user-select:none;
-    -webkit-overflow-scrolling: touch;
     transition:background .7s ease;
   }
   /* MrBrok får sit eget mørke "efterforskningslokale" i stedet for det
-     fælles teal — sat via en klasse på body, fordi baggrunden ellers er
-     fast/fælles for alle tre skærme. */
-  body.theme-mrbrok{
+     fælles teal — sat via en klasse på body, som #bgLayer's baggrund
+     lytter til. */
+  body.theme-mrbrok #bgLayer{
     background:
       radial-gradient(ellipse at 30% -10%, rgba(255,201,60,0.14) 0%, transparent 55%),
       radial-gradient(ellipse at 100% 0%, rgba(255,201,60,0.06) 0%, transparent 60%),
       linear-gradient(180deg, var(--noir) 0%, var(--noir-deep) 100%);
-    /* Vigtigt: `background` er en shorthand og nulstiller ALT den ikke selv
-       nævner — inkl. attachment/repeat fra den fælles body-regel ovenfor.
-       Uden disse to linjer falder attachment tilbage til "scroll" og
-       repeat til "repeat", så gradienten fliser (gentager sig) med en
-       hård søm midt på skærmen så snart siden er høj nok til at scrolle
-       (præcis den søm-fejl der tidligere sås på selve Brokkekassen). */
-    background-attachment: fixed;
-    background-repeat: no-repeat;
   }
   h1,h2,h3,.display{font-family:'Baloo 2', sans-serif;}
   button{font-family:inherit;}
@@ -244,6 +248,7 @@
 </style>
 </head>
 <body>
+<div id="bgLayer"></div>
 <div id="app"></div>
 <div class="offline-banner" id="offlineBanner">📡 Ingen forbindelse — viser sidste kendte data</div>
 <div class="toast" id="toast"></div>
@@ -251,6 +256,11 @@
 <script src="gsap.min.js"></script>
 <script>
 /* ============ CONFIG / IDENTITY ============ */
+// Synligt versions-mærke i admin-menuerne, så det altid er utvetydigt om
+// en given enhed rent faktisk har hentet den nyeste deployment eller
+// stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
+// worker-opdateringsproblemer uden browser-devtools.
+const BUILD_TAG = 'build-2026-08-04-2';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -919,6 +929,7 @@ function openGameAdminMenuSheet(){
     ${active ? `<button class="sheet-btn danger" id="gameAdminRestartBtn">🔄 Genstart Brokspillet</button>` : ''}
     ${hasHighscore ? `<button class="sheet-btn danger" id="gameAdminResetStatsBtn">🏆 Nulstil highscore</button>` : ''}
     <button class="sheet-btn ghost" id="gameAdminCloseBtn">Luk menu</button>
+    <p class="hint" style="text-align:center; font-size:10.5px; opacity:.5; margin-top:6px;">${BUILD_TAG}</p>
   `, ()=>{
     const restartBtn = document.getElementById('gameAdminRestartBtn');
     if(restartBtn) restartBtn.onclick = async ()=>{
@@ -1587,6 +1598,7 @@ function openMrbrokAdminMenuSheet(){
     <p class="hint">${active ? 'Der er et spil i gang lige nu.' : 'Der er ikke noget spil i gang lige nu.'}</p>
     ${active ? `<button class="sheet-btn danger" id="mrbrokAdminRestartBtn">🔄 Genstart MrBrok</button>` : ''}
     <button class="sheet-btn ghost" id="mrbrokAdminCloseBtn">Luk menu</button>
+    <p class="hint" style="text-align:center; font-size:10.5px; opacity:.5; margin-top:6px;">${BUILD_TAG}</p>
   `, ()=>{
     const restartBtn = document.getElementById('mrbrokAdminRestartBtn');
     if(restartBtn) restartBtn.onclick = async ()=>{
@@ -2637,6 +2649,7 @@ function openAdminMenuSheet(){
     <p class="hint" style="${hintStyle}">Sletter rummet fuldstændigt, med det samme — ingen historik tilbage, koden virker ikke mere. Kun til fejloprettede rum.</p>
 
     <button class="sheet-btn ghost" id="adminMenuCloseBtn">Luk menu</button>
+    <p class="hint" style="text-align:center; font-size:10.5px; opacity:.5; margin-top:6px;">${BUILD_TAG}</p>
   `, ()=>{
     document.getElementById('adminGoalBtn').onclick = ()=>{ closeSheet(); setTimeout(openGoalSheet, 230); };
     document.getElementById('adminBroadcastBtn').onclick = ()=>{ closeSheet(); setTimeout(openBroadcastSheet, 230); };
