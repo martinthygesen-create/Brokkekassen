@@ -228,21 +228,24 @@
      eller mase kortene sammen til de bliver ulæselige, scroller rækken
      vandret. Selve kortene skal ALDRIG falmes/skjules for at signalere det
      — det gør netop det kort man skal kunne læse og trykke på svært at se.
-     I stedet flyder en lille, ikke-blokerende pil-badge ovenpå kanten
-     (kun når der rent faktisk er mere at scrolle til). */
+     I stedet flyder en lille, dæmpet pil-badge ovenpå kanten — kun i den
+     retning der RENT FAKTISK er mere at scrolle til (højre-pil når man
+     står ved starten, venstre-pil når man har scrollet helt til fx MrBrok,
+     ikke bare en fast højre-pil uanset hvor man er). */
   .app-pick-scroll-wrap{ position:relative; }
   .app-pick-row{ display:flex; gap:10px; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
   .app-pick-row::-webkit-scrollbar{ display:none; }
   .app-pick-row .app-pick{ flex:0 0 auto; min-width:104px; }
   .app-pick-scroll-hint{
-    position:absolute; top:50%; right:2px; transform:translateY(-50%);
-    width:24px; height:24px; border-radius:50%;
-    background:rgba(5,32,36,0.55); color:#fff; font-size:14px; font-weight:800;
+    position:absolute; top:50%; transform:translateY(-50%);
+    width:18px; height:18px; border-radius:50%;
+    background:rgba(120,130,130,0.28); color:rgba(255,255,255,0.75); font-size:11px; font-weight:700;
     display:flex; align-items:center; justify-content:center; line-height:1;
     pointer-events:none; opacity:0; transition:opacity .2s ease;
-    box-shadow:0 2px 8px rgba(0,0,0,0.25);
   }
-  .app-pick-scroll-wrap.scrollable .app-pick-scroll-hint{ opacity:1; }
+  .app-pick-scroll-hint.right{ right:2px; }
+  .app-pick-scroll-hint.left{ left:2px; }
+  .app-pick-scroll-hint.show{ opacity:1; }
   .onboard-card input{ background:rgba(255,247,232,0.95); }
   .divider{ display:flex; align-items:center; gap:10px; color:rgba(255,247,232,0.4); font-size:12px; margin:22px 0; }
   .divider::before, .divider::after{ content:''; flex:1; height:1px; background:rgba(255,247,232,0.15); }
@@ -281,7 +284,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-04-9';
+const BUILD_TAG = 'build-2026-08-04-10';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -645,18 +648,27 @@ function homeScreenTip(strong){
   `;
 }
 
-// Sætter .scrollable på app-pick-wrapperen når rækken RENT FAKTISK er
-// bredere end sit synlige område (styrer pil-badgets synlighed — aldrig
-// noget der falmer/skjuler selve kortene), og scroller den AKTIVE app-kort
-// (hvis der er en, dvs. et .app-pick med data-goto-app) ind i syne — så
-// man ikke først skal opdage at man kan scrolle for at se hvilken app man
-// rent faktisk står på.
+// Viser kun den venstre/højre pil-badge i den retning der RENT FAKTISK er
+// mere at scrolle til lige nu (opdateres løbende på scroll — så pilen til
+// højre forsvinder og pilen til venstre dukker op når man har scrollet
+// helt hen til fx MrBrok, i stedet for en fast pil der peger forkert).
+// Scroller også den AKTIVE app (hvis der er en) ind i syne først.
+function updateAppPickHints(row){
+  const wrap = row.closest('.app-pick-scroll-wrap');
+  if(!wrap) return;
+  const canScrollLeft = row.scrollLeft > 1;
+  const canScrollRight = row.scrollLeft < row.scrollWidth - row.clientWidth - 1;
+  const left = wrap.querySelector('.app-pick-scroll-hint.left');
+  const right = wrap.querySelector('.app-pick-scroll-hint.right');
+  if(left) left.classList.toggle('show', canScrollLeft);
+  if(right) right.classList.toggle('show', canScrollRight);
+}
 function markAppPickScrollable(){
   document.querySelectorAll('.app-pick-row').forEach(row=>{
-    const wrap = row.closest('.app-pick-scroll-wrap');
-    if(wrap) wrap.classList.toggle('scrollable', row.scrollWidth > row.clientWidth + 1);
     const active = row.querySelector(`[data-goto-app="${activeApp}"]`);
     if(active) active.scrollIntoView({ block:'nearest', inline:'center' });
+    updateAppPickHints(row);
+    row.onscroll = () => updateAppPickHints(row);
   });
 }
 
@@ -704,7 +716,8 @@ function renderCreateOrJoin(errorMsg){
               <div class="app-pick-label">MrBrok</div>
             </div>
           </div>
-          <div class="app-pick-scroll-hint">›</div>
+          <div class="app-pick-scroll-hint left">‹</div>
+          <div class="app-pick-scroll-hint right">›</div>
         </div>
         <button class="sheet-btn primary" id="createBtn" style="margin-top:0;">Opret nyt rum</button>
       </div>
@@ -926,7 +939,8 @@ function openAppMenuSheet(){
           <div class="app-pick-label">MrBrok</div>
         </div>` : ''}
       </div>
-      <div class="app-pick-scroll-hint">›</div>
+      <div class="app-pick-scroll-hint left">‹</div>
+      <div class="app-pick-scroll-hint right">›</div>
     </div>
     <div class="menu-row-list">
       ${showPushBell ? `<div class="menu-row" id="menuPushBtn"><div class="menu-row-icon">🔔</div><div class="menu-row-label">Slå push til</div><span class="menu-row-chevron">›</span></div>` : ''}
