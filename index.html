@@ -23,31 +23,16 @@
   }
   *{box-sizing:border-box;}
   html,body{height:100%;}
-  html{ background: var(--sea-deep); }
-  body{
-    margin:0; font-family:'Work Sans', system-ui, sans-serif;
-    background: var(--sea-deep);
-    color:var(--cream); min-height:100dvh; overflow-x:hidden;
-    -webkit-tap-highlight-color: transparent; user-select:none;
-    -webkit-overflow-scrolling: touch;
-    position:relative; isolation:isolate;
-  }
-  /* Selve gradienten ligger på et EGET fast lag i stedet for på body's
-     `background-attachment:fixed` — iOS' WebKit er kendt for slet ikke at
-     male en `fixed`-baggrund korrekt ind under statusbaren/hakket i en
-     installeret ("Føj til hjemmeskærm") PWA, så det område endte med at
-     vise bodyens rå baggrundsfarve i stedet for selve gradienten — den
-     søm brugerne så øverst på skærmen. Et separat `position:fixed; inset:0`
-     lag dækker HELE viewportet inkl. safe area uafhængigt af scroll og af
-     WebKits særheder med `background-attachment`.
-     NB: bevidst IKKE negativ z-index — iOS' WKWebView (standalone/PWA-
-     tilstand specifikt) er kendt for at gengive `position:fixed` + negativ
-     z-index + safe-area-insets inkonsistent (virkede i almindelig Safari,
-     men ikke i den installerede PWA). `isolation:isolate` på body + en
-     ikke-negativ z-index-rækkefølge er langt mere pålideligt på tværs af
-     WebKit-versioner. */
-  #bgLayer{
-    position:fixed; inset:0; z-index:0;
+  /* Gradienten sidder på <html>, IKKE på body eller en position:fixed div.
+     Årsag: på mobile browsere (og især en installeret iOS-PWA) males
+     safe-area/hak-området og overscroll-kanterne ud fra CSS-spec'ens
+     "canvas background" — som pr. spec tages fra <html>'s baggrund, og
+     kun falder tilbage til <body>'s hvis html slet ingen har. Både
+     `body{background}` og en separat `position:fixed`-div (begge afprøvet
+     tidligere) blev konsekvent overtrumfet af den blanke standardfarve i
+     netop det område i en installeret PWA — html-baggrunden er den eneste
+     der faktisk regnes med til canvas'en. */
+  html{
     background:
       radial-gradient(ellipse at 20% -10%, #12666b 0%, transparent 100%),
       radial-gradient(ellipse at 100% 0%, #0e5a5f 0%, transparent 100%),
@@ -55,17 +40,25 @@
     transition:background .7s ease;
   }
   /* MrBrok får sit eget mørke "efterforskningslokale" i stedet for det
-     fælles teal — sat via en klasse på body, som #bgLayer's baggrund
-     lytter til. */
-  body.theme-mrbrok #bgLayer{
+     fælles teal — klassen sættes på <html> (ikke body), netop fordi det
+     er html's baggrund der tæller for canvas'en. */
+  html.theme-mrbrok{
     background:
       radial-gradient(ellipse at 30% -10%, rgba(255,201,60,0.14) 0%, transparent 55%),
       radial-gradient(ellipse at 100% 0%, rgba(255,201,60,0.06) 0%, transparent 60%),
       linear-gradient(180deg, var(--noir) 0%, var(--noir-deep) 100%);
   }
+  body{
+    margin:0; font-family:'Work Sans', system-ui, sans-serif;
+    background:transparent;
+    color:var(--cream); min-height:100dvh; overflow-x:hidden;
+    -webkit-tap-highlight-color: transparent; user-select:none;
+    -webkit-overflow-scrolling: touch;
+    position:relative;
+  }
   h1,h2,h3,.display{font-family:'Baloo 2', sans-serif;}
   button{font-family:inherit;}
-  #app{ max-width:480px; margin:0 auto; min-height:100dvh; display:flex; flex-direction:column; position:relative; z-index:1; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+  #app{ max-width:480px; margin:0 auto; min-height:100dvh; display:flex; flex-direction:column; position:relative; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
 
   header{ padding:20px 20px 6px; display:flex; flex-direction:column; gap:4px; position:relative; }
   header .title{ font-size:26px; font-weight:800; letter-spacing:-0.02em; white-space:nowrap; }
@@ -233,10 +226,21 @@
   /* Rækken af app-vælger-kort kan blive bredere end skærmen (fx alle 3 apps
      aktive på en smal skærm) — i stedet for at klippe det sidste kort af
      eller mase kortene sammen til de bliver ulæselige, scroller rækken
-     vandret, med et lille kig ind til næste kort som scroll-hint. */
+     vandret. En blød udtoning i højre kant (mask-image, virker uanset
+     baggrundsfarve bagved — falmer selve indholdet i stedet for at lægge
+     en farvet overlay ovenpå) gør det tydeligt at der er mere at scrolle
+     til, så man ikke er i tvivl om hvorvidt rækken kan scrolles. */
   .app-pick-row{ display:flex; gap:10px; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
   .app-pick-row::-webkit-scrollbar{ display:none; }
   .app-pick-row .app-pick{ flex:0 0 auto; min-width:104px; }
+  /* Falmer kun højre kant når rækken RENT FAKTISK er bredere end det
+     synlige område (sat via JS, se markAppPickScrollable) — ellers ville
+     et rum med kun 1-2 apps aktive få et unødvendigt, misvisende falmet
+     kort selvom alt allerede er synligt. */
+  .app-pick-row.scrollable{
+    mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+  }
   .onboard-card input{ background:rgba(255,247,232,0.95); }
   .divider{ display:flex; align-items:center; gap:10px; color:rgba(255,247,232,0.4); font-size:12px; margin:22px 0; }
   .divider::before, .divider::after{ content:''; flex:1; height:1px; background:rgba(255,247,232,0.15); }
@@ -264,7 +268,6 @@
 </style>
 </head>
 <body>
-<div id="bgLayer"></div>
 <div id="app"></div>
 <div class="offline-banner" id="offlineBanner">📡 Ingen forbindelse — viser sidste kendte data</div>
 <div class="toast" id="toast"></div>
@@ -276,7 +279,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-04-7';
+const BUILD_TAG = 'build-2026-08-04-8';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -640,6 +643,19 @@ function homeScreenTip(strong){
   `;
 }
 
+// Sætter .scrollable på app-pick-rækker der rent faktisk er bredere end
+// deres synlige område (styrer kant-udtoningen), og scroller den AKTIVE
+// app-kort (hvis der er en, dvs. et .app-pick med .selected/farvet
+// baggrund via data-goto-app) ind i syne — så man ikke først skal opdage
+// at man kan scrolle for at se hvilken app man rent faktisk står på.
+function markAppPickScrollable(){
+  document.querySelectorAll('.app-pick-row').forEach(row=>{
+    row.classList.toggle('scrollable', row.scrollWidth > row.clientWidth + 1);
+    const active = row.querySelector(`[data-goto-app="${activeApp}"]`);
+    if(active) active.scrollIntoView({ block:'nearest', inline:'center' });
+  });
+}
+
 function renderCreateOrJoin(errorMsg){
   const myRooms = getMyRooms();
   const roomIds = Object.keys(myRooms).filter(rid => rid !== roomId).sort((a,b)=>myRooms[b].ts - myRooms[a].ts);
@@ -689,6 +705,7 @@ function renderCreateOrJoin(errorMsg){
       ${homeScreenTip(false)}
     </div>
   `;
+  markAppPickScrollable();
   document.querySelectorAll('[data-goto-room]').forEach(el=>{
     el.onclick = ()=>switchToRoom(el.dataset.gotoRoom);
   });
@@ -823,7 +840,9 @@ function render(){
   // fælles teal (bliver en blød fade takket være transition på body), og
   // kun headerens accent forbliver mørk/guld foroven.
   const isMrbrokTheme = activeApp === 'mrbrok' && !(state.mrbrok && state.mrbrok.active);
-  document.body.classList.toggle('theme-mrbrok', isMrbrokTheme);
+  // Klassen sættes på <html>, ikke <body> — se CSS-kommentaren ved
+  // html{background:...} for hvorfor det er html's baggrund der tæller.
+  document.documentElement.classList.toggle('theme-mrbrok', isMrbrokTheme);
   // OS-statusbaren (og browserens egen UI-chrome) males IKKE af sidens CSS —
   // den bruger kun den statiske <meta theme-color>-værdi, som ellers stod
   // fast på teal uanset skærm. Det gav en hård søm øverst hver gang MrBroks
@@ -924,6 +943,7 @@ function openAppMenuSheet(){
       const openFn = activeApp==='spil' ? openGameAdminMenuSheet : (activeApp==='mrbrok' ? openMrbrokAdminMenuSheet : openAdminMenuSheet);
       setTimeout(openFn, 230);
     };
+    markAppPickScrollable();
   });
 }
 
