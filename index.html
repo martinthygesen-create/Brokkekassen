@@ -134,21 +134,10 @@
   .complaint-countdown{ flex:0 0 auto; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:15px; color:#FFD9CC; animation:timerPulse .8s ease-in-out infinite; }
   @keyframes slotWinPop{ 0%{ transform:scale(1) rotate(0deg); } 30%{ transform:scale(1.06) rotate(-1.5deg); } 55%{ transform:scale(1.03) rotate(1.5deg); } 100%{ transform:scale(1) rotate(0deg); } }
   .quip-slot-win{ animation:slotWinPop .5s ease-out; }
-  /* "Chancen" — den visuelle afgørelse når der ikke er nogen rigtig
-     afstemning (fx kun 2 spillere, eller en uafgjort stemning) og en
-     vinder i stedet trækkes tilfældigt. En reel af chips highlighter én
-     ad gangen i et stadig langsommere tempo (som et rullende terningkast/
-     hjul), så det føles som en spændende begivenhed man kan følge med i,
-     i stedet for en usynlig beslutning der bare dukker op færdig. */
-  .chance-badge{ display:inline-flex; align-items:center; gap:6px; background:rgba(255,201,60,0.16); border:1px solid rgba(255,201,60,0.35); color:var(--coin); font-family:'Baloo 2',sans-serif; font-weight:800; font-size:13px; padding:6px 14px; border-radius:100px; margin:0 0 12px; }
-  .chance-reel{ display:flex; justify-content:center; gap:12px; margin:4px 0 16px; }
-  .chance-chip{ display:flex; flex-direction:column; align-items:center; gap:6px; padding:8px; border-radius:16px; transition:background .15s ease, transform .15s ease; }
-  .chance-chip .avatar{ width:44px; height:44px; font-size:15px; transition:box-shadow .15s ease; }
-  .chance-chip-name{ font-size:11px; font-weight:700; color:rgba(255,247,232,0.6); }
-  .chance-chip.active{ background:rgba(255,201,60,0.18); transform:scale(1.08); }
-  .chance-chip.active .avatar{ box-shadow:0 0 0 3px var(--coin); }
-  .chance-chip.active .chance-chip-name{ color:var(--coin); }
-  .chance-chip.chance-winner{ animation:slotWinPop .5s ease-out; }
+  /* "Chancen" genbruger nu selve spillemaskine-designet fra Brokkekassens
+     daglige lodtrækning (.slot-cabinet/.slot-window/.reel osv. herunder) i
+     stedet for sin egen chip-reel — samme genkendelige "🎰 3 hjul lander på
+     samme vinder"-følelse, bare med Brokspillets egne kandidater som symboler. */
   .game-card{ background:linear-gradient(160deg, rgba(255,201,60,0.18), rgba(255,107,74,0.10)); border:1px solid rgba(255,201,60,0.35); border-radius:22px; padding:20px; box-shadow:0 10px 24px rgba(0,0,0,.18); }
   .game-card p{ color:var(--cream); }
   .game-btn{ display:block; width:100%; background:linear-gradient(160deg, var(--coral), #e14d2e); color:#fff; border:none; border-radius:100px; padding:15px; font-family:'Baloo 2',sans-serif; font-weight:700; font-size:16px; box-shadow:0 8px 18px rgba(255,107,74,0.35); cursor:pointer; margin-top:14px; }
@@ -329,7 +318,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-06-15';
+const BUILD_TAG = 'build-2026-08-06-16';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1072,16 +1061,11 @@ function openChanceTestSheet(){
   openSheet(`
     <h2>Test: Chancen 🎲</h2>
     <p class="hint">Sådan ser det ud når "Chancen" afgør en uafgjort/2-spiller-runde — ren visning, påvirker intet rigtigt spil.</p>
-    <div class="game-card" style="text-align:center;">
-      <div class="chance-badge">🎲 Chancen afgør det</div>
-      <div class="chance-reel" id="chanceReel">
-        ${demoMembers.map(m => `<div class="chance-chip" data-chance-id="${m.id}"><div class="avatar">${initials(m.name)}</div><div class="chance-chip-name">${escapeHtml(m.name)}</div></div>`).join('')}
-      </div>
-    </div>
-    <button class="sheet-btn ghost" id="chanceTestReplayBtn">🔁 Afspil igen</button>
+    ${buildSlotCabinetHtml('chance', demoMembers, winner, '🎲 CHANCEN AFGØR DET')}
+    <button class="sheet-btn ghost" id="chanceTestReplayBtn" style="margin-top:14px;">🔁 Afspil igen</button>
     <button class="sheet-btn ghost" id="chanceTestCloseBtn">Luk</button>
   `, ()=>{
-    playChanceReveal(winner.id);
+    playSlotChanceReveal('chance');
     document.getElementById('chanceTestReplayBtn').onclick = ()=>{ closeSheet(); setTimeout(openChanceTestSheet, 230); };
     document.getElementById('chanceTestCloseBtn').onclick = closeSheet;
   });
@@ -1263,39 +1247,85 @@ function renderGameScreen(){
   }
   celebrateGameRound(g);
   if(isNewGamePhase && g.current && g.current.type === 'quiplash' && g.current.phase === 'results' && g.current.randomPick){
-    playChanceReveal(g.current.winnerIds && g.current.winnerIds[0]);
+    playSlotChanceReveal('chance');
   }
 }
 
-// "Chancen": highlighter spillernes chips i rækkefølge, i et stadig
-// langsommere tempo (som et hjul der ruller ud), og lander til sidst på
-// den rigtige vinder (allerede afgjort server-side — dette er ren
-// visuel spænding, ikke selve afgørelsen). Kører kun én gang pr. ny
-// resultat-fase, styret af isNewGamePhase i renderGameScreen.
-function playChanceReveal(winnerId){
-  const reel = document.getElementById('chanceReel');
-  if(!reel) return;
-  const chips = [...reel.querySelectorAll('.chance-chip')];
-  if(!chips.length) return;
-  const winnerIdx = Math.max(0, chips.findIndex(c => c.dataset.chanceId === winnerId));
-  // Antal "stop" aftager i hastighed hen mod slutningen, ligesom et
-  // rigtigt lykkehjul/terningkast — ikke bare et jævnt tempo hele vejen.
-  const delays = [90,90,90,110,110,140,170,210,260,320,400];
-  let step = 0;
-  const totalSteps = delays.length + winnerIdx; // sørger for at lande PRÆCIS på vinderen til sidst
-  const tick = () => {
-    chips.forEach(c => c.classList.remove('active'));
-    chips[step % chips.length].classList.add('active');
-    step++;
-    if(step < totalSteps){
-      setTimeout(tick, delays[Math.min(step, delays.length - 1)]);
-    }else{
-      chips.forEach(c => c.classList.remove('active'));
-      const winnerChip = chips[winnerIdx];
-      if(winnerChip){ winnerChip.classList.add('active', 'chance-winner'); }
+const SLOT_REEL_H = 58;
+// Bygger selve spillemaskine-markup'et — samme .slot-cabinet/.slot-window/
+// .reel-design som Brokkekassens daglige "dagens gratis brok"-lodtrækning,
+// nu genbrugt til Chancen. Reelernes fyld-symboler er tilfældige hver gang
+// denne kaldes (harmløst — de ruller ud af syne uanset), men SIDSTE symbol
+// på hver reel er altid vinderen, og strip'en er som DEFAULT allerede
+// transformeret til den landede position. Det betyder et helt almindeligt
+// gen-render (fx fordi en anden spiller trykker "klar" mens man kigger på
+// resultatet) viser den korrekte, landede tilstand med det samme — kun den
+// FØRSTE visning kører den egentlige spin-animation (se playSlotChanceReveal).
+function buildSlotCabinetHtml(prefix, candidates, winner, bannerText){
+  if(!winner || !candidates.length) return '';
+  function buildStrip(){
+    const n = 10 + Math.floor(Math.random()*4);
+    const syms = [];
+    for(let i=0;i<n;i++) syms.push(candidates[Math.floor(Math.random()*candidates.length)]);
+    syms.push(winner);
+    return syms;
+  }
+  const reels = [buildStrip(), buildStrip(), buildStrip()];
+  const reelsHtml = reels.map((syms,ri)=>`
+    <div class="reel"><div class="reel-strip" id="${prefix}ReelStrip${ri}" style="transform:translateY(-${(syms.length-1)*SLOT_REEL_H}px);">
+      ${syms.map(m=>`<div class="reel-symbol"><div class="avatar">${initials(m?m.name:'?')}</div></div>`).join('')}
+    </div></div>
+  `).join('');
+  return `
+    <div style="text-align:center;">
+      <div class="slot-banner">${bannerText}</div>
+      <div class="slot-cabinet win" id="${prefix}Cabinet">
+        <div class="slot-window">${reelsHtml}</div>
+        <div class="slot-winner-name" id="${prefix}WinnerName" style="opacity:1;">${escapeHtml(winner.name)} vandt! 🍀</div>
+      </div>
+    </div>
+  `;
+}
+
+// Spiller selve spin-animationen for et allerede-renderet spillemaskine-kort
+// (bygget af buildSlotCabinetHtml) — "unsettler" hjulene til top og lader
+// dem rulle ned til den position markup'et allerede sagde de skulle lande
+// på. Kører kun én gang pr. ny resultat-fase, styret af isNewGamePhase i
+// renderGameScreen — den bagvedliggende vinder er allerede afgjort
+// server-side, dette er ren visuel spænding, ikke selve afgørelsen.
+function playSlotChanceReveal(prefix){
+  const cabinet = document.getElementById(prefix+'Cabinet');
+  if(!cabinet) return;
+  cabinet.classList.remove('win');
+  const nameEl = document.getElementById(prefix+'WinnerName');
+  if(nameEl) nameEl.style.opacity = '0';
+  const strips = [...cabinet.querySelectorAll('.reel-strip')];
+  const durations = [1.0, 1.5, 2.1];
+  let doneCount = 0;
+  const onAllStopped = ()=>{
+    cabinet.classList.add('win');
+    if(nameEl){
+      if(typeof gsap !== 'undefined') gsap.fromTo(nameEl, {opacity:0, y:6}, {opacity:1, y:0, duration:.4, ease:'power2.out'});
+      else nameEl.style.opacity = '1';
     }
+    fireConfetti(cabinet);
   };
-  tick();
+  strips.forEach((strip, ri) => {
+    const distance = strip.children.length ? (strip.children.length-1)*SLOT_REEL_H : 0;
+    const duration = durations[ri] || 1.5;
+    const finish = ()=>{ doneCount++; if(doneCount >= strips.length) onAllStopped(); };
+    if(typeof gsap !== 'undefined'){
+      gsap.fromTo(strip, { y: 0 }, { y: -distance, duration, ease: 'power3.out', onComplete: finish });
+    }else{
+      strip.style.transition = 'none';
+      strip.style.transform = 'translateY(0)';
+      requestAnimationFrame(()=>{
+        strip.style.transition = `transform ${duration}s ease-out`;
+        strip.style.transform = `translateY(-${distance}px)`;
+      });
+      setTimeout(finish, duration*1000);
+    }
+  });
 }
 
 function gameBodyHtml(g){
@@ -1458,15 +1488,11 @@ function quiplashHtml(g, cur){
     <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
     <div class="game-card" id="gameCard" style="text-align:center;">
       <p style="margin:0 0 10px;">${escapeHtml(cur.prompt)}</p>
-      ${cur.randomPick ? `
-        <div class="chance-badge">🎲 Chancen afgør det</div>
-        <div class="chance-reel" id="chanceReel">
-          ${(cur.chanceCandidates || Object.keys(cur.answers||{})).map(id=>{
-            const m = state.members.find(x=>x.id===id);
-            return `<div class="chance-chip" data-chance-id="${id}"><div class="avatar">${initials(m?m.name:'?')}</div><div class="chance-chip-name">${escapeHtml(m?m.name:'?')}</div></div>`;
-          }).join('')}
-        </div>
-      ` : ''}
+      ${cur.randomPick ? buildSlotCabinetHtml('chance',
+          (cur.chanceCandidates || Object.keys(cur.answers||{})).map(id=>state.members.find(m=>m.id===id)).filter(Boolean),
+          state.members.find(m=>m.id===(cur.winnerIds||[])[0]),
+          '🎲 CHANCEN AFGØR DET'
+        ) : ''}
       ${Object.entries(cur.answers||{}).map(([id,text])=>{
         const m = state.members.find(x=>x.id===id);
         const won = (cur.winnerIds||[]).includes(id);
