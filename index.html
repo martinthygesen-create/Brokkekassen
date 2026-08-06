@@ -192,7 +192,13 @@
      spillere selv VÆLGER et brok-ord, og der trækkes lod blandt de valg. */
   .mole-cabinet{ background:linear-gradient(160deg,#3d2b1f,#1a120b); border-radius:24px; padding:20px 14px 16px; box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #8a6b1f; position:relative; }
   .mole-cabinet.win{ box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #FFC93C, 0 0 24px rgba(255,201,60,.5); }
-  .mole-grid{ display:flex; flex-wrap:wrap; justify-content:center; gap:14px; padding:8px 4px; }
+  /* Fast 2 pr. række (ikke "så mange der er plads til") — ellers skifter
+     antallet af pr.-række afhængig af skærmbredde og kandidatantal, hvilket
+     så uforudsigeligt ud. En ulige sidste kandidat spænder over begge
+     kolonner på sin egen række, så den lander centreret i stedet for skævt
+     ude i venstre side. */
+  .mole-grid{ display:grid; grid-template-columns: repeat(2, 1fr); justify-items:center; gap:14px; padding:8px 4px; }
+  .mole-hole-wrap:last-child:nth-child(odd){ grid-column: 1 / -1; }
   .mole-hole-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; gap:5px; width:84px; padding-top:38px; }
   .mole-hole{ position:relative; width:68px; height:68px; border-radius:50%; background:radial-gradient(circle at 50% 30%, #4a3627, #1a120b); overflow:hidden; box-shadow:inset 0 4px 10px rgba(0,0,0,.6); }
   /* Håndbygget hammer (ikke emoji'en 🔨) — emoji-glyffer skalerer og
@@ -379,7 +385,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-06-29';
+const BUILD_TAG = 'build-2026-08-06-30';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1539,7 +1545,19 @@ function buildWheelChanceHtml(prefix, candidates, winner, bannerText, revealed){
   }).join('');
   const labelsHtml = visual.map((c,i)=>{
     const mid = i*sliceDeg + sliceDeg/2;
-    const p = wheelPolarPoint(cx, cy, r*0.62, mid);
+    // Teksten roteres RADIÆRT (langs stykkets egen retning, fra nav mod
+    // kant) i stedet for at stå vandret uanset hvor på hjulet den er —
+    // vandret tekst passede fint i toppen/bunden, men stak ud af den smalle
+    // kile ved fx kl. 3/9, hvor et helt ord ikke er bredt nok til at være
+    // vandret uden at ramme naboskiverne. Gruppen roteres til punktets
+    // vinkel (samme matematik som wheelPolarPoint), og teksten selv får
+    // yderligere +90° for at pege radiært i stedet for tangentielt — vippes
+    // 180° oveni hvis det ellers ville stå på hovedet for den der kigger på
+    // hjulet i ro.
+    const textExtraRot = 90;
+    const finalAngle = ((mid + textExtraRot) % 360 + 360) % 360;
+    const flip = finalAngle > 90 && finalAngle < 270;
+    const textOwnRot = textExtraRot + (flip ? 180 : 0);
     // Kandidater med et eget `.label` (fx et brok-ord) viser den tekst,
     // trunkeret så den er kort nok til at stå på ét stykke af hjulet —
     // ellers falder den tilbage til navne-initialer (den oprindelige brug:
@@ -1554,8 +1572,8 @@ function buildWheelChanceHtml(prefix, candidates, winner, bannerText, revealed){
     // som en malplaceret prik oven på hjulet) — kontrasten mod farve-
     // stykkerne klares i stedet af et mørkt "omrids" via stroke bag selve
     // teksten (paint-order tegner stroke FØR fill, så streget ligger bagved).
-    return `<g transform="translate(${p.x.toFixed(2)},${p.y.toFixed(2)})">
-      <text text-anchor="middle" dominant-baseline="central" font-family="'Baloo 2',sans-serif" font-weight="800" font-size="${fontSize}" fill="#FFF7E8" stroke="rgba(5,32,36,0.85)" stroke-width="4" stroke-linejoin="round" paint-order="stroke fill">${escapeHtml(text)}</text>
+    return `<g transform="rotate(${mid.toFixed(2)} ${cx} ${cy}) translate(${cx} ${(cy - r*0.62).toFixed(2)})">
+      <text transform="rotate(${textOwnRot})" text-anchor="middle" dominant-baseline="central" font-family="'Baloo 2',sans-serif" font-weight="800" font-size="${fontSize}" fill="#FFF7E8" stroke="rgba(5,32,36,0.85)" stroke-width="4" stroke-linejoin="round" paint-order="stroke fill">${escapeHtml(text)}</text>
     </g>`;
   }).join('');
   return `
