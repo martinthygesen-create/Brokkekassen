@@ -132,6 +132,10 @@
   .complain-btn:active{ transform:scale(0.97) !important; }
   .complaint-banner{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:12px; padding:12px 16px; border-radius:16px; background:rgba(255,77,46,0.16); border:1px solid rgba(255,77,46,0.4); color:rgba(255,247,232,0.95); font-size:13.5px; line-height:1.35; }
   .complaint-countdown{ flex:0 0 auto; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:15px; color:#FFD9CC; animation:timerPulse .8s ease-in-out infinite; }
+  /* MrBrok: alt der IKKE er ens egen tur dæmpes tydeligt ned — man skal
+     kunne se med det samme, uden at læse, om det er en selv der har ordet
+     eller ej. */
+  .mrbrok-dim{ opacity:.55; filter:grayscale(.3); }
   @keyframes slotWinPop{ 0%{ transform:scale(1) rotate(0deg); } 30%{ transform:scale(1.06) rotate(-1.5deg); } 55%{ transform:scale(1.03) rotate(1.5deg); } 100%{ transform:scale(1) rotate(0deg); } }
   .quip-slot-win{ animation:slotWinPop .5s ease-out; }
   /* Spillets slut-skærm: vinderen fejres, taberen får en lidt komisk
@@ -385,7 +389,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-06-30';
+const BUILD_TAG = 'build-2026-08-06-31';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -408,15 +412,15 @@ let lastComplaintKey = null; // undgår at genstarte brok-nedtællingens visning
 let wheelRevealTimeout = null; // se scheduleWheelChanceReveal
 let revealAnimationLock = false; // se renderGameScreen — blokerer gen-render mens hjul/mole-afsløring spiller
 let lastAnimatedMrbrokKey = null;
+let lastComplaintKeyMrbrok = null; // samme flimmer-fix som lastComplaintKey, men for MrBrok's egen brok-nedtælling
 
 let mrbrokWager = 'fun';
-let mrbrokRounds = 4; // 3 | 4 | 5
+let mrbrokWarmup = 2; // 1 | 2 | 3 — antal rene clue-runder før den første afstemning
 let mrbrokSelectedPlayers = null;
 let mrbrokInstructionsOpen = null; // null = ikke afgjort endnu denne session — "sådan foregår det" foldes automatisk ud første gang, sammen efterfølgende
 let gameInstructionsOpen = null; // samme mønster for Brokspillets egen lobby
 let mrbrokKnownMemberIds = null;
-let mrbrokTimerInterval = null;
-let mrbrokTimerDeadline = null;
+let mrbrokTipText = null; // client-only "hint til vinkel"-forslag — nulstilles ved ny tur, se mrbrokClueHtml/bindMrbrokHandlers
 let brokListSubTab = 'alltime'; // 'today' | 'alltime' — undersort inde i Broklisten-fanen; alltime er det vigtigste og vises først
 let polling = null;
 let toastTimer = null;
@@ -709,7 +713,6 @@ async function switchToRoom(rid){
   if(gameTimerInterval){ clearInterval(gameTimerInterval); gameTimerInterval = null; }
   if(complaintCountdownInterval){ clearInterval(complaintCountdownInterval); complaintCountdownInterval = null; }
   if(wheelRevealTimeout){ clearTimeout(wheelRevealTimeout); wheelRevealTimeout = null; }
-  if(mrbrokTimerInterval){ clearInterval(mrbrokTimerInterval); mrbrokTimerInterval = null; }
   activeApp = 'kasse';
   roomId = rid.toLowerCase();
   profile = JSON.parse(localStorage.getItem('bk_profile_' + roomId) || 'null');
@@ -722,7 +725,6 @@ function leaveRoom(){
   if(gameTimerInterval){ clearInterval(gameTimerInterval); gameTimerInterval = null; }
   if(complaintCountdownInterval){ clearInterval(complaintCountdownInterval); complaintCountdownInterval = null; }
   if(wheelRevealTimeout){ clearTimeout(wheelRevealTimeout); wheelRevealTimeout = null; }
-  if(mrbrokTimerInterval){ clearInterval(mrbrokTimerInterval); mrbrokTimerInterval = null; }
   localStorage.removeItem('bk_lastRoom');
   roomId = null; profile = null; state = null;
   const u = new URL(location.href); u.search = '';
@@ -2481,6 +2483,28 @@ function bindGameHandlers(g){
 }
 
 /* ============ MRBROK ============ */
+// Forslag til en VINKEL på ens clue (aldrig et svar/ord) — samme pulje som
+// api/_lib/mrbrok.js's MRBROK_CLUE_TIPS, men duplikeret her fordi hint-
+// knappen er en ren client-side ting (se bindMrbrokHandlers) og aldrig
+// behøver at røre serveren for at virke.
+const MRBROK_CLUE_TIPS = [
+  'Beskriv en følelse forbundet med det',
+  'Nævn et sted det typisk sker',
+  'Sammenlign det med noget helt andet',
+  'Beskriv en lyd eller lugt der hører til',
+  'Sig hvornår på dagen/ugen det sker',
+  'Nævn hvem der typisk er involveret',
+  'Beskriv hvordan det starter',
+  'Beskriv hvordan det plejer at ende',
+  'Brug et tal eller en mængde',
+  'Beskriv noget man IKKE bør gøre i den situation',
+  'Sammenlign størrelsen eller mængden af det',
+  'Beskriv hvordan man har det bagefter',
+  'Nævn noget det minder dig om fra din egen hverdag',
+  'Beskriv det med kun ét ord, meget vagt',
+  'Sig noget om hvor tit det sker',
+];
+
 async function mrbrokApi(action, extra){
   try{
     const r = await api('mrbrok', Object.assign({ action, roomId, actorId: profile.memberId }, extra||{}));
@@ -2510,49 +2534,41 @@ function openMrbrokAdminMenuSheet(){
 
 // Nedtælling pr. fase — samme nødbremse-filosofi som Brokspillet: ingen kan
 // blokere resten af rummet ved bare at sidde stille.
-const MRBROK_PHASE_SECONDS = { 'turn:ask': 30, 'turn:answer': 30, 'guess:guess': 25, 'steal:guessing': 30, 'steal:voting': 25 };
-function mrbrokTimerKey(cur){
-  if(cur.type === 'steal') return 'steal:' + (cur.guess ? 'voting' : 'guessing');
-  if(cur.type === 'turn') return 'turn:' + cur.phase;
-  if(cur.type === 'guess') return 'guess:guess';
-  return null;
+// Ingen hård klient-nedtælling der selv tvinger videre længere — samme
+// filosofi som Brokspillet (se getPendingIdsClient/complaintBlockHtml):
+// kun et synligt brok (menneske eller "MrBrok selv" efter lang stilhed)
+// og en udløbet nedtælling kan rykke fasen videre, aldrig en klients eget ur.
+function getPendingMrbrokIdsClient(m, cur){
+  if(!cur || !m.activeIds) return [];
+  if(cur.type === 'clue') return [cur.speakerId];
+  if(cur.type === 'vote') return m.activeIds.filter(id=>!(cur.votes && cur.votes[id] !== undefined));
+  if(cur.type === 'steal' && !cur.guess) return [m.mrBrokId];
+  if(cur.type === 'steal' && cur.guess) return m.activeIds.filter(id=>!(cur.votes && cur.votes[id] !== undefined));
+  return [];
 }
-function paintMrbrokTimerNow(){
-  // Samme flimmer-fix som paintGameTimerNow(): mal den friske #mrbrokTimer-
-  // node med det samme efter et stille poll, i stedet for at lade den stå
-  // tom indtil den gamle intervals næste tick (op til 1 sekund senere).
-  if(!mrbrokTimerDeadline) return;
-  const el = document.getElementById('mrbrokTimer');
-  if(!el) return;
-  const left = Math.max(0, Math.ceil((mrbrokTimerDeadline - Date.now())/1000));
-  el.textContent = '⏱️ ' + left + 's';
-  el.style.color = left <= 10 ? '#FFD9CC' : '';
-  el.classList.toggle('game-timer-urgent', left <= 10 && left > 0);
-}
-function startMrbrokTimer(cur){
-  clearInterval(mrbrokTimerInterval);
-  mrbrokTimerInterval = null;
-  if(!cur || cur.type === 'gameover') return;
-  const key = mrbrokTimerKey(cur);
-  const secs = key ? MRBROK_PHASE_SECONDS[key] : null;
-  if(!secs){ mrbrokTimerDeadline = null; return; }
-  mrbrokTimerDeadline = Date.now() + secs*1000;
-  const tick = ()=>{
-    const el = document.getElementById('mrbrokTimer');
-    const left = Math.max(0, Math.ceil((mrbrokTimerDeadline - Date.now())/1000));
-    if(el){
-      el.textContent = '⏱️ ' + left + 's';
-      el.style.color = left <= 10 ? '#FFD9CC' : '';
-      el.classList.toggle('game-timer-urgent', left <= 10 && left > 0);
-    }
-    if(left <= 0){
-      clearInterval(mrbrokTimerInterval);
-      mrbrokTimerInterval = null;
-      mrbrokApi('advance', {});
-    }
-  };
-  tick();
-  mrbrokTimerInterval = setInterval(tick, 1000);
+
+function mrbrokComplaintBlockHtml(m, cur){
+  if(!cur || !profile) return '';
+  const pending = getPendingMrbrokIdsClient(m, cur);
+  if(!pending.length) return '';
+  const myId = profile.memberId;
+  if(cur.complaint){
+    const byName = cur.complaint.by === 'brokspillet' ? 'MrBrok' : ((state.members.find(mm=>mm.id===cur.complaint.by)||{}).name || 'Nogen');
+    const targetName = (state.members.find(mm=>mm.id===cur.complaint.targetId)||{}).name || 'nogen';
+    return `
+      <div class="complaint-banner">
+        <span>${cur.complaint.by === 'brokspillet' ? '🎙️' : '🐌'} <b>${escapeHtml(byName)}</b> brokker sig over at <b>${escapeHtml(targetName)}</b> bruger sin tid</span>
+        <span id="complaintCountdown" class="complaint-countdown"></span>
+      </div>
+    `;
+  }
+  if(pending.includes(myId)) return ''; // man skal selv være færdig for at kunne brokke sig
+  const age = cur.phaseStartedAt ? (Date.now() - cur.phaseStartedAt) : 0;
+  if(age < MIN_COMPLAIN_AGE_MS) return '';
+  const growth = Math.min(1, (age - MIN_COMPLAIN_AGE_MS) / 30000);
+  const targetName = pending.length === 1 ? (state.members.find(mm=>mm.id===pending[0])||{}).name : null;
+  const label = targetName ? `🐌 Brok over ${escapeHtml(targetName)}s tempo` : `🐌 Brok over de langsomme`;
+  return `<button class="complain-btn" id="complainBtn" data-target="${pending[0]}" style="transform:scale(${(1+growth*0.16).toFixed(2)}); opacity:${(0.6+growth*0.4).toFixed(2)};">${label}</button>`;
 }
 
 function renderMrbrokScreen(){
@@ -2569,36 +2585,46 @@ function renderMrbrokScreen(){
   document.getElementById('btnAppMenu').onclick = openAppMenuSheet;
   bindMrbrokHandlers(m);
   const card = document.getElementById('mrbrokCard') || document.getElementById('mrbrokReveal');
-  // Samme fix som Brokspillet: kun animér/genstart nedtællingen ved et
-  // rigtigt fase-skift, ikke ved hvert stille poll — ellers flimrer kortet
-  // og uret hopper tilbage til fuld tid hver gang en anden spiller reagerer.
-  const mrbrokAnimKey = m.active && m.current ? (m.round + ':' + mrbrokTimerKey(m.current)) : 'lobby';
+  // Samme fix som Brokspillet: kun animér ved et RIGTIGT fase/tur-skift,
+  // ikke ved hvert stille poll — ellers flimrer kortet ved hver eneste
+  // andens reaktion. turnIndex er med i nøglen, så hver enkelt tur (ikke
+  // kun hver runde) tæller som et nyt "løft".
+  const cur = m.active ? m.current : null;
+  const mrbrokAnimKey = cur ? (m.round + ':' + cur.type + ':' + (cur.turnIndex !== undefined ? cur.turnIndex : '')) : 'lobby';
   const isNewMrbrokPhase = mrbrokAnimKey !== lastAnimatedMrbrokKey;
   lastAnimatedMrbrokKey = mrbrokAnimKey;
+  if(isNewMrbrokPhase) mrbrokTipText = null; // nyt hint kun ved en ny tur, ikke midt i ens egen
   if(card && typeof gsap !== 'undefined' && isNewMrbrokPhase){
-    gsap.fromTo(card, { opacity:0, y:14, scale:.97 }, { opacity:1, y:0, scale:1, duration:.45, ease:'power2.out' });
+    // Et "løft" snarere end et almindeligt fade-ind — lidt længere
+    // opad-bevægelse og en blødere overshoot-easing, så det føles som at
+    // ordet gives videre til den næste, ikke bare endnu et kort der popper op.
+    gsap.fromTo(card, { opacity:0, y:22, scale:.96 }, { opacity:1, y:0, scale:1, duration:.5, ease:'back.out(1.4)' });
   }
-  if(m.active && profile && m.players && m.players.includes(profile.memberId)){
-    if(isNewMrbrokPhase || !mrbrokTimerInterval) startMrbrokTimer(m.current);
-    else paintMrbrokTimerNow();
-  }else{
-    clearInterval(mrbrokTimerInterval);
-    mrbrokTimerInterval = null;
+  const complaintKey = cur && cur.complaint ? (mrbrokAnimKey + ':' + cur.complaint.startedAt) : null;
+  if(complaintKey !== lastComplaintKeyMrbrok){
+    lastComplaintKeyMrbrok = complaintKey;
+    startComplaintCountdown(cur);
   }
 }
 
 function mrbrokBodyHtml(m){
   if(!m.active || !m.current) return mrbrokLobbyHtml();
   const cur = m.current;
-  if(cur.type !== 'gameover' && profile && m.players && !m.players.includes(profile.memberId)){
+  // MrBrok selv bliver også lagt i eliminatedIds i det øjeblik de bliver
+  // afsløret (for at forlade activeIds/tur-rækkefølgen) — men de har stadig
+  // en aktiv rolle i selve tyveri-fasen (deres sidste gæt på emnet), så de
+  // skal IKKE regnes som "kigger med" mens den fase står på.
+  const isCaughtMrBrokInSteal = cur.type === 'steal' && profile && profile.memberId === m.mrBrokId;
+  const isEliminated = profile && !isCaughtMrBrokInSteal && (m.eliminatedIds||[]).some(e=>e.id===profile.memberId);
+  if(cur.type !== 'gameover' && profile && m.players && (!m.players.includes(profile.memberId) || isEliminated)){
     return `
-      <div class="game-badge">Runde ${m.round}/${m.totalRounds} · 👀 Du kigger med</div>
-      <div class="empty-state"><span class="emoji">🍿</span><b>Du er ikke med i denne omgang</b>De andre spiller videre — du er velkommen næste spil.</div>
+      <div class="game-badge">Runde ${m.round} · 👀 Du kigger med</div>
+      <div class="empty-state"><span class="emoji">🍿</span><b>${isEliminated ? 'Du blev stemt ud' : 'Du er ikke med i denne omgang'}</b>${isEliminated ? 'De andre spiller videre uden dig — se med til det hele afsløres.' : 'De andre spiller videre — du er velkommen næste spil.'}</div>
     `;
   }
   if(cur.type === 'gameover') return mrbrokOverHtml(m, cur);
-  if(cur.type === 'turn') return mrbrokTurnHtml(m, cur);
-  if(cur.type === 'guess') return mrbrokGuessHtml(m, cur);
+  if(cur.type === 'clue') return mrbrokClueHtml(m, cur);
+  if(cur.type === 'vote') return mrbrokVoteHtml(m, cur);
   if(cur.type === 'steal') return mrbrokStealHtml(m, cur);
   return '';
 }
@@ -2652,9 +2678,10 @@ function mrbrokLobbyHtml(){
   const enough = mrbrokSelectedPlayers.length >= 3;
   const steps = [
     ['🤫', 'Alle undtagen én kender det samme brok-emne'],
-    ['❓', 'I spørger og svarer på skift, uden at afsløre for meget'],
-    ['🤔', 'Alle gætter hvem der bluffer — ingen facit før til sidst'],
-    ['🎭', 'Afsløring — og MrBrok får ét sidste gæt for at stjæle sejren'],
+    ['🗣️', 'Gå på skift og sig HØJT en clue om emnet — ingen skriver noget ned'],
+    ['🤔', 'Efter et par runder begynder I at stemme — den mest mistænkelige ryger ud'],
+    ['🍿', 'Stemt ud? Så kigger du med resten af spillet'],
+    ['🎭', 'Fanges MrBrok, får de ét sidste gæt for at stjæle sejren alligevel'],
   ];
   // Foldes automatisk ud første gang nogen ser lobbyen på denne enhed, og
   // sammen alle gange efter — så det ikke bare bliver fyld man scroller
@@ -2687,11 +2714,11 @@ function mrbrokLobbyHtml(){
         <div class="seg ${mrbrokWager!=='euro'?'active':''}" data-mrbrok-wager="fun">🏅 Æren</div>
         <div class="seg ${mrbrokWager==='euro'?'active':''}" data-mrbrok-wager="euro">💶 1 euro i kassen</div>
       </div>
-      <label class="field-label" style="color:rgba(255,247,232,0.7); display:flex; align-items:center; justify-content:space-between;"><span>Antal omgange</span><span style="opacity:.7; font-weight:400; text-transform:none; letter-spacing:normal;">~15 min for 4</span></label>
+      <label class="field-label" style="color:rgba(255,247,232,0.7); display:flex; align-items:center; justify-content:space-between;"><span>Runder før første afstemning</span><span style="opacity:.7; font-weight:400; text-transform:none; letter-spacing:normal;">mere tid til at snuse rundt</span></label>
       <div class="segmented" style="margin-bottom:0;">
-        <div class="seg ${mrbrokRounds===3?'active':''}" data-mrbrok-rounds="3">3</div>
-        <div class="seg ${mrbrokRounds===4?'active':''}" data-mrbrok-rounds="4">4</div>
-        <div class="seg ${mrbrokRounds===5?'active':''}" data-mrbrok-rounds="5">5</div>
+        <div class="seg ${mrbrokWarmup===1?'active':''}" data-mrbrok-warmup="1">1</div>
+        <div class="seg ${mrbrokWarmup===2?'active':''}" data-mrbrok-warmup="2">2</div>
+        <div class="seg ${mrbrokWarmup===3?'active':''}" data-mrbrok-warmup="3">3</div>
       </div>
     </div>
     <button class="game-btn" id="startMrbrokBtn" ${enough?'':'disabled'}>🕵️ Start MrBrok (${mrbrokSelectedPlayers.length} spillere)</button>
@@ -2700,86 +2727,97 @@ function mrbrokLobbyHtml(){
   `;
 }
 
-function mrbrokTurnHtml(m, cur){
-  const asker = state.members.find(mm=>mm.id===cur.askerId);
-  const target = state.members.find(mm=>mm.id===cur.targetId);
-  const isAsker = profile && profile.memberId === cur.askerId;
-  const isTarget = profile && profile.memberId === cur.targetId;
-  const turnNo = cur.turnIndex + 1, totalTurns = cur.pairing.length;
-  const badge = `<div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Omgang ${m.round}/${m.totalRounds} · Tur ${turnNo}/${totalTurns}</span><span id="mrbrokTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>`;
+// Kompakt visning af tur-rækkefølgen for DENNE runde — hvem har allerede
+// sagt sin clue, hvem har ordet nu, og hvem er der tilbage. Ren kontekst,
+// ingen klik/handling herfra.
+// Samme name-pill som resten af appen bruger (fx target-vælgeren i
+// Brokspillets sandt/falsk) — ikke en særskilt mindre chip-stil kun for
+// MrBrok. Kun den der har turen nu fremhæves, med MrBrok's egen guld/
+// coin-farve, ikke en tilfældig anden accentfarve.
+function mrbrokTurnOrderHtml(m, cur){
+  const chips = cur.order.map((id,i)=>{
+    const mm = state.members.find(x=>x.id===id);
+    const isDone = i < cur.turnIndex, isCurrent = i === cur.turnIndex;
+    const style = isCurrent
+      ? 'background:var(--coin); border-color:var(--coin); color:var(--noir);'
+      : (isDone ? 'opacity:.45; text-decoration:line-through;' : 'opacity:.75;');
+    return `<div class="name-pill" style="${style}">${isDone?'✓ ':''}${escapeHtml(mm?mm.name:'?')}</div>`;
+  }).join('');
+  return `<div class="name-grid" style="margin-bottom:14px;">${chips}</div>`;
+}
 
-  if(cur.phase === 'ask'){
-    if(isAsker){
-      return `
-        ${badge}
-        ${mrbrokTopicBanner(m)}
-        <div class="game-card" id="mrbrokCard">
-          <p class="hint" style="margin:0 0 8px; color:rgba(255,247,232,0.7);">Stil ${escapeHtml(target?target.name:'?')} et spørgsmål om emnet — uden at nævne det direkte.</p>
-          <textarea id="mrbrokQuestionInput" rows="2" maxlength="140" placeholder="Dit spørgsmål..."></textarea>
-          <button class="game-btn" id="mrbrokAskBtn" style="margin-top:10px;">🚀 Send spørgsmål</button>
-        </div>
-      `;
-    }
+function mrbrokClueHtml(m, cur){
+  const speaker = state.members.find(mm=>mm.id===cur.speakerId);
+  const isSpeaker = profile && profile.memberId === cur.speakerId;
+  const turnNo = cur.turnIndex + 1, totalTurns = cur.order.length;
+  const warmupLabel = cur.round <= m.warmupRounds ? ' · opvarmning' : '';
+  const badge = `<div class="game-badge">Runde ${m.round} · Tur ${turnNo}/${totalTurns}${warmupLabel}</div>`;
+
+  if(isSpeaker){
     return `
       ${badge}
       ${mrbrokTopicBanner(m)}
-      <div class="empty-state"><span class="emoji">✍️</span><b>${escapeHtml(asker?asker.name:'?')} spørger ${escapeHtml(target?target.name:'?')}...</b>Vent til spørgsmålet er sendt.</div>
-    `;
-  }
-
-  // phase === 'answer'
-  if(isTarget){
-    return `
-      ${badge}
-      ${mrbrokTopicBanner(m)}
-      <div class="game-card" id="mrbrokCard">
-        <p class="hint" style="margin:0 0 4px; color:rgba(255,247,232,0.6);">${escapeHtml(asker?asker.name:'?')} spørger:</p>
-        <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:18px; margin:0 0 12px;">"${escapeHtml(cur.question||'')}"</p>
-        <textarea id="mrbrokAnswerInput" rows="2" maxlength="140" placeholder="Dit svar..."></textarea>
-        <button class="game-btn" id="mrbrokAnswerBtn" style="margin-top:10px;">🚀 Send svar</button>
+      ${mrbrokTurnOrderHtml(m, cur)}
+      <div class="game-card" id="mrbrokCard" style="text-align:center; border-color:rgba(255,201,60,0.5); background:rgba(255,201,60,0.08);">
+        <div style="font-size:26px;">🗣️</div>
+        <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:4px 0 6px;">Din tur!</p>
+        <p class="hint" style="color:rgba(255,247,232,0.75); margin:0 0 14px;">Sig din clue om emnet HØJT for de andre — intet skrives ned, husk det selv.</p>
+        <button class="game-btn ghost" id="mrbrokTipBtn" style="margin-top:0;">💡 Brug for et hint til en vinkel?</button>
+        ${mrbrokTipText ? `<p class="hint" style="margin:10px 0 0; color:rgba(255,201,60,0.9); font-weight:600;">${escapeHtml(mrbrokTipText)}</p>` : ''}
+        <button class="game-btn" id="mrbrokDoneBtn" style="margin-top:14px;">✅ Færdig, min tur er ovre</button>
       </div>
     `;
   }
+  // Man skal kunne se på afstand/uden at læse hvem der taler lige nu — så
+  // navnet står stort, ikke gemt inde i en almindelig lille status-tekst.
   return `
     ${badge}
-    ${mrbrokTopicBanner(m)}
-    <div class="game-card" id="mrbrokCard" style="text-align:center;">
-      <p class="hint" style="margin:0 0 4px; color:rgba(255,247,232,0.6);">${escapeHtml(asker?asker.name:'?')} spurgte ${escapeHtml(target?target.name:'?')}:</p>
-      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:17px;">"${escapeHtml(cur.question||'')}"</p>
-      <p class="hint" style="margin-top:8px; color:rgba(255,247,232,0.6);">Venter på svar...</p>
+    <div class="mrbrok-dim">
+      ${mrbrokTopicBanner(m)}
+      ${mrbrokTurnOrderHtml(m, cur)}
+      <div class="empty-state" style="padding:30px 20px;">
+        <span class="emoji">👂</span>
+        <b style="font-size:26px;">${escapeHtml(speaker?speaker.name:'?')}</b>
+        har ordet
+      </div>
     </div>
+    ${mrbrokComplaintBlockHtml(m, cur)}
   `;
 }
 
-function mrbrokGuessHtml(m, cur){
-  const badge = `<div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Omgang ${m.round}/${m.totalRounds} · 🤔 Hvem er MrBrok?</span><span id="mrbrokTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>`;
-  const eligible = m.players.length - 1; // alle undtagen MrBrok selv
-  if(m.youAreMrBrok){
-    return `${badge}<div class="empty-state"><span class="emoji">🕵️</span><b>De andre gætter lige nu...</b>Du kan ikke gætte på dig selv — vent til næste omgang.</div>${gameProgressHtml(cur.guessCount||0, eligible, 'har gættet')}`;
-  }
-  const already = profile && profile.memberId in (cur.guesses||{});
+// MrBrok stemmer OGSÅ med her (for ikke at stikke ud) — bare ikke på sig
+// selv, ligesom alle andre — så der er ingen særskilt "youAreMrBrok"-gren
+// længere; alle aktive spillere (MrBrok inklusiv) ser nøjagtig samme skærm.
+function mrbrokVoteHtml(m, cur){
+  const badge = `<div class="game-badge">Runde ${m.round} · 🤔 Hvem er MrBrok?</div>`;
+  const eligible = m.activeIds.length;
+  const already = profile && cur.votes && cur.votes[profile.memberId] !== undefined;
   if(already){
-    return `${badge}<div class="empty-state"><span class="emoji">🤫</span><b>Dit gæt er registreret</b>Ingen facit endnu — det kommer først til allersidst.</div>${gameProgressHtml(cur.guessCount||0, eligible, 'har gættet')}`;
+    return `${badge}<div class="empty-state"><span class="emoji">🤫</span><b>Din stemme er registreret</b>Ingen facit endnu — det kommer først når nogen bliver stemt ud.</div>${gameProgressHtml(cur.voteCount||0, eligible, 'har stemt')}${mrbrokComplaintBlockHtml(m, cur)}`;
   }
-  const options = state.members.filter(mm=>m.players.includes(mm.id) && mm.id !== profile.memberId);
-  const rows = options.map(mm=>`
-    <div class="bal-row game-pick" data-mrbrok-guess="${mm.id}" style="cursor:pointer;">
+  return `
+    ${badge}
+    <p class="hint" style="text-align:center; margin:0 0 8px; color:rgba(255,247,232,0.7);">Hvem tror du er MrBrok? Den med flest stemmer ryger ud.</p>
+    ${mrbrokVoteOptionsHtml(m, cur)}
+    ${gameProgressHtml(cur.voteCount||0, eligible, 'har stemt')}
+    ${mrbrokComplaintBlockHtml(m, cur)}
+  `;
+}
+
+function mrbrokVoteOptionsHtml(m, cur){
+  const options = state.members.filter(mm=>m.activeIds.includes(mm.id) && mm.id !== profile.memberId);
+  return options.map(mm=>`
+    <div class="bal-row game-pick" data-mrbrok-vote="${mm.id}" style="cursor:pointer;">
       <div class="avatar">${initials(mm.name)}</div>
       <div class="feed-body"><div class="bal-name">${escapeHtml(mm.name)}</div></div>
     </div>
   `).join('');
-  return `
-    ${badge}
-    <p class="hint" style="text-align:center; margin:0 0 8px; color:rgba(255,247,232,0.7);">${m.round >= m.totalRounds ? 'Sidste omgang — dette er den afgørende anklage!' : 'Hvem tror du er MrBrok lige nu?'}</p>
-    ${rows}
-    ${gameProgressHtml(cur.guessCount||0, eligible, 'har gættet')}
-  `;
 }
 
 function mrbrokStealHtml(m, cur){
   const mrbrokMember = state.members.find(mm=>mm.id===m.mrBrokId);
   const badge = `<div class="game-badge">🕵️ MrBrok er afsløret!</div>`;
-  const eligible = m.players.length - 1; // alle undtagen MrBrok selv
+  const eligible = m.activeIds.length; // MrBrok er allerede fjernet fra activeIds på dette tidspunkt
   if(m.youAreMrBrok){
     if(!cur.guess){
       return `
@@ -2794,7 +2832,7 @@ function mrbrokStealHtml(m, cur){
     return `${badge}<div class="empty-state"><span class="emoji">🤞</span><b>Dit gæt er sendt</b>De andre stemmer nu om det er tæt nok.</div>${gameProgressHtml(cur.voteCount||0, eligible, 'har stemt')}`;
   }
   if(!cur.guess){
-    return `${badge}<div class="empty-state"><span class="emoji">⏳</span><b>${escapeHtml(mrbrokMember?mrbrokMember.name:'MrBrok')} tænker...</b>Vent på deres sidste gæt på emnet.</div>`;
+    return `${badge}<div class="empty-state"><span class="emoji">⏳</span><b>${escapeHtml(mrbrokMember?mrbrokMember.name:'MrBrok')} tænker...</b>Vent på deres sidste gæt på emnet.</div>${mrbrokComplaintBlockHtml(m, cur)}`;
   }
   const already = profile && profile.memberId in (cur.votes||{});
   if(already){
@@ -2812,27 +2850,25 @@ function mrbrokStealHtml(m, cur){
       </div>
     </div>
     ${gameProgressHtml(cur.voteCount||0, eligible, 'har stemt')}
+    ${mrbrokComplaintBlockHtml(m, cur)}
   `;
 }
 
 function mrbrokRecapHtml(m, cur){
-  if(!cur.history || !cur.history.length) return '';
-  const rows = cur.history.map(h=>{
-    const turns = h.turns.map(t=>{
-      const asker = state.members.find(mm=>mm.id===t.askerId);
-      const target = state.members.find(mm=>mm.id===t.targetId);
-      return `<p class="hint" style="margin:2px 0; color:rgba(255,247,232,0.75);">${escapeHtml(asker?asker.name:'?')} → ${escapeHtml(target?target.name:'?')}: "${escapeHtml(t.question||'')}" — "${escapeHtml(t.answer||'')}"</p>`;
-    }).join('');
-    const guesses = Object.entries(h.guesses||{}).map(([voterId,guessedId])=>{
+  if(!cur.voteHistory || !cur.voteHistory.length) return '';
+  const rows = cur.voteHistory.map(h=>{
+    const eliminated = state.members.find(mm=>mm.id===h.eliminatedId);
+    const wasMrBrok = h.eliminatedId === cur.mrBrokId;
+    const votes = Object.entries(h.votes||{}).map(([voterId,votedForId])=>{
       const voter = state.members.find(mm=>mm.id===voterId);
-      const guessed = state.members.find(mm=>mm.id===guessedId);
-      const right = guessedId === cur.mrBrokId;
-      return `<span style="display:inline-block; margin:2px 6px 2px 0; padding:3px 9px; border-radius:100px; font-size:11.5px; background:${right?'rgba(255,201,60,0.18)':'rgba(255,247,232,0.08)'};">${escapeHtml(voter?voter.name:'?')} → ${escapeHtml(guessed?guessed.name:'?')} ${right?'✓':''}</span>`;
+      const votedFor = state.members.find(mm=>mm.id===votedForId);
+      const right = votedForId === cur.mrBrokId;
+      return `<span style="display:inline-block; margin:2px 6px 2px 0; padding:3px 9px; border-radius:100px; font-size:11.5px; background:${right?'rgba(255,201,60,0.18)':'rgba(255,247,232,0.08)'};">${escapeHtml(voter?voter.name:'?')} → ${escapeHtml(votedFor?votedFor.name:'?')} ${right?'✓':''}</span>`;
     }).join('');
     return `<div class="game-card" style="text-align:left; margin-bottom:8px;">
-      <p style="font-weight:700; margin:0 0 6px;">Omgang ${h.round}</p>
-      ${turns}
-      <div style="margin-top:8px;">${guesses}</div>
+      <p style="font-weight:700; margin:0 0 6px;">Runde ${h.round}${h.tie?' · uafgjort, Chancen valgte':''}</p>
+      <p class="hint" style="margin:0 0 8px; color:rgba(255,247,232,0.8);">${wasMrBrok?'🕵️':'😬'} <b style="color:rgba(255,247,232,0.9);">${escapeHtml(eliminated?eliminated.name:'?')}</b> blev stemt ud${wasMrBrok?' — det var MrBrok!':' (ikke MrBrok)'}</p>
+      <div>${votes}</div>
     </div>`;
   }).join('');
   return `<div class="section-label">📜 Sådan gik det</div>${rows}`;
@@ -2879,8 +2915,8 @@ function bindMrbrokHandlers(m){
   document.querySelectorAll('[data-mrbrok-wager]').forEach(el=>{
     el.onclick = ()=>{ mrbrokWager = el.dataset.mrbrokWager; render(); };
   });
-  document.querySelectorAll('[data-mrbrok-rounds]').forEach(el=>{
-    el.onclick = ()=>{ mrbrokRounds = parseInt(el.dataset.mrbrokRounds,10); render(); };
+  document.querySelectorAll('[data-mrbrok-warmup]').forEach(el=>{
+    el.onclick = ()=>{ mrbrokWarmup = parseInt(el.dataset.mrbrokWarmup,10); render(); };
   });
   document.querySelectorAll('[data-mrbrok-player]').forEach(el=>{
     el.onclick = ()=>{
@@ -2891,41 +2927,43 @@ function bindMrbrokHandlers(m){
     };
   });
   const startBtn = document.getElementById('startMrbrokBtn');
-  if(startBtn) startBtn.onclick = ()=> mrbrokApi('start', { wager: mrbrokWager, playerIds: mrbrokSelectedPlayers, totalRounds: mrbrokRounds });
+  if(startBtn) startBtn.onclick = ()=> mrbrokApi('start', { wager: mrbrokWager, playerIds: mrbrokSelectedPlayers, warmupRounds: mrbrokWarmup });
 
   const playAgainBtn = document.getElementById('mrbrokPlayAgainBtn');
   if(playAgainBtn) playAgainBtn.onclick = ()=>{
-    mrbrokApi('end', {}).then(()=> mrbrokApi('start', { wager: mrbrokWager, playerIds: mrbrokSelectedPlayers, totalRounds: mrbrokRounds }));
+    mrbrokApi('end', {}).then(()=> mrbrokApi('start', { wager: mrbrokWager, playerIds: mrbrokSelectedPlayers, warmupRounds: mrbrokWarmup }));
   };
   const endBtn = document.getElementById('mrbrokEndBtn');
   if(endBtn) endBtn.onclick = ()=> mrbrokApi('end', {});
 
+  const complainBtn = document.getElementById('complainBtn');
+  if(complainBtn) complainBtn.onclick = ()=> mrbrokApi('complain', { payload: { targetId: complainBtn.dataset.target } });
+
   if(!cur) return;
 
-  if(cur.type === 'turn' && cur.phase === 'ask' && profile && profile.memberId === cur.askerId){
-    const btn = document.getElementById('mrbrokAskBtn');
-    if(btn) btn.onclick = ()=>{
-      const question = document.getElementById('mrbrokQuestionInput').value.trim();
-      if(!question) return;
-      lockSubmitBtn(btn, 'Sender...');
-      mrbrokApi('submit', { payload: { question } });
+  if(cur.type === 'clue' && profile && profile.memberId === cur.speakerId){
+    const tipBtn = document.getElementById('mrbrokTipBtn');
+    if(tipBtn) tipBtn.onclick = ()=>{
+      // Rent client-side — trænger aldrig i nærheden af serveren, det er
+      // bare et tilfældigt forslag til en VINKEL, aldrig et svar/ord.
+      const pool = MRBROK_CLUE_TIPS;
+      let pick = pool[Math.floor(Math.random()*pool.length)];
+      if(pool.length > 1) while(pick === mrbrokTipText) pick = pool[Math.floor(Math.random()*pool.length)];
+      mrbrokTipText = pick;
+      render();
+    };
+    const doneBtn = document.getElementById('mrbrokDoneBtn');
+    if(doneBtn) doneBtn.onclick = ()=>{
+      lockSubmitBtn(doneBtn, 'Går videre...');
+      mrbrokApi('submit', { payload: {} });
     };
   }
-  if(cur.type === 'turn' && cur.phase === 'answer' && profile && profile.memberId === cur.targetId){
-    const btn = document.getElementById('mrbrokAnswerBtn');
-    if(btn) btn.onclick = ()=>{
-      const answer = document.getElementById('mrbrokAnswerInput').value.trim();
-      if(!answer) return;
-      lockSubmitBtn(btn, 'Sender...');
-      mrbrokApi('submit', { payload: { answer } });
-    };
-  }
-  if(cur.type === 'guess'){
-    document.querySelectorAll('[data-mrbrok-guess]').forEach(el=>{
+  if(cur.type === 'vote'){
+    document.querySelectorAll('[data-mrbrok-vote]').forEach(el=>{
       el.onclick = ()=>{
-        document.querySelectorAll('[data-mrbrok-guess]').forEach(x=>x.style.opacity='.4');
+        document.querySelectorAll('[data-mrbrok-vote]').forEach(x=>x.style.opacity='.4');
         el.style.opacity='1'; el.style.outline='2px solid var(--coin)';
-        mrbrokApi('submit', { payload: { guessedId: el.dataset.mrbrokGuess } });
+        mrbrokApi('submit', { payload: { votedForId: el.dataset.mrbrokVote } });
       };
     });
   }

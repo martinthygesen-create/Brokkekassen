@@ -1,5 +1,6 @@
 const { getState, setState, mutateState, processPendingExpiry, checkSilenceNudge, redactStateFor } = require('./_lib/store');
 const { expireGamePhaseIfDue, BROKSPILLET_AUTO_MS, COMPLAINT_COUNTDOWN_MS } = require('./_lib/gameFlow');
+const { expireMrbrokPhaseIfDue } = require('./_lib/mrbrokFlow');
 const { pushToMembers } = require('./_lib/push');
 
 // Billig, ikke-muterende forhåndstjek: er der overhovedet en chance for at
@@ -10,6 +11,16 @@ function gameExpiryMightBeDue(state) {
   const g = state.game;
   if (!g || !g.active || !g.current || !g.current.phaseStartedAt) return false;
   const cur = g.current;
+  const now = Date.now();
+  if (cur.complaint) return (now - cur.complaint.startedAt) >= COMPLAINT_COUNTDOWN_MS;
+  return (now - cur.phaseStartedAt) >= BROKSPILLET_AUTO_MS;
+}
+
+// Samme billige forhåndstjek som gameExpiryMightBeDue, men for MrBrok.
+function mrbrokExpiryMightBeDue(state) {
+  const m = state.mrbrok;
+  if (!m || !m.active || !m.current || !m.current.phaseStartedAt) return false;
+  const cur = m.current;
   const now = Date.now();
   if (cur.complaint) return (now - cur.complaint.startedAt) >= COMPLAINT_COUNTDOWN_MS;
   return (now - cur.phaseStartedAt) >= BROKSPILLET_AUTO_MS;
@@ -47,6 +58,14 @@ module.exports = async (req, res) => {
       const mutated = await mutateState(roomId, async (fresh) => {
         const players = (fresh.game && fresh.game.players) || fresh.members.map(m => m.id);
         expireGamePhaseIfDue(fresh, players);
+      });
+      if (mutated) state = mutated.state;
+    }
+
+    // Samme opportunistiske mønster for MrBrok's tur/afstemnings-timing.
+    if (mrbrokExpiryMightBeDue(state)) {
+      const mutated = await mutateState(roomId, async (fresh) => {
+        expireMrbrokPhaseIfDue(fresh);
       });
       if (mutated) state = mutated.state;
     }

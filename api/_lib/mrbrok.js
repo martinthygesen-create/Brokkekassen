@@ -1,9 +1,10 @@
-// Ren spillogik til MrBrok — ingen state-adgang her udover ren
-// datamanipulation, ingen scoring/euro/stats (det ligger i api/mrbrok.js,
-// ligesom Brokspillets endGame() ligger i api/game.js og ikke her). Ligger
-// under _lib/ så den IKKE tæller med i Vercels 12-serverless-function-loft.
+// Rent INDHOLD til MrBrok — emner, hvem der bliver MrBrok, hint-forslag.
+// Selve spil-FLOWET (tur-rækkefølge, afstemning, elimination) ligger i
+// _lib/mrbrokFlow.js, ligesom Brokspillets indhold/flow er delt mellem
+// _lib/game.js og _lib/gameFlow.js. Ligger under _lib/ så den IKKE tæller
+// med i Vercels 12-serverless-function-loft.
 
-const { shuffle, pickFromBag, pickWeighted } = require('./game');
+const { pickFromBag, pickWeighted } = require('./game');
 
 // Vælger hvem der bliver MrBrok: vægtet tilfældigt efter hvor mange gange
 // man har haft rollen før — færre gange giver højere chance, men man kan
@@ -52,64 +53,27 @@ function pickTopic(state) {
   return MRBROK_TOPICS[idx];
 }
 
-// Bygger en runde-parring: hver spiller spørger præcis én gang og bliver
-// spurgt præcis én gang, ingen spørger sig selv, og (bedste forsøg) ingen
-// gentager sidste rundes parring. Kræver mindst 3 spillere.
-function buildRoundPairing(players, prevPairing) {
-  const ids = players.map(p => p.id);
-  const prevKey = prevPairing ? prevPairing.map(p => p.askerId + '>' + p.targetId).sort().join('|') : null;
-  let targets, attempts = 0;
-  do {
-    targets = shuffle(ids);
-    attempts++;
-  } while (
-    (targets.some((t, i) => t === ids[i]) ||
-      (prevKey && ids.map((askerId, i) => askerId + '>' + targets[i]).sort().join('|') === prevKey)) &&
-    attempts < 50
-  );
-  return ids.map((askerId, i) => ({ askerId, targetId: targets[i] }));
-}
+// Forslag til en VINKEL på ens clue (aldrig et svar/ord) — vises kun til
+// den der har turen lige nu, via "Brug for et hint?"-knappen, ren client-
+// side hjælp (se index.html). Holdes her sammen med resten af MrBroks
+// indhold, selvom de reelt kunne have ligget rent client-side — samlet ét
+// sted er lettere at redigere/udvide.
+const MRBROK_CLUE_TIPS = [
+  'Beskriv en følelse forbundet med det',
+  'Nævn et sted det typisk sker',
+  'Sammenlign det med noget helt andet',
+  'Beskriv en lyd eller lugt der hører til',
+  'Sig hvornår på dagen/ugen det sker',
+  'Nævn hvem der typisk er involveret',
+  'Beskriv hvordan det starter',
+  'Beskriv hvordan det plejer at ende',
+  'Brug et tal eller en mængde',
+  'Beskriv noget man IKKE bør gøre i den situation',
+  'Sammenlign størrelsen eller mængden af det',
+  'Beskriv hvordan man har det bagefter',
+  'Nævn noget det minder dig om fra din egen hverdag',
+  'Beskriv det med kun ét ord, meget vagt',
+  'Sig noget om hvor tit det sker',
+];
 
-function beginMrbrokRound(state, players) {
-  state.mrbrok.round += 1;
-  const prevPairing = state.mrbrok.current && state.mrbrok.current.pairing;
-  const pairing = buildRoundPairing(players, prevPairing);
-  state.mrbrok.current = {
-    type: 'turn',
-    round: state.mrbrok.round,
-    pairing,
-    turnIndex: 0,
-    askerId: pairing[0].askerId,
-    targetId: pairing[0].targetId,
-    phase: 'ask',
-    question: null,
-    answer: null,
-  };
-}
-
-// Afslutter den aktuelle tur (spørgsmål+svar er på plads, eller sprunget
-// over pga. timeout), lægger den i rundens historik, og går videre til
-// næste tur — eller til gættefasen hvis det var rundens sidste tur.
-function advanceTurn(state) {
-  const cur = state.mrbrok.current;
-  if (!state.mrbrok.history) state.mrbrok.history = [];
-  let roundEntry = state.mrbrok.history.find(h => h.round === cur.round);
-  if (!roundEntry) {
-    roundEntry = { round: cur.round, turns: [], guesses: {} };
-    state.mrbrok.history.push(roundEntry);
-  }
-  roundEntry.turns.push({ askerId: cur.askerId, targetId: cur.targetId, question: cur.question, answer: cur.answer });
-
-  const next = cur.turnIndex + 1;
-  if (next < cur.pairing.length) {
-    const p = cur.pairing[next];
-    state.mrbrok.current = {
-      type: 'turn', round: cur.round, pairing: cur.pairing, turnIndex: next,
-      askerId: p.askerId, targetId: p.targetId, phase: 'ask', question: null, answer: null,
-    };
-  } else {
-    state.mrbrok.current = { type: 'guess', round: cur.round, guesses: {} };
-  }
-}
-
-module.exports = { MRBROK_TOPICS, pickTopic, pickMrBrok, buildRoundPairing, beginMrbrokRound, advanceTurn };
+module.exports = { MRBROK_TOPICS, MRBROK_CLUE_TIPS, pickTopic, pickMrBrok };

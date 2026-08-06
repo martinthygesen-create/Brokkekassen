@@ -1,87 +1,19 @@
-const { mutateState, uid, redactStateFor, ApiError } = require('./_lib/store');
-const { pickTopic, pickMrBrok, beginMrbrokRound, advanceTurn } = require('./_lib/mrbrok');
+const { mutateState, redactStateFor, ApiError } = require('./_lib/store');
+const { pickTopic, pickMrBrok } = require('./_lib/mrbrok');
+const {
+  MIN_COMPLAIN_AGE_MS,
+  beginClueRound,
+  advanceClue,
+  resolveVote,
+  resolveSteal,
+  getPendingMrbrokIds,
+  expireMrbrokPhaseIfDue,
+} = require('./_lib/mrbrokFlow');
 const { pushToMembers } = require('./_lib/push');
 
 const MIN_PLAYERS = 3;
-const DEFAULT_ROUNDS = 4;
-const ALLOWED_ROUNDS = [3, 4, 5];
-
-// Point-fordeling for det personlige gætte-regnskab (ikke selve sejren, se
-// endMrbrokGame): korrekt gæt fordobles pr. runde (1,2,4,8...), forkert
-// gæt koster -1 — undtagen i SIDSTE runde, hvor det afgørende gæt vejer
-// tungere: -2 ved forkert. MrBrok selv gætter aldrig (kender jo sig selv).
-function resolveGuessPhase(state, players) {
-  const m = state.mrbrok;
-  const cur = m.current;
-  const roundEntry = m.history.find(h => h.round === cur.round);
-  if (roundEntry) roundEntry.guesses = { ...cur.guesses };
-
-  const isFinal = cur.round >= m.totalRounds;
-  const wrongPenalty = isFinal ? -2 : -1;
-  const correctPoints = Math.pow(2, cur.round - 1);
-  Object.entries(cur.guesses).forEach(([voterId, guessedId]) => {
-    if (m.scores[voterId] === undefined) m.scores[voterId] = 0;
-    m.scores[voterId] += (guessedId === m.mrBrokId) ? correctPoints : wrongPenalty;
-  });
-
-  if (!isFinal) {
-    beginMrbrokRound(state, players);
-    return;
-  }
-
-  // Sidste rundes gæt ER den officielle anklage: hvem flest pegede på.
-  // Uafgjort tæller som fanget — tvivlen falder ikke MrBrok til gode.
-  const tally = {};
-  Object.values(cur.guesses).forEach(id => { tally[id] = (tally[id] || 0) + 1; });
-  const maxVotes = Math.max(0, ...Object.values(tally));
-  const leaders = maxVotes > 0 ? Object.keys(tally).filter(id => tally[id] === maxVotes) : [];
-  const caught = leaders.includes(m.mrBrokId);
-  m.caught = caught;
-  if (caught) {
-    m.current = { type: 'steal', guess: null, votes: {} };
-  } else {
-    // Flertallet ramte forbi — MrBrok undslipper automatisk uden at skulle
-    // gætte på emnet, og vinder.
-    endMrbrokGame(state, true);
-  }
-}
-
-// Flertal (blandt de andre spillere) afgør om MrBrok's gæt på emnet var
-// tæt nok til at stjæle sejren. Uafgjort tæller som nej.
-function resolveSteal(state) {
-  const cur = state.mrbrok.current;
-  const yes = Object.values(cur.votes).filter(v => v === true).length;
-  const no = Object.values(cur.votes).filter(v => v === false).length;
-  endMrbrokGame(state, yes > no);
-}
-
-function endMrbrokGame(state, mrBrokWon) {
-  const m = state.mrbrok;
-  if (m.wager === 'euro') {
-    const payerIds = mrBrokWon ? m.players.filter(id => id !== m.mrBrokId) : [m.mrBrokId];
-    payerIds.forEach(id => {
-      state.events.push({ id: uid(), memberId: id, message: 'Tabte MrBrok', ts: Date.now(), votes: [], free: false, gameLoss: true });
-    });
-  }
-  if (!state.mrbrokStats) state.mrbrokStats = {};
-  m.players.forEach(id => {
-    if (!state.mrbrokStats[id]) state.mrbrokStats[id] = { played: 0, wins: 0 };
-    state.mrbrokStats[id].played += 1;
-  });
-  const winnerIds = mrBrokWon ? [m.mrBrokId] : m.players.filter(id => id !== m.mrBrokId);
-  winnerIds.forEach(id => { state.mrbrokStats[id].wins += 1; });
-
-  m.current = {
-    type: 'gameover',
-    mrBrokId: m.mrBrokId,
-    topic: m.topic,
-    caught: m.caught || false,
-    mrBrokWon,
-    scores: m.scores,
-    history: m.history,
-    stealGuess: m.current && m.current.guess,
-  };
-}
+const DEFAULT_WARMUP = 2;
+const ALLOWED_WARMUP = [1, 2, 3];
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' });
@@ -91,7 +23,7 @@ module.exports = async (req, res) => {
 
     // Se api/game.js for hvorfor mutateState (CAS + retry) bruges her i
     // stedet for almindelig getState+setState: uden det kan to samtidige
-    // spillere (fx alle der gætter i samme sekund) stille overskrive
+    // spillere (fx alle der stemmer i samme sekund) stille overskrive
     // hinandens svar.
     let pushInfo = null;
     const mutated = await mutateState(roomId, async (state) => {
@@ -105,17 +37,18 @@ module.exports = async (req, res) => {
         const playerObjs = state.members.filter(mm => requested.includes(mm.id));
         if (playerObjs.length < MIN_PLAYERS) throw new ApiError(400, `vælg mindst ${MIN_PLAYERS} spillere`);
         const wager = req.body.wager === 'euro' ? 'euro' : 'fun';
-        const totalRounds = ALLOWED_ROUNDS.includes(req.body.totalRounds) ? req.body.totalRounds : DEFAULT_ROUNDS;
+        const warmupRounds = ALLOWED_WARMUP.includes(req.body.warmupRounds) ? req.body.warmupRounds : DEFAULT_WARMUP;
         const players = playerObjs.map(mm => mm.id);
         const mrBrokId = pickMrBrok(state, playerObjs).id;
         const scores = {};
         players.forEach(id => { if (id !== mrBrokId) scores[id] = 0; });
 
         state.mrbrok = {
-          active: true, wager, players, mrBrokId, topic: pickTopic(state),
-          round: 0, totalRounds, scores, caught: false, history: [], current: null, startedAt: Date.now(),
+          active: true, wager, players, activeIds: players.slice(), eliminatedIds: [],
+          mrBrokId, topic: pickTopic(state), warmupRounds,
+          round: 0, scores, caught: false, voteHistory: [], current: null, startedAt: Date.now(),
         };
-        beginMrbrokRound(state, playerObjs);
+        beginClueRound(state, 1);
 
         const starter = state.members.find(mm => mm.id === actorId);
         pushInfo = { excludeIds: [actorId], title: '🕵️ MrBrok er i gang!', body: `${starter ? starter.name : 'Nogen'} startede et spil — kom med!`, url: '/?r=' + roomId };
@@ -124,31 +57,27 @@ module.exports = async (req, res) => {
 
       if (!state.mrbrok.active) throw new ApiError(409, 'der er ikke noget MrBrok-spil i gang');
       const m = state.mrbrok;
+
+      // Enhver handling i et aktivt spil tjekker først opportunistisk om
+      // den aktuelle fase skal tvinges videre pga. en udløbet brok-
+      // nedtælling — samme mønster som Brokspillet (se expireGamePhaseIfDue).
+      expireMrbrokPhaseIfDue(state);
       const cur = m.current;
-      const players = m.players;
 
       if (action === 'submit') {
         const { payload } = req.body || {};
         if (!cur || !payload) throw new ApiError(400, 'mangler data');
-        if (!players.includes(actorId)) throw new ApiError(403, 'du er ikke med i dette spil af MrBrok');
 
-        if (cur.type === 'turn' && cur.phase === 'ask') {
-          if (actorId !== cur.askerId) throw new ApiError(403, 'det er ikke din tur til at spørge');
-          const text = (payload.question || '').toString().trim().slice(0, 140);
-          if (!text) throw new ApiError(400, 'skriv et spørgsmål');
-          cur.question = text;
-          cur.phase = 'answer';
-        } else if (cur.type === 'turn' && cur.phase === 'answer') {
-          if (actorId !== cur.targetId) throw new ApiError(403, 'det er ikke dig der skal svare lige nu');
-          const text = (payload.answer || '').toString().trim().slice(0, 140);
-          if (!text) throw new ApiError(400, 'skriv et svar');
-          cur.answer = text;
-          advanceTurn(state);
-        } else if (cur.type === 'guess') {
-          if (actorId === m.mrBrokId) throw new ApiError(403, 'du kan ikke gætte på dig selv');
-          if (!players.includes(payload.guessedId)) throw new ApiError(400, 'ukendt spiller');
-          cur.guesses[actorId] = payload.guessedId;
-          if (Object.keys(cur.guesses).length >= players.length - 1) resolveGuessPhase(state, state.members.filter(mm => players.includes(mm.id)));
+        if (cur.type === 'clue') {
+          if (actorId !== cur.speakerId) throw new ApiError(403, 'det er ikke din tur lige nu');
+          advanceClue(state);
+        } else if (cur.type === 'vote') {
+          if (!m.activeIds.includes(actorId)) throw new ApiError(403, 'du er ikke aktiv i denne omgang af MrBrok');
+          const votedForId = payload.votedForId;
+          if (votedForId === actorId) throw new ApiError(400, 'du kan ikke stemme på dig selv');
+          if (!m.activeIds.includes(votedForId)) throw new ApiError(400, 'ukendt spiller');
+          cur.votes[actorId] = votedForId;
+          if (Object.keys(cur.votes).length >= m.activeIds.length) resolveVote(state);
         } else if (cur.type === 'steal' && !cur.guess) {
           if (actorId !== m.mrBrokId) throw new ApiError(403, 'kun MrBrok kan gætte emnet');
           const text = (payload.guess || '').toString().trim().slice(0, 140);
@@ -156,34 +85,35 @@ module.exports = async (req, res) => {
           cur.guess = text;
         } else if (cur.type === 'steal' && cur.guess) {
           if (actorId === m.mrBrokId) throw new ApiError(403, 'du kan ikke stemme om dit eget gæt');
+          if (!m.activeIds.includes(actorId)) throw new ApiError(403, 'du er ikke aktiv i denne omgang af MrBrok');
           cur.votes[actorId] = !!payload.closeEnough;
-          if (Object.keys(cur.votes).length >= players.length - 1) resolveSteal(state);
+          if (Object.keys(cur.votes).length >= m.activeIds.length) resolveSteal(state);
         } else {
           throw new ApiError(400, 'ugyldig handling lige nu');
         }
         return;
       }
 
-      // "advance" er nødbremsen klientens nedtællings-timer bruger hvis nogen
-      // ikke når at svare/gætte/stemme til tiden — spring bare videre.
-      if (action === 'advance') {
+      // "complain" — samme filosofi som Brokspillet: en spiller der selv
+      // allerede er færdig kan brokke sig over en navngiven langsom
+      // medspiller efter lidt tid, hvilket starter en kort tvangs-
+      // nedtælling. Kun relevante spillere (stadig aktive, eller MrBrok
+      // selv under tyveri-fasen) kan brokke sig — allerede eliminerede
+      // tilskuere har ikke noget at skulle have sagt.
+      if (action === 'complain') {
         if (!cur) throw new ApiError(400, 'ingen aktiv runde');
-
-        if (cur.type === 'turn' && cur.phase === 'ask') {
-          cur.question = cur.question || '(intet spørgsmål — tiden løb ud)';
-          advanceTurn(state);
-        } else if (cur.type === 'turn' && cur.phase === 'answer') {
-          cur.answer = cur.answer || '(intet svar — tiden løb ud)';
-          advanceTurn(state);
-        } else if (cur.type === 'guess') {
-          resolveGuessPhase(state, state.members.filter(mm => players.includes(mm.id)));
-        } else if (cur.type === 'steal' && !cur.guess) {
-          endMrbrokGame(state, false);
-        } else if (cur.type === 'steal' && cur.guess) {
-          resolveSteal(state);
-        } else {
-          throw new ApiError(400, 'kan ikke gå videre lige nu');
+        const relevant = m.activeIds.includes(actorId) || actorId === m.mrBrokId;
+        if (!relevant) throw new ApiError(403, 'du er ikke aktiv i dette spil af MrBrok');
+        const pending = getPendingMrbrokIds(m);
+        if (pending.length === 0) throw new ApiError(400, 'der er ingen at brokke sig over lige nu');
+        if (pending.includes(actorId)) throw new ApiError(403, 'du skal selv være færdig før du kan brokke dig over andre');
+        if (cur.complaint) throw new ApiError(409, 'der er allerede brokket over nogen i denne runde');
+        if (!cur.phaseStartedAt || (Date.now() - cur.phaseStartedAt) < MIN_COMPLAIN_AGE_MS) {
+          throw new ApiError(400, 'giv dem lidt mere tid endnu');
         }
+        const requestedTarget = req.body && req.body.payload && req.body.payload.targetId;
+        const targetId = pending.includes(requestedTarget) ? requestedTarget : pending[0];
+        cur.complaint = { by: actorId, targetId, startedAt: Date.now() };
         return;
       }
 

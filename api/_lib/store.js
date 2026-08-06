@@ -347,17 +347,17 @@ function redactStateFor(state, viewerId) {
   const m = state.mrbrok;
   if (!m || !m.active || (m.current && m.current.type === 'gameover')) return state;
   const isMrBrok = !!(viewerId && viewerId === m.mrBrokId);
-  const safe = { ...m, mrBrokId: undefined, youAreMrBrok: isMrBrok, history: undefined };
+  // voteHistory (tidligere runders afstemninger) holdes skjult MENS spillet
+  // er i gang — samme filosofi som Brokspillets round-history — og
+  // afsløres først i den fulde, uredigerede state når type bliver
+  // 'gameover' (se det tidlige return ovenfor).
+  const safe = { ...m, mrBrokId: undefined, youAreMrBrok: isMrBrok, voteHistory: undefined };
   if (isMrBrok) safe.topic = undefined;
-  if (safe.current && safe.current.guesses) {
-    const mine = viewerId && Object.prototype.hasOwnProperty.call(safe.current.guesses, viewerId);
-    // Antallet af indsendte gæt er ikke hemmeligt (kun HVEM der gættede
-    // hvad er) — sendes med så klienten kan vise en fremdrifts-bar uden at
-    // lække andres gæt.
-    safe.current = { ...safe.current, guessCount: Object.keys(safe.current.guesses).length, guesses: mine ? { [viewerId]: safe.current.guesses[viewerId] } : {} };
-  }
-  if (safe.current && safe.current.type === 'steal' && safe.current.votes) {
+  if (safe.current && (safe.current.type === 'vote' || safe.current.type === 'steal') && safe.current.votes) {
     const mine = viewerId && Object.prototype.hasOwnProperty.call(safe.current.votes, viewerId);
+    // Antallet af indsendte stemmer er ikke hemmeligt (kun HVEM der stemte
+    // hvad er) — sendes med så klienten kan vise en fremdrifts-bar uden at
+    // lække andres stemmer.
     safe.current = { ...safe.current, voteCount: Object.keys(safe.current.votes).length, votes: mine ? { [viewerId]: safe.current.votes[viewerId] } : {} };
   }
   return { ...state, mrbrok: safe };
