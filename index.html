@@ -346,7 +346,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-06-20';
+const BUILD_TAG = 'build-2026-08-06-21';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -366,6 +366,7 @@ let lastCelebratedKey = null; // undgår at fyre konfetti/hån-toast flere gange
 let lastCountdownRound = null; // undgår at afspille 3-2-1-nedtællingen flere gange for samme runde
 let lastAnimatedGameKey = null; // undgår at gen-afspille kortets indgangs-animation ved hvert stille poll-opdatering (så det ikke "flimrer")
 let lastComplaintKey = null; // undgår at genstarte brok-nedtællingens visning ved hvert stille poll
+let wheelRevealTimeout = null; // se scheduleWheelChanceReveal
 let lastAnimatedMrbrokKey = null;
 
 let mrbrokWager = 'fun';
@@ -667,6 +668,7 @@ function rememberRoom(){
 async function switchToRoom(rid){
   if(gameTimerInterval){ clearInterval(gameTimerInterval); gameTimerInterval = null; }
   if(complaintCountdownInterval){ clearInterval(complaintCountdownInterval); complaintCountdownInterval = null; }
+  if(wheelRevealTimeout){ clearTimeout(wheelRevealTimeout); wheelRevealTimeout = null; }
   if(mrbrokTimerInterval){ clearInterval(mrbrokTimerInterval); mrbrokTimerInterval = null; }
   activeApp = 'kasse';
   roomId = rid.toLowerCase();
@@ -679,6 +681,7 @@ function leaveRoom(){
   if(polling){ clearInterval(polling); polling = null; }
   if(gameTimerInterval){ clearInterval(gameTimerInterval); gameTimerInterval = null; }
   if(complaintCountdownInterval){ clearInterval(complaintCountdownInterval); complaintCountdownInterval = null; }
+  if(wheelRevealTimeout){ clearTimeout(wheelRevealTimeout); wheelRevealTimeout = null; }
   if(mrbrokTimerInterval){ clearInterval(mrbrokTimerInterval); mrbrokTimerInterval = null; }
   localStorage.removeItem('bk_lastRoom');
   roomId = null; profile = null; state = null;
@@ -1278,7 +1281,7 @@ function renderGameScreen(){
     playMoleChanceReveal('chance');
   }
   if(isNewGamePhase && g.current && g.current.type === 'casinobrok' && g.current.phase === 'results'){
-    playWheelChanceReveal('chance');
+    scheduleWheelChanceReveal('chance', g.current.phaseStartedAt);
   }
 }
 
@@ -1452,6 +1455,24 @@ function buildWheelChanceHtml(prefix, candidates, winner, bannerText){
 // hele omgange plus den vinkel markup'et allerede sagde det skulle lande
 // på (data-rest-angle), så det ALTID lander præcis samme sted som den
 // statiske, uanimerede visning. Kører kun én gang pr. ny resultat-fase.
+
+// Hver klient opdager selv en ny resultat-fase på et LIDT forskelligt
+// tidspunkt (afhængig af hvornår ens eget 3-sekunders poll lige rammer) —
+// starter spinnet man med det samme, kan nogen nå at åbne skærmen efter
+// den allerede er landet, og aldrig se selve snurret. I stedet planlægges
+// spinnet til at starte på et FÆLLES tidspunkt, udregnet ud fra serverens
+// egen cur.phaseStartedAt (som alle klienter allerede får med) — så alle
+// telefoner regner sig frem til PRÆCIS samme starttidspunkt, uanset hvornår
+// deres eget poll opdagede fasen. Er man allerede for sent på den (fx en
+// telefon der lige er kommet tilbage), spilles det bare med det samme.
+const WHEEL_REVEAL_DELAY_MS = 8000;
+function scheduleWheelChanceReveal(prefix, phaseStartedAt){
+  clearTimeout(wheelRevealTimeout);
+  const target = (phaseStartedAt || Date.now()) + WHEEL_REVEAL_DELAY_MS;
+  const delay = Math.max(0, target - Date.now());
+  wheelRevealTimeout = setTimeout(()=> playWheelChanceReveal(prefix), delay);
+}
+
 // Snurrer hjulet via en almindelig CSS `transition` på `transform`, IKKE
 // via GSAP — GSAP's `rotate`-property på et rod-<svg>-element viste sig i
 // praksis upålideligt på iOS Safari (nedtællingen/landingen virkede fint,
@@ -1686,10 +1707,17 @@ function quiplashHtml(g, cur){
     `;
   }
   if(cur.phase === 'vote'){
-    const entries = Object.entries(cur.answers||{}).filter(([id])=>id!==(profile&&profile.memberId));
+    const myId = profile && profile.memberId;
+    const myAnswer = myId ? cur.answers[myId] : undefined;
+    const others = Object.entries(cur.answers||{}).filter(([id])=>id!==myId).map(([id,text])=>({id,text}));
+    const decoys = (cur.decoys||[]).map(d=>({id:d.id, text:d.text}));
+    // Blander egne + opdigtede svar i én stabil (ikke gen-tilfældig ved
+    // hvert poll) rækkefølge, så decoys ikke altid ligger sidst og dermed
+    // stikker ud rent visuelt.
+    const combined = [...others, ...decoys].sort((a,b)=> a.id < b.id ? -1 : (a.id > b.id ? 1 : 0));
     const myVote = profile && cur.votes[profile.memberId];
     const votedCount = Object.keys(cur.votes||{}).length;
-    const rows = entries.map(([id,text],i)=>`
+    const rows = combined.map(({id,text},i)=>`
       <div class="bal-row${myVote?'':' game-pick'}" ${myVote?'':`data-vote-for="${id}"`} style="${myVote?'':'cursor:pointer;'} ${myVote===id?'outline:2px solid var(--coin);':''} ${myVote&&myVote!==id?'opacity:.5;':''}">
         <div class="avatar" style="width:34px;height:34px;font-size:12.5px; background:linear-gradient(160deg, var(--coin), var(--coin-dark)); color:var(--ink);">${i+1}</div>
         <div class="feed-body"><div class="bal-name">"${escapeHtml(text)}"</div></div>
@@ -1699,13 +1727,24 @@ function quiplashHtml(g, cur){
     return `
       <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Stem på det bedste svar</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
       <p class="hint" style="margin:0 0 10px; color:rgba(255,247,232,0.75);">${escapeHtml(cur.prompt)}</p>
+      <p style="font-weight:700; margin:0 0 10px; font-size:14px;">🗳️ Stem på det bedste svar!</p>
+      ${myAnswer ? `<div class="bal-row" style="opacity:.45; cursor:default;">
+        <div class="avatar" style="width:34px;height:34px;font-size:12.5px;">✍️</div>
+        <div class="feed-body"><div class="bal-name" style="text-decoration:line-through;">"${escapeHtml(myAnswer)}"</div></div>
+        <span style="font-size:11px; font-weight:700; opacity:.8;">din — kan ikke stemmes på</span>
+      </div>` : ''}
       ${rows || '<p class="hint">Ingen andre svar at stemme på.</p>'}
       ${gameProgressHtml(votedCount, g.players.length, 'har stemt')}
       ${myVote ? `<div class="waiting-pill"><span class="waiting-dot"></span> Venter på de andre...</div>` : ''}
       ${complaintBlockHtml(g, cur)}
     `;
   }
-  const winners = (cur.winnerIds||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
+  const decoyWon = (cur.winnerIds||[]).some(id=>id.indexOf('decoy')===0);
+  const winners = decoyWon ? [] : (cur.winnerIds||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
+  const allEntries = [
+    ...Object.entries(cur.answers||{}).map(([id,text])=>({id, text, name:(state.members.find(m=>m.id===id)||{}).name})),
+    ...(cur.decoys||[]).map(d=>({id:d.id, text:d.text, name:null})),
+  ];
   return `
     <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
     <div class="game-card" id="gameCard" style="text-align:center;">
@@ -1715,15 +1754,15 @@ function quiplashHtml(g, cur){
           state.members.find(m=>m.id===(cur.winnerIds||[])[0]),
           '🎲 CHANCEN AFGØR DET'
         ) : ''}
-      ${Object.entries(cur.answers||{}).map(([id,text])=>{
-        const m = state.members.find(x=>x.id===id);
+      ${allEntries.map(({id,text,name})=>{
         const won = (cur.winnerIds||[]).includes(id);
+        const isDecoy = !name;
         return `<div class="feed-item${won && cur.randomPick ? ' quip-slot-win' : ''}" style="${won?'border-color:var(--coin); background:rgba(255,201,60,0.16);':''}">
-          <div class="avatar">${initials(m?m.name:'?')}</div>
-          <div class="feed-body"><div class="feed-name">${escapeHtml(m?m.name:'?')} ${won?'🏆':''}</div><div class="feed-msg">"${escapeHtml(text)}"</div></div>
+          <div class="avatar">${isDecoy?'🎭':initials(name)}</div>
+          <div class="feed-body"><div class="feed-name">${isDecoy?'Opdigtet svar — ingen skrev det':escapeHtml(name)} ${won?'🏆':''}</div><div class="feed-msg">"${escapeHtml(text)}"</div></div>
         </div>`;
       }).join('')}
-      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:17px; margin-top:12px; color:var(--coin);">${winners.length ? '🏆 ' + winners.map(w=>escapeHtml(w.name)).join(' & ') + ' vandt runden!' : 'Ingen stemmer denne gang.'}</p>
+      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:17px; margin-top:12px; color:var(--coin);">${decoyWon ? '😏 I stemte på et opdigtet svar — ingen point denne gang!' : (winners.length ? '🏆 ' + winners.map(w=>escapeHtml(w.name)).join(' & ') + ' vandt runden!' : 'Ingen stemmer denne gang.')}</p>
     </div>
     ${gameReadyHtml(g, cur)}
   `;

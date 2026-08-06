@@ -1,5 +1,5 @@
 const { mutateState, redactStateFor, ApiError } = require('./_lib/store');
-const { beginRound, buildOptions, pickDecoyBroks } = require('./_lib/game');
+const { beginRound, buildOptions, pickDecoyBroks, pickQuiplashDecoys } = require('./_lib/game');
 const { pushToMembers } = require('./_lib/push');
 const {
   MIN_COMPLAIN_AGE_MS,
@@ -75,7 +75,17 @@ module.exports = async (req, res) => {
           if (text) cur.answers[actorId] = text;
           if (Object.keys(cur.answers).length >= players.length) {
             if (players.length === 2) resolveQuiplashRandom(state, cur);
-            else { cur.phase = 'vote'; cur.votes = {}; stampPhase(cur); }
+            else {
+              cur.phase = 'vote';
+              cur.votes = {};
+              // Et par opdigtede svar blandet ind gør det sværere at
+              // gennemskue hvem der skrev hvad — flere decoys når der er
+              // få rigtige svar at vælge imellem (så det ikke er for nemt),
+              // færre når der allerede er nok rigtige at sortere i.
+              const decoyTexts = pickQuiplashDecoys(state, players.length <= 3 ? 2 : 1);
+              cur.decoys = decoyTexts.map((text, i) => ({ id: 'decoy' + i, text }));
+              stampPhase(cur);
+            }
           }
         } else if (cur.type === 'quiplash' && cur.phase === 'vote') {
           if (payload.votedFor && payload.votedFor !== actorId) cur.votes[actorId] = payload.votedFor;
@@ -110,7 +120,7 @@ module.exports = async (req, res) => {
           if (actorId !== cur.authorId) throw new ApiError(403, 'kun den der skriver rundens brok kan gøre dette');
           const statement = (payload.statement || '').toString().trim().slice(0, 120);
           if (!statement) throw new ApiError(400, 'skriv et brok');
-          const decoys = pickDecoyBroks(state, 3);
+          const decoys = pickDecoyBroks(state, 3, statement);
           const { options, correctIndex } = buildOptions(statement, decoys);
           cur.statement = statement;
           cur.options = options;

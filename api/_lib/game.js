@@ -45,6 +45,37 @@ const QUIPLASH_PROMPTS = [
   'Om 10 år brokker {target} sig stadig over...',
 ];
 
+// Opdigtede "vrangforestillinger" der blandes ind blandt de ægte svar i
+// afstemnings-fasen — generiske nok til at kunne passe som svar på næsten
+// alle QUIPLASH_PROMPTS ovenfor, uden at være skrevet til noget bestemt
+// prompt. Ingen forfatter — vinder en decoy afstemningen, får ingen rigtig
+// spiller point den runde (se resolveQuiplashVote i gameFlow.js).
+const QUIPLASH_DECOYS = [
+  'At brokke sig over vejret hver eneste dag',
+  'At miste telefonen for tredje gang på én ferie',
+  'At sove til langt over middag og kalde det "restitution"',
+  'At skændes højlydt med GPS\'en',
+  'At spise is til morgenmad og kalde det sund fornuft',
+  'At glemme solcreme og så brokke sig over solskoldning',
+  'At tabe kortspillet og påstå det var snyd',
+  'At bruge en hel time på at vælge restaurant',
+  'At sige "lige om lidt" i tre timer i træk',
+  'At købe souvenirs ingen nogensinde bad om',
+  'At filme hele solnedgangen i stedet for bare at se den',
+  'At påstå man ikke er sulten, og så spise alt andres mad',
+  'At pakke for meget og bruge halvdelen af det',
+  'At insistere på at køre, men aldrig kende vejen',
+];
+
+function pickQuiplashDecoys(state, n) {
+  const picked = [];
+  for (let i = 0; i < n; i++) {
+    const idx = pickFromBag(state, 'quiplashDecoy', QUIPLASH_DECOYS.length);
+    picked.push(QUIPLASH_DECOYS[idx]);
+  }
+  return picked;
+}
+
 // Ægte real-world "brok der endte med et resultat"-trivia — blandes ind
 // imellem rundens egne data-spørgsmål, så der er noget at grine af selv
 // tidligt i en frisk brokkekasse uden meget historik endnu.
@@ -193,6 +224,40 @@ function generateTriviaQuestion(state) {
     }
   }
 
+  // "Brok fra Brokkekassen — hvem sagde det?" og den omvendte variant —
+  // bruger ÆGTE tidligere loggede brok som spørgsmål i stedet for kun
+  // optalte statistikker. Vælges TILFÆLDIGT blandt alle rigtige brok hver
+  // gang (ikke altid "flest/færrest"), så det jævner sig ud hvem der
+  // bliver spurgt om over mange runder, i stedet for altid samme person.
+  const brokEvents = allEvents.filter(e => e.message && e.message.trim() && members.find(m => m.id === e.memberId));
+  if (brokEvents.length && members.length >= 3) {
+    candidates.push(() => {
+      const ev = pickRandom(brokEvents);
+      const correct = members.find(m => m.id === ev.memberId);
+      const distractors = shuffle(members.filter(m => m.id !== ev.memberId)).slice(0, 3).map(m => m.name);
+      const { options, correctIndex } = buildOptions(correct.name, distractors);
+      return { question: `Brok fra Brokkekassen: "${ev.message}" — hvem sagde det?`, options, correctIndex };
+    });
+    // Kun med hvis der reelt findes nok ANDRE forskellige brok-tekster at
+    // bruge som decoys — ellers ville spørgsmålet ikke kunne stilles fair.
+    const viableTargets = members.filter(m => {
+      const own = brokEvents.filter(e => e.memberId === m.id);
+      if (!own.length) return false;
+      const otherTexts = new Set(brokEvents.filter(e => e.memberId !== m.id).map(e => e.message));
+      return otherTexts.size >= 3;
+    });
+    if (viableTargets.length) {
+      candidates.push(() => {
+        const target = pickRandom(viableTargets);
+        const correct = pickRandom(brokEvents.filter(e => e.memberId === target.id)).message;
+        const otherTexts = [...new Set(brokEvents.filter(e => e.memberId !== target.id).map(e => e.message))];
+        const distractors = shuffle(otherTexts).slice(0, 3);
+        const { options, correctIndex } = buildOptions(correct, distractors);
+        return { question: `Hvilket af disse brok skrev ${target.name}?`, options, correctIndex };
+      });
+    }
+  }
+
   if (!candidates.length) {
     const distractors = [String(members.length + 1), String(Math.max(1, members.length - 1)), String(members.length + 2)];
     const { options, correctIndex } = buildOptions(String(members.length), [...new Set(distractors)]);
@@ -243,14 +308,46 @@ const DECOY_BROK = [
   'Færgen blev forsinket tre timer uden nogen forklaring',
   'Den "havudsigt" der var lovet, var faktisk udsigt til en ventilationsskakt',
   'Alle håndklæderne på hotellet lugtede af klor',
+  // Korte, hurtigt-skrevne opdigtede forslag — hvis alle de opdigtede altid
+  // er længere og mere detaljerede end det RIGTIGE brok (som typisk skrives
+  // hurtigt under tidspres i selve runden), bliver længden i sig selv et
+  // spor der afslører hvilket der er ægte. Blandet ind med de længere
+  // ovenfor, så det ikke er en fast regel man kan regne ud.
+  'Håndklæderne var våde igen',
+  'Isen var smeltet allerede',
+  'Wifi\'en droppede hele aftenen',
+  'Der var myg overalt ved bordet',
+  'Solcremen klistrede i håret',
+  'Bussen kom aldrig',
+  'Poolen var lukket uden varsel',
+  'Der var ingen håndklæder tilbage',
+  'Nøglekortet virkede ikke',
+  'Middagen var kold da den kom',
+  'Parasollen væltede i vinden',
+  'Der manglede sæbe på badet',
 ];
 
-function pickDecoyBroks(state, n) {
-  const picked = [];
-  for (let i = 0; i < n; i++) {
-    const idx = pickFromBag(state, 'decoyBrok', DECOY_BROK.length);
-    picked.push(DECOY_BROK[idx]);
-  }
+// Rigtige, tidligere loggede brok fra selve Brokkekassen (hvis den er i
+// brug) blandes ind som decoys sammen med den generiske liste ovenfor —
+// de er allerede skrevet i familiens eget sprog og tempo, så de er langt
+// sværere at kende fra hinanden end noget udelukkende opdigtet kan være.
+// Ingen forfatter-tilknytning følger med — kun selve teksten genbruges.
+function realEventTexts(state) {
+  const fromNow = (state.events || []).filter(e => !e.free && !e.voided);
+  const fromHistory = (state.history || []).flatMap(h => h.events || []).filter(e => !e.free && !e.voided);
+  return [...fromNow, ...fromHistory]
+    .map(e => (e.message || '').trim())
+    .filter(t => t && t.length <= 120);
+}
+
+function pickDecoyBroks(state, n, excludeText) {
+  const pool = [...new Set([...realEventTexts(state), ...DECOY_BROK])].filter(t => t !== excludeText);
+  const shuffled = shuffle(pool.length ? pool : DECOY_BROK);
+  const picked = shuffled.slice(0, n);
+  // Sikkerhedsnet for et helt nyt/tomt rum uden ret meget historik endnu —
+  // fylder op fra den generiske liste hvis puljen var for lille til at
+  // give `n` unikke forslag.
+  while (picked.length < n) picked.push(DECOY_BROK[Math.floor(Math.random() * DECOY_BROK.length)]);
   return picked;
 }
 
@@ -324,4 +421,4 @@ function beginRound(state, players) {
   }
 }
 
-module.exports = { pickRandom, shuffle, pickWeighted, buildOptions, pickFromBag, pickQuiplashPrompt, pickWorldTrivia, pickWorldTrueFalse, pickDecoyBroks, generateTriviaQuestion, beginRound };
+module.exports = { pickRandom, shuffle, pickWeighted, buildOptions, pickFromBag, pickQuiplashPrompt, pickWorldTrivia, pickWorldTrueFalse, pickDecoyBroks, pickQuiplashDecoys, generateTriviaQuestion, beginRound };

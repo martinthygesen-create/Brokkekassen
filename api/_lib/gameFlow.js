@@ -61,6 +61,13 @@ function getPendingIds(cur, players) {
   return [];
 }
 
+// Opdigtede svar (cur.decoys, se api/game.js) har id'er formet "decoy0",
+// "decoy1" osv. — ingen rigtig spiller står bag dem, så de kan tælles med i
+// selve afstemningen (og godt vinde!) men skal ALDRIG give rigtige point.
+function isDecoyId(id) {
+  return typeof id === 'string' && id.indexOf('decoy') === 0;
+}
+
 // Ved uafgjort stemning (2+ svar med samme antal stemmer) afgør "Chancen"
 // det i stedet for at dele sejren mellem alle tied kandidater — gælder
 // uanset antal spillere, ikke kun 2-spiller-tilfældet. cur.chanceCandidates
@@ -77,12 +84,12 @@ function resolveQuiplashVote(state, cur) {
   cur.readyIds = [];
   if (tiedIds.length > 1) {
     const winnerId = tiedIds[Math.floor(Math.random() * tiedIds.length)];
-    state.game.scores[winnerId] = (state.game.scores[winnerId] || 0) + ROUND_POINTS;
+    if (!isDecoyId(winnerId)) state.game.scores[winnerId] = (state.game.scores[winnerId] || 0) + ROUND_POINTS;
     cur.winnerIds = [winnerId];
     cur.randomPick = true;
     cur.chanceCandidates = tiedIds;
   } else {
-    tiedIds.forEach(id => { state.game.scores[id] = (state.game.scores[id] || 0) + ROUND_POINTS; });
+    tiedIds.forEach(id => { if (!isDecoyId(id)) state.game.scores[id] = (state.game.scores[id] || 0) + ROUND_POINTS; });
     cur.winnerIds = tiedIds;
   }
 }
