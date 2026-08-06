@@ -342,7 +342,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-06-18';
+const BUILD_TAG = 'build-2026-08-06-19';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1642,8 +1642,8 @@ function quiplashHtml(g, cur){
       <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · 🎭 Skriv-og-stem</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
       <div class="game-card" id="gameCard">
         <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:0 0 14px; line-height:1.3;">${escapeHtml(cur.prompt)}</p>
-        <textarea id="quipInput" rows="2" maxlength="120" placeholder="Dit svar...">${mine?escapeHtml(mine):''}</textarea>
-        <button class="game-btn" id="quipSubmitBtn" style="margin-top:10px;">🔒 Lås dit svar</button>
+        <textarea id="quipInput" rows="2" maxlength="120" placeholder="Dit svar..." ${mine?'disabled':''}>${mine?escapeHtml(mine):''}</textarea>
+        ${mine ? '' : `<button class="game-btn" id="quipSubmitBtn" style="margin-top:10px;">🔒 Lås dit svar</button>`}
       </div>
       ${gameProgressHtml(answered, g.players.length, 'har svaret')}
       ${mine ? `<div class="waiting-pill"><span class="waiting-dot"></span> Venter på de andre...</div>` : ''}
@@ -1655,7 +1655,7 @@ function quiplashHtml(g, cur){
     const myVote = profile && cur.votes[profile.memberId];
     const votedCount = Object.keys(cur.votes||{}).length;
     const rows = entries.map(([id,text],i)=>`
-      <div class="bal-row game-pick" data-vote-for="${id}" style="cursor:pointer; ${myVote===id?'outline:2px solid var(--coin);':''}">
+      <div class="bal-row${myVote?'':' game-pick'}" ${myVote?'':`data-vote-for="${id}"`} style="${myVote?'':'cursor:pointer;'} ${myVote===id?'outline:2px solid var(--coin);':''} ${myVote&&myVote!==id?'opacity:.5;':''}">
         <div class="avatar" style="width:34px;height:34px;font-size:12.5px; background:linear-gradient(160deg, var(--coin), var(--coin-dark)); color:var(--ink);">${i+1}</div>
         <div class="feed-body"><div class="bal-name">"${escapeHtml(text)}"</div></div>
         ${myVote===id?'<span style="font-size:18px;">✓</span>':''}
@@ -1802,15 +1802,17 @@ function guessBrokHtml(g, cur){
   if(cur.phase === 'guess'){
     const guessedCount = Object.keys(cur.guesses||{}).length;
     const eligible = g.players.length - 1;
-    const myGuess = profile && cur.guesses[profile.memberId] !== undefined;
-    const badgeLabel = isAuthor ? '🎯 Hvilket brok?' : (myGuess ? '🎯 Hvilket brok?' : '🎯 Gæt: hvilket er ægte?');
+    const myGuessIndex = (profile && cur.guesses[profile.memberId] !== undefined) ? cur.guesses[profile.memberId] : null;
+    const hasGuessed = myGuessIndex !== null;
+    const badgeLabel = isAuthor ? '🎯 Hvilket brok?' : (hasGuessed ? '🎯 Hvilket brok?' : '🎯 Gæt: hvilket er ægte?');
     const opts = (cur.options||[]).map((label,i)=>{
       const isMine = isAuthor && i === cur.correctIndex;
+      const clickable = !isAuthor && !hasGuessed;
       return `
-      <div class="bal-row${isAuthor ? '' : ' game-pick'}" data-choice="${i}" style="${isAuthor ? '' : 'cursor:pointer;'} ${myGuess===i?'outline:2px solid var(--coin);':''} ${isMine?'outline:2px solid rgba(255,201,60,0.5); background:rgba(255,201,60,0.08);':''}">
+      <div class="bal-row${clickable ? ' game-pick' : ''}" ${clickable?`data-choice="${i}"`:''} style="${clickable ? 'cursor:pointer;' : ''} ${myGuessIndex===i?'outline:2px solid var(--coin);':''} ${isMine?'outline:2px solid rgba(255,201,60,0.5); background:rgba(255,201,60,0.08);':''} ${hasGuessed && myGuessIndex!==i && !isMine ? 'opacity:.5;':''}">
         <div class="avatar" style="width:34px;height:34px;font-size:12.5px; background:linear-gradient(160deg, var(--coin), var(--coin-dark)); color:var(--ink);">${String.fromCharCode(65+i)}</div>
         <div class="feed-body"><div class="bal-name">"${escapeHtml(label)}"</div></div>
-        ${isMine ? '<span style="font-size:12px; font-weight:700; color:var(--coin);">✍️ din</span>' : (myGuess===i?'<span style="font-size:18px;">✓</span>':'')}
+        ${isMine ? '<span style="font-size:12px; font-weight:700; color:var(--coin);">✍️ din</span>' : (myGuessIndex===i?'<span style="font-size:18px;">✓</span>':'')}
       </div>
     `;
     }).join('');
@@ -1819,7 +1821,7 @@ function guessBrokHtml(g, cur){
       <p class="hint" style="margin:0 0 10px; color:rgba(255,247,232,0.75);">${isAuthor ? 'Sådan ser de andre spørgsmålet — kan du se hvor godt dit brok gemmer sig?' : `Hvilket af disse ville ${escapeHtml(author?author.name:'?')} faktisk brokke sig over?`}</p>
       ${opts}
       ${gameProgressHtml(guessedCount, eligible, 'har gættet')}
-      ${(myGuess !== undefined || isAuthor) ? `<div class="waiting-pill"><span class="waiting-dot"></span> Venter på de andre...</div>` : ''}
+      ${(hasGuessed || isAuthor) ? `<div class="waiting-pill"><span class="waiting-dot"></span> Venter på de andre...</div>` : ''}
       ${complaintBlockHtml(g, cur)}
     `;
   }
@@ -1838,10 +1840,10 @@ function guessBrokHtml(g, cur){
 
 function triviaHtml(g, cur){
   if(cur.phase === 'answer'){
-    const mine = profile ? cur.choices[profile.memberId] : undefined;
+    const mine = profile && cur.choices[profile.memberId] !== undefined ? cur.choices[profile.memberId] : null;
     const answered = Object.keys(cur.choices||{}).length;
     const opts = cur.options.map((label,i)=>`
-      <div class="bal-row game-pick" data-choice="${i}" style="cursor:pointer; ${mine===i?'outline:2px solid var(--coin);':''}">
+      <div class="bal-row${mine===null?' game-pick':''}" ${mine===null?`data-choice="${i}"`:''} style="${mine===null?'cursor:pointer;':''} ${mine===i?'outline:2px solid var(--coin);':''} ${mine!==null&&mine!==i?'opacity:.5;':''}">
         <div class="avatar" style="width:34px;height:34px;font-size:12.5px; background:linear-gradient(160deg, var(--coin), var(--coin-dark)); color:var(--ink);">${String.fromCharCode(65+i)}</div>
         <div class="feed-body"><div class="bal-name">${escapeHtml(label)}</div></div>
         ${mine===i?'<span style="font-size:18px;">✓</span>':''}
@@ -1854,7 +1856,7 @@ function triviaHtml(g, cur){
         ${opts}
       </div>
       ${gameProgressHtml(answered, g.players.length, 'har svaret')}
-      ${mine !== undefined ? `<div class="waiting-pill"><span class="waiting-dot"></span> Venter på de andre...</div>` : ''}
+      ${mine !== null ? `<div class="waiting-pill"><span class="waiting-dot"></span> Venter på de andre...</div>` : ''}
       ${complaintBlockHtml(g, cur)}
     `;
   }
@@ -1879,8 +1881,8 @@ function casinobrokHtml(g, cur){
       <div class="game-card" id="gameCard">
         <label class="field-label" style="color:rgba(255,247,232,0.7);">Skriv ét brok-ord — bare ét ord, ikke en hel sætning. Alle ord havner på hjulet, og det trukne ords forfatter vinder runden.</label>
         <p class="hint" style="margin:0 0 10px; color:rgba(255,247,232,0.55);">F.eks.: <i>"regnvejr"</i>, <i>"morgenmaden"</i>, <i>"snorken"</i> — I må gerne skrive det samme ord, det er stadig hver jeres eget lod.</p>
-        <input type="text" id="casinoWordInput" maxlength="24" placeholder="Dit brok-ord..." value="${mine?escapeHtml(mine):''}">
-        <button class="game-btn" id="casinoSubmitBtn" style="margin-top:12px;">🎰 Send ordet</button>
+        <input type="text" id="casinoWordInput" maxlength="24" placeholder="Dit brok-ord..." value="${mine?escapeHtml(mine):''}" ${mine?'disabled':''}>
+        ${mine ? '' : `<button class="game-btn" id="casinoSubmitBtn" style="margin-top:12px;">🎰 Send ordet</button>`}
       </div>
       ${gameProgressHtml(written, g.players.length, 'har skrevet')}
       ${mine ? `<div class="waiting-pill"><span class="waiting-dot"></span> Venter på de andre...</div>` : ''}
