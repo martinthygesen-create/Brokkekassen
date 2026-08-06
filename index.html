@@ -134,6 +134,14 @@
   .complaint-countdown{ flex:0 0 auto; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:15px; color:#FFD9CC; animation:timerPulse .8s ease-in-out infinite; }
   @keyframes slotWinPop{ 0%{ transform:scale(1) rotate(0deg); } 30%{ transform:scale(1.06) rotate(-1.5deg); } 55%{ transform:scale(1.03) rotate(1.5deg); } 100%{ transform:scale(1) rotate(0deg); } }
   .quip-slot-win{ animation:slotWinPop .5s ease-out; }
+  /* Spillets slut-skærm: vinderen fejres, taberen får en lidt komisk
+     "dømt"-rystning i stedet for bare flad tekst. */
+  @keyframes gameoverWinnerPop{ 0%{ transform:scale(.7); opacity:0; } 55%{ transform:scale(1.14); opacity:1; } 75%{ transform:scale(.96); } 100%{ transform:scale(1); } }
+  .gameover-winner-pop{ animation:gameoverWinnerPop .6s cubic-bezier(.34,1.56,.64,1); display:inline-block; }
+  @keyframes gameoverLoserShake{ 0%,100%{ transform:translateX(0) rotate(0deg); } 15%{ transform:translateX(-6px) rotate(-2deg); } 30%{ transform:translateX(5px) rotate(2deg); } 45%{ transform:translateX(-4px) rotate(-1.5deg); } 60%{ transform:translateX(3px) rotate(1deg); } 75%{ transform:translateX(-2px) rotate(-.5deg); } }
+  .gameover-loser-shake{ animation:gameoverLoserShake .7s ease-in-out .5s; }
+  @keyframes gameoverLoserDroop{ 0%{ transform:translateY(0) rotate(0deg); } 100%{ transform:translateY(4px) rotate(-8deg); } }
+  .gameover-loser-droop{ display:inline-block; animation:gameoverLoserDroop .6s ease-out 1.1s forwards; }
   /* "Chancen" genbruger nu selve spillemaskine-designet fra Brokkekassens
      daglige lodtrækning (.slot-cabinet/.slot-window/.reel osv. herunder) i
      stedet for sin egen chip-reel — samme genkendelige "🎰 3 hjul lander på
@@ -171,7 +179,7 @@
   .wheel-cabinet.win{ box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #FFC93C, 0 0 24px rgba(255,201,60,.5); }
   .wheel-pointer{ position:absolute; left:50%; top:4px; transform:translateX(-50%); width:0; height:0; border-left:11px solid transparent; border-right:11px solid transparent; border-top:20px solid var(--coin); z-index:3; filter:drop-shadow(0 3px 4px rgba(0,0,0,.6)); }
   .wheel-pointer::before{ content:''; position:absolute; left:50%; top:-24px; transform:translateX(-50%); width:9px; height:9px; border-radius:50%; background:radial-gradient(circle at 35% 30%, #fff6d0, var(--coin) 60%, #b8860b); box-shadow:0 0 6px rgba(255,201,60,.8); }
-  .wheel-wrap{ position:relative; width:230px; height:230px; margin:14px auto 4px; }
+  .wheel-wrap{ position:relative; width:205px; height:205px; margin:14px auto 4px; }
   .wheel-lights{ position:absolute; inset:0; z-index:1; pointer-events:none; }
   .wheel-bulb{ position:absolute; width:7px; height:7px; margin:-3.5px 0 0 -3.5px; border-radius:50%; background:radial-gradient(circle at 35% 30%, #fff6d0, var(--coin) 60%, #b8860b); box-shadow:0 0 6px rgba(255,201,60,.75); animation:bulbTwinkle 1.6s ease-in-out infinite; }
   @keyframes bulbTwinkle{ 0%,100%{ opacity:1; } 50%{ opacity:.45; } }
@@ -185,7 +193,9 @@
   .mole-cabinet{ background:linear-gradient(160deg,#3d2b1f,#1a120b); border-radius:24px; padding:20px 14px 16px; box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #8a6b1f; position:relative; }
   .mole-cabinet.win{ box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #FFC93C, 0 0 24px rgba(255,201,60,.5); }
   .mole-grid{ display:flex; flex-wrap:wrap; justify-content:center; gap:14px; padding:6px 4px; }
+  .mole-hole-wrap{ display:flex; flex-direction:column; align-items:center; gap:5px; width:72px; }
   .mole-hole{ position:relative; width:64px; height:64px; border-radius:50%; background:radial-gradient(circle at 50% 30%, #4a3627, #1a120b); overflow:hidden; box-shadow:inset 0 4px 10px rgba(0,0,0,.6); }
+  .mole-caption{ font-size:10px; font-weight:700; color:rgba(255,247,232,0.6); line-height:1.2; text-align:center; }
   .mole{ position:absolute; left:50%; bottom:-6px; width:46px; height:46px; transform:translate(-50%, 30px); transition:transform .28s cubic-bezier(.34,1.56,.64,1), filter .2s ease; }
   .mole .avatar{ width:46px; height:46px; font-size:15px; }
   .mole.mole-up{ transform:translate(-50%, -14px); }
@@ -346,7 +356,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-06-23';
+const BUILD_TAG = 'build-2026-08-06-24';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -367,6 +377,7 @@ let lastCountdownRound = null; // undgår at afspille 3-2-1-nedtællingen flere 
 let lastAnimatedGameKey = null; // undgår at gen-afspille kortets indgangs-animation ved hvert stille poll-opdatering (så det ikke "flimrer")
 let lastComplaintKey = null; // undgår at genstarte brok-nedtællingens visning ved hvert stille poll
 let wheelRevealTimeout = null; // se scheduleWheelChanceReveal
+let revealAnimationLock = false; // se renderGameScreen — blokerer gen-render mens hjul/mole-afsløring spiller
 let lastAnimatedMrbrokKey = null;
 
 let mrbrokWager = 'fun';
@@ -1046,7 +1057,21 @@ async function gameApi(action, extra){
     const r = await api('game', Object.assign({ action, roomId, actorId: profile.memberId }, extra||{}));
     state = r.state;
     render();
-  }catch(e){ toast(e.message); }
+  }catch(e){
+    if(e.message === 'ugyldig handling lige nu'){
+      // Denne fejl betyder ALTID at runden nåede at rykke videre (fx pga.
+      // en brok-nedtælling) i det korte vindue mellem at skærmen blev
+      // tegnet og at man nåede at trykke — klientens lokale visning er
+      // dermed forældet. Uden dette stod man bare med en kryptisk
+      // fejlbesked og en død skærm, og ens indtastede svar så ud til at
+      // "forsvinde" uden forklaring. Hent frisk state med det samme i
+      // stedet, så skærmen viser hvad der RENT FAKTISK sker nu.
+      toast('🔄 Runden nåede at gå videre — opdaterer...');
+      await refreshState(false);
+    } else {
+      toast(e.message);
+    }
+  }
 }
 
 function openGameAdminMenuSheet(){
@@ -1216,6 +1241,12 @@ function celebrateGameRound(g){
   fireConfetti(card);
   if(cur.type === 'gameover'){
     toast(`👑 ${winnerNames.join(' & ')} vandt hele spillet! Hån frit resten af aftenen.`);
+    const winnerNameEl = document.getElementById('gameoverWinnerName');
+    if(winnerNameEl) winnerNameEl.classList.add('gameover-winner-pop');
+    const loserNameEl = document.getElementById('gameoverLoserName');
+    if(loserNameEl) loserNameEl.classList.add('gameover-loser-shake');
+    const loserEmojiEl = document.getElementById('gameoverLoserEmoji');
+    if(loserEmojiEl) loserEmojiEl.classList.add('gameover-loser-droop');
   }else{
     toast(randomTaunt(winnerNames.join(' & ')));
   }
@@ -1243,6 +1274,15 @@ function playRoundCountdown(){
 }
 
 function renderGameScreen(){
+  // Mens en Chancen-afsløring (hjul eller whack-a-mole) reelt spiller af,
+  // må intet gen-render røre DOM'en — heller ikke fordi en ANDEN spiller
+  // trykkede "klar" og dermed reelt ændrede server-staten. Sådan et
+  // gen-render erstatter HELE main-DOM'en, hvilket ødelægger den igangværende
+  // CSS-transition midt i spinnet/elimineringen og fik det til at se ud som
+  // om det bare hoppede direkte til facit på under et sekund. Genoptages af
+  // sig selv når afsløringen er færdig — se playWheelChanceReveal/
+  // playMoleChanceReveal's onDone, som nulstiller låsen.
+  if(revealAnimationLock) return;
   const g = state.game || { active:false };
   if(g.active && !g.players) g.players = state.members.map(m=>m.id); // forsvar mod ældre spil-state uden players-feltet
   if(g.active && g.current && (g.current.phase === 'answer' || g.current.phase === 'write') && g.round !== lastCountdownRound){
@@ -1378,10 +1418,10 @@ function wheelPolarPoint(cx, cy, r, angleDeg){
 // pære får sin egen animation-delay, ellers blinker de i takt og ser
 // mekanisk ud i stedet for et rigtigt glimtende lyskæde-mønster.
 function wheelLightsHtml(n){
-  // Pixel-koordinater matcher .wheel-wrap's egen CSS-størrelse (230x230) —
+  // Pixel-koordinater matcher .wheel-wrap's egen CSS-størrelse (205x205) —
   // ændres wrap'ens størrelse, skal cx/cy/r ændres tilsvarende, ellers
   // ryger lysene ud af position i forhold til selve hjulet.
-  const cx = 115, cy = 115, r = 112;
+  const cx = 102.5, cy = 102.5, r = 100;
   let html = '';
   for (let i = 0; i < n; i++) {
     const p = wheelPolarPoint(cx, cy, r, (360/n)*i);
@@ -1481,6 +1521,7 @@ function buildWheelChanceHtml(prefix, candidates, winner, bannerText, revealed){
 // deres eget poll opdagede fasen. Er man allerede for sent på den (fx en
 // telefon der lige er kommet tilbage), spilles det bare med det samme.
 const WHEEL_REVEAL_DELAY_MS = 8000;
+const WHEEL_SPIN_DURATION_MS = 6000; // ægte 5-7 sekunders spin, ikke et hop
 function scheduleWheelChanceReveal(prefix, phaseStartedAt){
   clearTimeout(wheelRevealTimeout);
   const target = (phaseStartedAt || Date.now()) + WHEEL_REVEAL_DELAY_MS;
@@ -1497,13 +1538,14 @@ function scheduleWheelChanceReveal(prefix, phaseStartedAt){
 function playWheelChanceReveal(prefix){
   const cabinet = document.getElementById(prefix+'Cabinet');
   if(!cabinet) return;
+  revealAnimationLock = true; // se renderGameScreen — intet gen-render må afbryde spinnet
   cabinet.classList.remove('win');
   const nameEl = document.getElementById(prefix+'WinnerName');
   if(nameEl) nameEl.style.opacity = '0';
   const svg = document.getElementById(prefix+'WheelSvg');
-  if(!svg) return;
+  if(!svg){ revealAnimationLock = false; return; }
   const restAngle = parseFloat(svg.dataset.restAngle || '0');
-  const spins = 5;
+  const spins = 8; // flere omgange for at fylde de fulde 6 sekunder ordentligt ud, ikke bare rotere hurtigt forbi
   const finalAngle = restAngle + 360*spins;
   const onDone = ()=>{
     cabinet.classList.add('win');
@@ -1512,16 +1554,17 @@ function playWheelChanceReveal(prefix){
       else nameEl.style.opacity = '1';
     }
     fireConfetti(cabinet);
+    revealAnimationLock = false; // gen-render må nu godt køre igen (fx en anden spillers "klar"-tryk imens vi ventede)
   };
   svg.style.transition = 'none';
   svg.style.transform = 'rotate(0deg)';
   requestAnimationFrame(()=>{
     requestAnimationFrame(()=>{
-      svg.style.transition = 'transform 3.2s cubic-bezier(.16,.84,.28,1)';
+      svg.style.transition = `transform ${WHEEL_SPIN_DURATION_MS/1000}s cubic-bezier(.16,.84,.28,1)`;
       svg.style.transform = `rotate(${finalAngle}deg)`;
     });
   });
-  setTimeout(onDone, 3200);
+  setTimeout(onDone, WHEEL_SPIN_DURATION_MS);
 }
 
 // Chancens standard-visning ved uafgjort/2-spiller-skip: whack-a-mole. Ren
@@ -1535,7 +1578,16 @@ function buildMoleChanceHtml(prefix, candidates, winner, bannerText){
   if(!winner || !candidates.length) return '';
   const holes = candidates.map(c=>{
     const isWin = c.id === winner.id;
-    return `<div class="mole-hole"><div class="mole ${isWin?'mole-up mole-win':'mole-down'}" data-mole-id="${c.id}" ${isWin?'data-winner="1"':''}><div class="avatar">${initials(c.name)}</div></div></div>`;
+    // Kandidater med et eget `.label` (fx quiplash-svaret bag hver mole)
+    // viser en kort smagsprøve under hullet — kun en teaser, ikke fuld
+    // læsbarhed, for med 4+ moles er der ikke plads til mere end få tegn.
+    // Den fulde tekst står allerede i listen under hele reveal'en.
+    const caption = c.label ? (c.label.length > 11 ? c.label.slice(0,10)+'…' : c.label) : '';
+    return `
+      <div class="mole-hole-wrap">
+        <div class="mole-hole"><div class="mole ${isWin?'mole-up mole-win':'mole-down'}" data-mole-id="${c.id}" ${isWin?'data-winner="1"':''}><div class="avatar">${initials(c.name)}</div></div></div>
+        ${caption ? `<div class="mole-caption">"${escapeHtml(caption)}"</div>` : ''}
+      </div>`;
   }).join('');
   return `
     <div style="text-align:center;">
@@ -1552,36 +1604,50 @@ function buildMoleChanceHtml(prefix, candidates, winner, bannerText){
 // én ad gangen i tilfældig rækkefølge (rent visuel spænding — vinderen er
 // allerede afgjort server-side), til kun vinderens muldvarp står tilbage
 // og fejrer. Kører kun én gang pr. ny resultat-fase.
+// Fast total varighed på ~6 sekunder UANSET hvor mange kandidater der er —
+// med kun 1 taber ville den gamle version være færdig på under et sekund
+// (én hurtig bank, ingen reel spænding). Nu er der altid en ordentlig
+// optakt før den første bankes ned, og en kort pause før vinderen fejrer,
+// så det føles som en rigtig afsløring uanset gruppestørrelse.
+const MOLE_PREROLL_MS = 2200;
+const MOLE_KNOCK_BUDGET_MS = 2600;
+const MOLE_POST_PAUSE_MS = 1200;
 function playMoleChanceReveal(prefix){
   const cabinet = document.getElementById(prefix+'Cabinet');
   if(!cabinet) return;
+  revealAnimationLock = true; // se renderGameScreen — intet gen-render må afbryde elimineringen
   cabinet.classList.remove('win');
   const nameEl = document.getElementById(prefix+'WinnerName');
   if(nameEl) nameEl.style.opacity = '0';
   const moles = [...cabinet.querySelectorAll('.mole')];
-  if(!moles.length) return;
+  if(!moles.length){ revealAnimationLock = false; return; }
   const winnerMole = moles.find(m => m.dataset.winner === '1');
   const losers = moles.filter(m => m.dataset.winner !== '1');
   moles.forEach(m => { m.classList.remove('mole-down', 'mole-win'); m.classList.add('mole-up'); });
   const order = losers.slice().sort(() => Math.random() - 0.5);
+  const perKnockDelay = order.length ? Math.max(450, MOLE_KNOCK_BUDGET_MS / order.length) : 0;
   let i = 0;
+  const finish = () => {
+    cabinet.classList.add('win');
+    if(winnerMole) winnerMole.classList.add('mole-win');
+    if(nameEl){
+      if(typeof gsap !== 'undefined') gsap.fromTo(nameEl, {opacity:0, y:6}, {opacity:1, y:0, duration:.4, ease:'power2.out'});
+      else nameEl.style.opacity = '1';
+    }
+    fireConfetti(cabinet);
+    revealAnimationLock = false; // gen-render må nu godt køre igen
+  };
   const whackNext = () => {
     if(i < order.length){
       order[i].classList.remove('mole-up');
       order[i].classList.add('mole-down');
       i++;
-      setTimeout(whackNext, 260 + Math.random()*160);
+      setTimeout(whackNext, perKnockDelay);
     }else{
-      cabinet.classList.add('win');
-      if(winnerMole) winnerMole.classList.add('mole-win');
-      if(nameEl){
-        if(typeof gsap !== 'undefined') gsap.fromTo(nameEl, {opacity:0, y:6}, {opacity:1, y:0, duration:.4, ease:'power2.out'});
-        else nameEl.style.opacity = '1';
-      }
-      fireConfetti(cabinet);
+      setTimeout(finish, MOLE_POST_PAUSE_MS);
     }
   };
-  setTimeout(whackNext, 500);
+  setTimeout(whackNext, MOLE_PREROLL_MS);
 }
 
 function gameBodyHtml(g){
@@ -1765,7 +1831,10 @@ function quiplashHtml(g, cur){
     <div class="game-card" id="gameCard" style="text-align:center;">
       <p style="margin:0 0 10px;">${escapeHtml(cur.prompt)}</p>
       ${cur.randomPick ? buildMoleChanceHtml('chance',
-          (cur.chanceCandidates || Object.keys(cur.answers||{})).map(id=>state.members.find(m=>m.id===id)).filter(Boolean),
+          (cur.chanceCandidates || Object.keys(cur.answers||{})).map(id=>{
+            const mm = state.members.find(x=>x.id===id);
+            return mm ? { id: mm.id, name: mm.name, label: (cur.answers||{})[id] } : null;
+          }).filter(Boolean),
           state.members.find(m=>m.id===(cur.winnerIds||[])[0]),
           '🎲 CHANCEN AFGØR DET'
         ) : ''}
@@ -2025,10 +2094,10 @@ function gameOverHtml(g, cur){
   return `
     <div class="game-badge">🎉 Spillet er slut!</div>
     ${rows}
-    ${winners.length ? `<p class="hint" style="text-align:center; margin-top:10px; color:rgba(255,247,232,0.75);">👑 Vinder: ${winners.map(m=>escapeHtml(m.name)).join(' & ')}</p>` : ''}
+    ${winners.length ? `<p class="hint" style="text-align:center; margin-top:10px; color:rgba(255,247,232,0.75);">👑 Vinder: <span id="gameoverWinnerName">${winners.map(m=>escapeHtml(m.name)).join(' & ')}</span></p>` : ''}
     <div class="game-card" id="gameoverReveal" style="text-align:center; margin-top:16px;">
-      <div style="font-size:34px;">🫵</div>
-      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:6px 0;">Taberen er... ${losers.map(m=>escapeHtml(m.name)).join(' & ')}!</p>
+      <div style="font-size:34px;" id="gameoverLoserEmoji">🫵</div>
+      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:6px 0;">Taberen er... <span id="gameoverLoserName">${losers.map(m=>escapeHtml(m.name)).join(' & ')}</span>!</p>
       ${g.wager==='euro' ? '<p class="hint" style="color:rgba(255,247,232,0.7);">1€ lagt i Brokkekassens pulje.</p>' : '<p class="hint" style="color:rgba(255,247,232,0.7);">Kun for sjov denne gang.</p>'}
     </div>
     ${gameHighscoreHtml()}
