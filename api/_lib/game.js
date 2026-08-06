@@ -52,11 +52,11 @@ const QUIPLASH_PROMPTS = [
 // spiller point den runde (se resolveQuiplashVote i gameFlow.js).
 const QUIPLASH_DECOYS = [
   'At brokke sig over vejret hver eneste dag',
-  'At miste telefonen for tredje gang på én ferie',
+  'At miste telefonen for tredje gang denne uge',
   'At sove til langt over middag og kalde det "restitution"',
   'At skændes højlydt med GPS\'en',
   'At spise is til morgenmad og kalde det sund fornuft',
-  'At glemme solcreme og så brokke sig over solskoldning',
+  'At brokke sig over trafikken hver eneste dag',
   'At tabe kortspillet og påstå det var snyd',
   'At bruge en hel time på at vælge restaurant',
   'At sige "lige om lidt" i tre timer i træk',
@@ -289,25 +289,38 @@ function pickAuthor(state, players, bankKey) {
 // Falske, opdigtede "brok"-forslag der blandes ind sammen med forfatterens
 // EGET rigtige brok i "Hvilket brok ville {author} sige?"-runden — resten
 // skal kunne lyde plausible nok til at snyde, men er ikke om nogen bestemt.
+// Holdt bevidst til HVERDAGS-ting (pool, biler, supermarked, restauranter,
+// rengøring, trapper, toiletter, børn, larm) frem for ferie-specifikke
+// oplevelser — noget som "gondol" er kun genkendeligt hvis man faktisk har
+// været i Venedig, og afslører sig selv som opdigtet for alle andre. Det
+// skal kunne ramme plausibelt uanset hvor eller hvornår man er.
 const DECOY_BROK = [
-  'Der var kun ét ledigt toilet i lufthavnen, og køen flyttede sig ikke',
-  'Aircondition på hotelværelset lavede en klikkende lyd hele natten',
+  'Der var kun ét ledigt toilet, og køen flyttede sig ikke',
+  'Aircondition lavede en klikkende lyd hele natten',
   'Der var ingen stikkontakter tæt nok på sengen til at oplade telefonen',
-  'Morgenmaden løb tør for bacon lige før jeg nåede frem',
+  'Morgenmaden løb tør for det gode lige før jeg nåede frem',
   'Solsengene var "reserveret" med et håndklæde kl. 6 om morgenen',
   'GPS\'en insisterede på en "genvej" der tog dobbelt så lang tid',
-  'Der var ingen wifi i hele lobbyen, kun på værelserne',
-  'Naboerne på campingpladsen spillede musik til langt ud på natten',
-  'Isen i minibaren var smeltet allerede ved indtjekning',
-  'Der var 40 minutters kø til den ene gondol, der virkede',
+  'Der var ingen wifi der hvor jeg faktisk sad',
+  'Naboerne spillede musik til langt ud på natten',
+  'Isen var smeltet allerede da jeg nåede frem',
   'Restauranten havde "udsolgt" af det eneste jeg ville have',
-  'Bagagen kom ud på det forkerte bånd, tyve minutter for sent',
-  'Parkeringspladsen ved stranden kostede mere end selve frokosten',
-  'Skiudlejningen havde ikke min størrelse, kun én nummer for stor',
+  'Parkeringspladsen kostede mere end det jeg skulle handle',
   'Der var byggestøj lige udenfor vinduet fra kl. 7 hver morgen',
-  'Færgen blev forsinket tre timer uden nogen forklaring',
-  'Den "havudsigt" der var lovet, var faktisk udsigt til en ventilationsskakt',
-  'Alle håndklæderne på hotellet lugtede af klor',
+  'Alle håndklæderne lugtede af klor',
+  'Køen i supermarkedet flyttede sig slet ikke',
+  'Selvbetjeningskassen ville ikke scanne noget som helst',
+  'Der var ingen ledige parkeringspladser nogen steder',
+  'Bilen ville ikke starte lige da vi skulle af sted',
+  'Der var ikke gjort ordentligt rent på badeværelset',
+  'Støvsugeren virkede kun halvdelen af tiden',
+  'Elevatoren var i stykker, så det blev trapper hele vejen',
+  'Der var alt for mange trapper for at komme derop',
+  'Damernes var optaget, og mændenes var beskidt',
+  'Børnene skændtes om hvem der skulle sidde forrest',
+  'Der var ingen børnestole tilbage på restauranten',
+  'Legepladsen var fyldt, der var ingen plads til flere',
+  'Der var konstant larm fra vejen udenfor',
   // Korte, hurtigt-skrevne opdigtede forslag — hvis alle de opdigtede altid
   // er længere og mere detaljerede end det RIGTIGE brok (som typisk skrives
   // hurtigt under tidspres i selve runden), bliver længden i sig selv et
@@ -325,6 +338,9 @@ const DECOY_BROK = [
   'Middagen var kold da den kom',
   'Parasollen væltede i vinden',
   'Der manglede sæbe på badet',
+  'Køen i supermarkedet var uendelig',
+  'Ingen ledige borde noget sted',
+  'Trappen var spærret af igen',
 ];
 
 // Rigtige, tidligere loggede brok fra selve Brokkekassen (hvis den er i

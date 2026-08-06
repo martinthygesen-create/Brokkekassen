@@ -346,7 +346,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-06-22';
+const BUILD_TAG = 'build-2026-08-06-23';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1390,8 +1390,16 @@ function wheelLightsHtml(n){
   return html;
 }
 
-function buildWheelChanceHtml(prefix, candidates, winner, bannerText){
+function buildWheelChanceHtml(prefix, candidates, winner, bannerText, revealed){
   if(!winner || !candidates.length) return '';
+  // revealed=false (kun brugt af Casinobrok, som venter til et fælles
+  // tidspunkt før spinnet — se scheduleWheelChanceReveal): hjulets HVILE-
+  // vinkel er nødt til at pege på vinderen med det samme (for at kunne stå
+  // stille og korrekt ved senere gen-render), men selve AFSLØRINGEN
+  // (glødende vinder-stykke, guld-kabinet, navnet) holdes skjult indtil
+  // det planlagte tidspunkt — ellers ville folk kunne se svaret i samme
+  // øjeblik skærmen åbnes, længe før hjulet overhovedet begynder at snurre.
+  if(revealed === undefined) revealed = true;
   // Med kun 2-3 rigtige kandidater ser hjulet kedeligt/mønt-kast-agtigt ud
   // delt i 2-3 store stykker. Gentager kandidaterne til mindst 6 SYNLIGE
   // stykker i stedet — ændrer IKKE de reelle odds, hver kandidat får stadig
@@ -1418,7 +1426,7 @@ function buildWheelChanceHtml(prefix, candidates, winner, bannerText){
     const p1 = wheelPolarPoint(cx,cy,r,start), p2 = wheelPolarPoint(cx,cy,r,end);
     const largeArc = (end-start) > 180 ? 1 : 0;
     const path = `M${cx},${cy} L${p1.x.toFixed(2)},${p1.y.toFixed(2)} A${r},${r} 0 ${largeArc} 1 ${p2.x.toFixed(2)},${p2.y.toFixed(2)} Z`;
-    return `<path d="${path}" fill="${color}" class="wheel-slice${i===winnerIdx?' wheel-slice-win':''}" stroke="#052024" stroke-width="2"></path>`;
+    return `<path d="${path}" fill="${color}" class="wheel-slice${(i===winnerIdx&&revealed)?' wheel-slice-win':''}" stroke="#052024" stroke-width="2"></path>`;
   }).join('');
   const labelsHtml = visual.map((c,i)=>{
     const mid = i*sliceDeg + sliceDeg/2;
@@ -1441,17 +1449,17 @@ function buildWheelChanceHtml(prefix, candidates, winner, bannerText){
   return `
     <div style="text-align:center;">
       <div class="slot-banner">${bannerText}</div>
-      <div class="wheel-cabinet win" id="${prefix}Cabinet">
+      <div class="wheel-cabinet${revealed?' win':''}" id="${prefix}Cabinet">
         <div class="wheel-pointer"></div>
         <div class="wheel-wrap">
           <div class="wheel-lights">${wheelLightsHtml(14)}</div>
           <svg id="${prefix}WheelSvg" class="wheel-svg" viewBox="0 0 220 220" style="transform:rotate(${restAngle}deg);" data-rest-angle="${restAngle}">
             ${slicesHtml}
             ${labelsHtml}
-            <circle cx="110" cy="110" r="14" fill="#052024" stroke="${WHEEL_COLORS[winnerIdx % WHEEL_COLORS.length]}" stroke-width="3"></circle>
+            <circle cx="110" cy="110" r="14" fill="#052024" stroke="${revealed ? WHEEL_COLORS[winnerIdx % WHEEL_COLORS.length] : '#8a6b1f'}" stroke-width="3"></circle>
           </svg>
         </div>
-        <div class="slot-winner-name" id="${prefix}WinnerName" style="opacity:1;">${escapeHtml(winner.name)} vandt! 🍀</div>
+        <div class="slot-winner-name" id="${prefix}WinnerName" style="opacity:${revealed?1:0};">${escapeHtml(winner.name)} vandt! 🍀</div>
       </div>
     </div>
   `;
@@ -1982,12 +1990,17 @@ function casinobrokHtml(g, cur){
     return { id, name: m?m.name:'?', label: word };
   });
   const winner = candidates.find(c=>c.id===cur.winnerId);
+  // Vinderen står allerede fast server-side, men må ikke AFSLØRES visuelt
+  // (hverken på hjulet eller i listen herunder) før det planlagte fælles
+  // spin-tidspunkt — ellers kan man se svaret længe før hjulet overhovedet
+  // begynder at snurre. Se scheduleWheelChanceReveal.
+  const revealed = !cur.phaseStartedAt || (Date.now() - cur.phaseStartedAt) >= WHEEL_REVEAL_DELAY_MS;
   return `
     <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
     <div class="game-card" id="gameCard" style="text-align:center;">
-      ${buildWheelChanceHtml('chance', candidates, winner, '🎰 CASINOBROK TRÆKKER LOD')}
+      ${buildWheelChanceHtml('chance', candidates, winner, '🎰 CASINOBROK TRÆKKER LOD', revealed)}
       ${candidates.map(c=>{
-        const won = c.id === cur.winnerId;
+        const won = revealed && c.id === cur.winnerId;
         return `<div class="feed-item${won?' quip-slot-win':''}" style="${won?'border-color:var(--coin); background:rgba(255,201,60,0.16);':''}">
           <div class="avatar">${initials(c.name)}</div>
           <div class="feed-body"><div class="feed-name">${escapeHtml(c.name)} ${won?'🏆':''}</div><div class="feed-msg">"${escapeHtml(c.label)}"</div></div>
