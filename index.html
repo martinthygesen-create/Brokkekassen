@@ -164,6 +164,15 @@
   .slot-lever:active{ transform:scale(.97); }
   .slot-lever:disabled{ opacity:.5; }
   .slot-winner-name{ text-align:center; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; color:var(--coral); margin-top:14px; opacity:0; }
+  /* Chancens nye standard-visning: et lykkehjul, i samme mørke/guld
+     kabinet-stil som spillemaskinen ovenfor (som stadig ligger urørt som
+     reserve — se buildSlotCabinetHtml/playSlotChanceReveal). */
+  .wheel-cabinet{ background:linear-gradient(160deg,#2e2a24,#141414); border-radius:24px; padding:20px 12px 16px; box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #8a6b1f; position:relative; }
+  .wheel-cabinet.win{ box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #FFC93C, 0 0 24px rgba(255,201,60,.5); }
+  .wheel-pointer{ position:absolute; left:50%; top:2px; transform:translateX(-50%); width:0; height:0; border-left:10px solid transparent; border-right:10px solid transparent; border-top:18px solid var(--coin); z-index:3; filter:drop-shadow(0 2px 3px rgba(0,0,0,.5)); }
+  .wheel-wrap{ position:relative; width:200px; height:200px; margin:8px auto 4px; }
+  .wheel-svg{ width:100%; height:100%; display:block; filter:drop-shadow(0 6px 14px rgba(0,0,0,.5)); transform-box:fill-box; transform-origin:50% 50%; }
+  .wheel-slice-win{ filter:drop-shadow(0 0 5px rgba(255,201,60,.9)); }
 
   main{ flex:1; padding:0 16px 130px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
 
@@ -318,7 +327,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-06-16';
+const BUILD_TAG = 'build-2026-08-06-17';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1061,11 +1070,11 @@ function openChanceTestSheet(){
   openSheet(`
     <h2>Test: Chancen 🎲</h2>
     <p class="hint">Sådan ser det ud når "Chancen" afgør en uafgjort/2-spiller-runde — ren visning, påvirker intet rigtigt spil.</p>
-    ${buildSlotCabinetHtml('chance', demoMembers, winner, '🎲 CHANCEN AFGØR DET')}
+    ${buildWheelChanceHtml('chance', demoMembers, winner, '🎲 CHANCEN AFGØR DET')}
     <button class="sheet-btn ghost" id="chanceTestReplayBtn" style="margin-top:14px;">🔁 Afspil igen</button>
     <button class="sheet-btn ghost" id="chanceTestCloseBtn">Luk</button>
   `, ()=>{
-    playSlotChanceReveal('chance');
+    playWheelChanceReveal('chance');
     document.getElementById('chanceTestReplayBtn').onclick = ()=>{ closeSheet(); setTimeout(openChanceTestSheet, 230); };
     document.getElementById('chanceTestCloseBtn').onclick = closeSheet;
   });
@@ -1247,7 +1256,7 @@ function renderGameScreen(){
   }
   celebrateGameRound(g);
   if(isNewGamePhase && g.current && g.current.type === 'quiplash' && g.current.phase === 'results' && g.current.randomPick){
-    playSlotChanceReveal('chance');
+    playWheelChanceReveal('chance');
   }
 }
 
@@ -1326,6 +1335,98 @@ function playSlotChanceReveal(prefix){
       setTimeout(finish, duration*1000);
     }
   });
+}
+
+// Chancens NUVÆRENDE standardvisning: et lykkehjul, opdelt i lige store
+// stykker (ét pr. kandidat), der snurrer og lander med den server-afgjorte
+// vinder under pilen. Samme "landet som default"-mønster som spillemaskinen
+// ovenfor: restAngle er den vinkel hjulet SKAL stå i for at vinderen er
+// under pilen, gemt som data-attribut, så et almindeligt gen-render (ingen
+// animation) altid viser den korrekte, landede tilstand med det samme.
+const WHEEL_COLORS = ['#FF6B4A','#FFC93C','#0B4F55','#137a7d','#E8A317','#8a5fb0'];
+function wheelPolarPoint(cx, cy, r, angleDeg){
+  const rad = angleDeg * Math.PI/180; // 0° = kl. 12 (toppen), stigende med uret
+  return { x: cx + r*Math.sin(rad), y: cy - r*Math.cos(rad) };
+}
+function buildWheelChanceHtml(prefix, candidates, winner, bannerText){
+  if(!winner || !candidates.length) return '';
+  const n = candidates.length;
+  const sliceDeg = 360/n;
+  const cx = 110, cy = 110, r = 104;
+  const winnerIdx = Math.max(0, candidates.findIndex(c=>c.id===winner.id));
+  const midWinner = winnerIdx*sliceDeg + sliceDeg/2;
+  // Vinklen hjulet skal roteres til for at vinderens midte lander under
+  // pilen (som sidder fast kl. 12, dvs. 0°) — se playWheelChanceReveal.
+  const restAngle = ((-midWinner) % 360 + 360) % 360;
+  const slicesHtml = candidates.map((c,i)=>{
+    const start = i*sliceDeg, end = (i+1)*sliceDeg;
+    const color = WHEEL_COLORS[i % WHEEL_COLORS.length];
+    const p1 = wheelPolarPoint(cx,cy,r,start), p2 = wheelPolarPoint(cx,cy,r,end);
+    const largeArc = (end-start) > 180 ? 1 : 0;
+    const path = `M${cx},${cy} L${p1.x.toFixed(2)},${p1.y.toFixed(2)} A${r},${r} 0 ${largeArc} 1 ${p2.x.toFixed(2)},${p2.y.toFixed(2)} Z`;
+    return `<path d="${path}" fill="${color}" class="wheel-slice${i===winnerIdx?' wheel-slice-win':''}" stroke="#052024" stroke-width="2"></path>`;
+  }).join('');
+  const labelsHtml = candidates.map((c,i)=>{
+    const mid = i*sliceDeg + sliceDeg/2;
+    const p = wheelPolarPoint(cx, cy, r*0.62, mid);
+    return `<g transform="translate(${p.x.toFixed(2)},${p.y.toFixed(2)})">
+      <circle r="17" fill="rgba(5,32,36,0.55)"></circle>
+      <text text-anchor="middle" dominant-baseline="central" font-family="'Baloo 2',sans-serif" font-weight="800" font-size="14" fill="#FFF7E8">${escapeHtml(initials(c.name))}</text>
+    </g>`;
+  }).join('');
+  return `
+    <div style="text-align:center;">
+      <div class="slot-banner">${bannerText}</div>
+      <div class="wheel-cabinet win" id="${prefix}Cabinet">
+        <div class="wheel-pointer"></div>
+        <div class="wheel-wrap">
+          <svg id="${prefix}WheelSvg" class="wheel-svg" viewBox="0 0 220 220" style="transform:rotate(${restAngle}deg);" data-rest-angle="${restAngle}">
+            ${slicesHtml}
+            ${labelsHtml}
+            <circle cx="110" cy="110" r="14" fill="#052024" stroke="${WHEEL_COLORS[winnerIdx % WHEEL_COLORS.length]}" stroke-width="3"></circle>
+          </svg>
+        </div>
+        <div class="slot-winner-name" id="${prefix}WinnerName" style="opacity:1;">${escapeHtml(winner.name)} vandt! 🍀</div>
+      </div>
+    </div>
+  `;
+}
+
+// Spiller selve spin-animationen for et allerede-renderet hjul (bygget af
+// buildWheelChanceHtml) — starter hjulet ved 0° og lader det snurre flere
+// hele omgange plus den vinkel markup'et allerede sagde det skulle lande
+// på (data-rest-angle), så det ALTID lander præcis samme sted som den
+// statiske, uanimerede visning. Kører kun én gang pr. ny resultat-fase.
+function playWheelChanceReveal(prefix){
+  const cabinet = document.getElementById(prefix+'Cabinet');
+  if(!cabinet) return;
+  cabinet.classList.remove('win');
+  const nameEl = document.getElementById(prefix+'WinnerName');
+  if(nameEl) nameEl.style.opacity = '0';
+  const svg = document.getElementById(prefix+'WheelSvg');
+  if(!svg) return;
+  const restAngle = parseFloat(svg.dataset.restAngle || '0');
+  const spins = 5;
+  const finalAngle = restAngle + 360*spins;
+  const onDone = ()=>{
+    cabinet.classList.add('win');
+    if(nameEl){
+      if(typeof gsap !== 'undefined') gsap.fromTo(nameEl, {opacity:0, y:6}, {opacity:1, y:0, duration:.4, ease:'power2.out'});
+      else nameEl.style.opacity = '1';
+    }
+    fireConfetti(cabinet);
+  };
+  if(typeof gsap !== 'undefined'){
+    gsap.fromTo(svg, { rotate: 0 }, { rotate: finalAngle, duration: 3.2, ease: 'power3.out', onComplete: onDone });
+  }else{
+    svg.style.transition = 'none';
+    svg.style.transform = 'rotate(0deg)';
+    requestAnimationFrame(()=>{
+      svg.style.transition = 'transform 3.2s cubic-bezier(.16,.84,.28,1)';
+      svg.style.transform = `rotate(${finalAngle}deg)`;
+    });
+    setTimeout(onDone, 3200);
+  }
 }
 
 function gameBodyHtml(g){
@@ -1488,7 +1589,7 @@ function quiplashHtml(g, cur){
     <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
     <div class="game-card" id="gameCard" style="text-align:center;">
       <p style="margin:0 0 10px;">${escapeHtml(cur.prompt)}</p>
-      ${cur.randomPick ? buildSlotCabinetHtml('chance',
+      ${cur.randomPick ? buildWheelChanceHtml('chance',
           (cur.chanceCandidates || Object.keys(cur.answers||{})).map(id=>state.members.find(m=>m.id===id)).filter(Boolean),
           state.members.find(m=>m.id===(cur.winnerIds||[])[0]),
           '🎲 CHANCEN AFGØR DET'
