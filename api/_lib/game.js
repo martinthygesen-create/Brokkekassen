@@ -385,12 +385,32 @@ function pickDecoyBroks(state, n, excludeText) {
   return picked;
 }
 
-// Sætter indholdet af en ny runde op — vælger tilfældigt mellem de tre
-// rundetyper og bygger den nødvendige startdata for hver. `players` er de
+// Tilfældig tildeling af "hvem roser hvem" til Rose-runden — en permutation
+// uden faste punkter (ingen får sig selv), så hver spiller BÅDE skriver
+// præcis én ros OG modtager præcis én, uden ekstra bogføring. Ved uheld
+// (fx 50/50 ved kun 2 spillere) prøves der igen et par gange, og falder det
+// stadig ikke på plads roteres listen ét hak — det er ALTID en gyldig
+// afledning uden faste punkter for 2+ spillere.
+function buildRoseDerangement(ids) {
+  if (ids.length < 2) return {};
+  let perm;
+  let tries = 0;
+  do {
+    perm = shuffle(ids.slice());
+    tries++;
+  } while (ids.some((id, i) => perm[i] === id) && tries < 50);
+  if (ids.some((id, i) => perm[i] === id)) perm = ids.slice(1).concat(ids.slice(0, 1));
+  const map = {};
+  ids.forEach((id, i) => { map[id] = perm[i]; });
+  return map;
+}
+
+// Sætter indholdet af en ny runde op — vælger tilfældigt mellem
+// rundetyperne og bygger den nødvendige startdata for hver. `players` er de
 // medlemmer der reelt er med i DENNE runde af spillet (kan være en delmængde
 // af hele rummet) — trivia-spørgsmål handler stadig om hele rummets rigtige
 // brok-historik, uanset hvem der spiller med lige nu.
-const ROUND_TYPES = ['quiplash', 'truefalse', 'trivia', 'guessbrok', 'casinobrok'];
+const ROUND_TYPES = ['quiplash', 'truefalse', 'trivia', 'guessbrok', 'casinobrok', 'rose'];
 
 function beginRound(state, players) {
   state.game.round += 1;
@@ -452,7 +472,7 @@ function beginRound(state, players) {
     // uden at kræve et vist antal spillere.
     const author = pickAuthor(state, players, 'guessBrokAuthorPickCounts');
     state.game.current = { type, phase: 'write', authorId: author.id, statement: null, options: null, correctIndex: null, guesses: {} };
-  } else {
+  } else if (type === 'casinobrok') {
     // "Casinobrok" — ALLE spillere skriver hvert sit ene brok-ord (ikke en
     // hel sætning), og der trækkes bagefter lod blandt de indsendte ord på
     // hjulet. Vinderen er den der skrev det trukne ord — flere spillere kan
@@ -460,7 +480,14 @@ function beginRound(state, players) {
     // tekst, så det er reelt en tilfældig person der vindes over, bare
     // camoufleret som et ord-lod i stedet for en direkte navnetrækning.
     state.game.current = { type, phase: 'write', words: {} };
+  } else {
+    // "Rose" — ikke alt skal handle om brok. Hver spiller skriver en ægte,
+    // kort ros til én tilfældigt tildelt medspiller (aldrig sig selv), og
+    // bagefter skal alle gætte hvem der skrev hvad om hvem — se
+    // transitionRoseToMatch/resolveRoseMatch i gameFlow.js.
+    const targets = buildRoseDerangement(playerIds);
+    state.game.current = { type, phase: 'write', targets, compliments: {}, guesses: {} };
   }
 }
 
-module.exports = { pickRandom, shuffle, pickWeighted, buildOptions, pickFromBag, pickQuiplashPrompt, pickWinnerTauntPrompt, pickWorldTrivia, pickWorldTrueFalse, pickDecoyBroks, pickQuiplashDecoys, generateTriviaQuestion, beginRound };
+module.exports = { pickRandom, shuffle, pickWeighted, buildOptions, pickFromBag, pickQuiplashPrompt, pickWinnerTauntPrompt, pickWorldTrivia, pickWorldTrueFalse, pickDecoyBroks, pickQuiplashDecoys, generateTriviaQuestion, buildRoseDerangement, beginRound };

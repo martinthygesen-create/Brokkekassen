@@ -58,6 +58,12 @@ function getPendingIds(cur, players) {
   if (cur.type === 'casinobrok' && cur.phase === 'write') {
     return players.filter(id => !(cur.words && cur.words[id] !== undefined));
   }
+  if (cur.type === 'rose' && cur.phase === 'write') {
+    return players.filter(id => cur.compliments && cur.compliments[id] === undefined);
+  }
+  if (cur.type === 'rose' && cur.phase === 'match') {
+    return players.filter(id => cur.guesses && cur.guesses[id] === undefined);
+  }
   return [];
 }
 
@@ -174,6 +180,43 @@ function resolveCasinobrok(state, cur) {
   cur.readyIds = [];
 }
 
+// Manglende ros'er (nogen nåede ikke at skrive) fyldes op med en fast
+// pladsholder-tekst i stedet for at fjerne spilleren fra opgøret — ellers
+// bliver invertering af tildelingerne (se resolveRoseMatch) mere kringlet,
+// og alle andre skal stadig kunne gætte på et komplet navnesæt.
+function transitionRoseToMatch(state, cur, players) {
+  players.forEach(id => { if (cur.compliments[id] === undefined) cur.compliments[id] = 'Nåede ikke at skrive en ros i tide 🌹'; });
+  cur.phase = 'match';
+  cur.guesses = {};
+  stampPhase(cur);
+}
+
+// Point-loft på 2 (samme "værdi" som en vundet runde af enhver anden type,
+// se ROUND_POINTS) uanset hvor mange man gætter rigtigt — uden loftet ville
+// nogen med fx 3 rigtige ud af 3 spillere score langt mere end normalt for
+// én runde, hvilket skævvrider det samlede regnskab langt mere end tiltænkt
+// for en enkelt bonus-mekanik.
+const ROSE_MAX_POINTS = 2;
+function resolveRoseMatch(state, cur, players) {
+  const authorForRecipient = {};
+  Object.keys(cur.targets).forEach(authorId => { authorForRecipient[cur.targets[authorId]] = authorId; });
+  const correctCounts = {};
+  players.forEach(guesserId => {
+    const guesses = (cur.guesses && cur.guesses[guesserId]) || {};
+    let correct = 0;
+    Object.keys(authorForRecipient).forEach(recipientId => {
+      if (guesses[recipientId] && guesses[recipientId] === authorForRecipient[recipientId]) correct++;
+    });
+    correctCounts[guesserId] = correct;
+    state.game.scores[guesserId] = (state.game.scores[guesserId] || 0) + Math.min(correct, ROSE_MAX_POINTS);
+  });
+  cur.phase = 'results';
+  stampPhase(cur);
+  cur.readyIds = [];
+  cur.correctCounts = correctCounts;
+  cur.authorForRecipient = authorForRecipient;
+}
+
 function goToNextRoundOrEnd(state, players) {
   if (state.game.round >= state.game.totalRounds) endGame(state);
   else { beginRound(state, state.members.filter(m => players.includes(m.id))); stampPhase(state.game.current); }
@@ -248,6 +291,19 @@ function forceResolveCurrentPhase(state, cur, players) {
     } else {
       resolveCasinobrok(state, cur);
     }
+  } else if (cur.type === 'rose' && cur.phase === 'write') {
+    // Uden mindst én indsendt ros er der intet at gætte på — spring runden
+    // over. Ellers fyldes de manglende op og der gås videre til gætte-fasen
+    // med det der nåede at komme ind.
+    if (Object.keys(cur.compliments).length < 1) {
+      cur.phase = 'skipped';
+      cur.readyIds = [];
+      stampPhase(cur);
+    } else {
+      transitionRoseToMatch(state, cur, players);
+    }
+  } else if (cur.type === 'rose' && cur.phase === 'match') {
+    resolveRoseMatch(state, cur, players);
   } else if (cur.phase === 'results' || cur.phase === 'skipped') {
     goToNextRoundOrEnd(state, players);
   }
@@ -276,6 +332,7 @@ function expireGamePhaseIfDue(state, players) {
 
 module.exports = {
   ROUND_POINTS,
+  ROSE_MAX_POINTS,
   MIN_COMPLAIN_AGE_MS,
   BROKSPILLET_AUTO_MS,
   COMPLAINT_COUNTDOWN_MS,
@@ -287,6 +344,8 @@ module.exports = {
   resolveGuessBrok,
   resolveTriviaAnswer,
   resolveCasinobrok,
+  transitionRoseToMatch,
+  resolveRoseMatch,
   goToNextRoundOrEnd,
   endGame,
   expireGamePhaseIfDue,

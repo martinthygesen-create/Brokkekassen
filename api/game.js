@@ -11,6 +11,8 @@ const {
   resolveGuessBrok,
   resolveTriviaAnswer,
   resolveCasinobrok,
+  transitionRoseToMatch,
+  resolveRoseMatch,
   goToNextRoundOrEnd,
   expireGamePhaseIfDue,
 } = require('./_lib/gameFlow');
@@ -137,6 +139,19 @@ module.exports = async (req, res) => {
           if (!word) throw new ApiError(400, 'skriv et brok-ord');
           cur.words[actorId] = word;
           if (Object.keys(cur.words).length >= players.length) resolveCasinobrok(state, cur);
+        } else if (cur.type === 'rose' && cur.phase === 'write') {
+          const compliment = (payload.compliment || '').toString().trim().slice(0, 140);
+          if (!compliment) throw new ApiError(400, 'skriv en ros');
+          cur.compliments[actorId] = compliment;
+          if (Object.keys(cur.compliments).length >= players.length) transitionRoseToMatch(state, cur, players);
+        } else if (cur.type === 'rose' && cur.phase === 'match') {
+          const raw = payload.guesses && typeof payload.guesses === 'object' ? payload.guesses : {};
+          const sanitized = {};
+          Object.keys(raw).forEach(recipientId => {
+            if (players.includes(recipientId) && players.includes(raw[recipientId])) sanitized[recipientId] = raw[recipientId];
+          });
+          cur.guesses[actorId] = sanitized;
+          if (Object.keys(cur.guesses).length >= players.length) resolveRoseMatch(state, cur, players);
         } else {
           throw new ApiError(400, 'ugyldig handling lige nu');
         }

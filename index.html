@@ -208,6 +208,17 @@
   @keyframes moleQuoteSlide{ from{ opacity:0; transform:translateX(70px); } to{ opacity:1; transform:translateX(0); } }
   .mole-quote.show{ animation:moleQuoteSlide .45s cubic-bezier(.34,1.56,.64,1) forwards; }
 
+  /* Rose-bonusrunden — bevidst et andet visuelt tema (lyserød, ikke guld/mønt)
+     end resten af Brokspillet, så det tydeligt føles som noget andet end brok. */
+  .rose-card{ background:linear-gradient(160deg, rgba(255,143,179,0.22), rgba(255,107,74,0.08)); border:1px solid rgba(255,143,179,0.4); }
+  .rose-btn{ background:linear-gradient(160deg, #ff8fb3, #e14d7a); box-shadow:0 8px 18px rgba(255,143,179,0.35); }
+  .rose-match-card{ background:rgba(255,143,179,0.1); border:1px solid rgba(255,143,179,0.3); border-radius:18px; padding:14px 16px; margin-bottom:12px; }
+  .rose-match-text{ font-family:'Baloo 2',sans-serif; font-weight:700; font-size:15.5px; margin:0 0 6px; color:var(--cream); }
+  .rose-match-to{ font-size:12.5px; margin:0; color:rgba(255,247,232,0.65); }
+  .rose-guess-chips{ display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; }
+  .rose-guess-chip{ padding:8px 14px; border-radius:100px; border:2px solid rgba(255,143,179,0.4); background:rgba(255,247,232,0.06); color:var(--cream); font-weight:700; font-size:13px; cursor:pointer; }
+  .rose-guess-chip.selected{ background:#ff8fb3; border-color:#ff8fb3; color:#3d1120; }
+
   main{ flex:1; padding:0 16px 130px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
 
   .feed-item{ background:rgba(255,247,232,0.07); border:1px solid rgba(255,247,232,0.1); border-radius:16px; padding:12px 14px; margin-bottom:10px; display:flex; gap:12px; align-items:flex-start; }
@@ -361,7 +372,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-06-27';
+const BUILD_TAG = 'build-2026-08-06-28';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1197,6 +1208,8 @@ function getPendingIdsClient(cur, players){
   if(cur.type === 'trivia' && cur.phase === 'answer') return players.filter(id=>!(cur.choices && cur.choices[id] !== undefined));
   if(cur.type === 'guessbrok' && cur.phase === 'write') return cur.authorId ? [cur.authorId] : [];
   if(cur.type === 'guessbrok' && cur.phase === 'guess') return players.filter(id=>id!==cur.authorId).filter(id=>!(cur.guesses && cur.guesses[id] !== undefined));
+  if(cur.type === 'rose' && cur.phase === 'write') return players.filter(id=>cur.compliments && cur.compliments[id] === undefined);
+  if(cur.type === 'rose' && cur.phase === 'match') return players.filter(id=>cur.guesses && cur.guesses[id] === undefined);
   return [];
 }
 
@@ -1724,6 +1737,7 @@ function gameBodyHtml(g){
   if(cur.type === 'trivia') return triviaHtml(g, cur);
   if(cur.type === 'guessbrok') return guessBrokHtml(g, cur);
   if(cur.type === 'casinobrok') return casinobrokHtml(g, cur);
+  if(cur.type === 'rose') return roseHtml(g, cur);
   return '';
 }
 
@@ -1787,6 +1801,7 @@ function gameLobbyHtml(){
     ['🎯', 'Hvilket brok? Én skriver et RIGTIGT brok blandt 3 opdigtede — resten gætter hvilket der er ægte'],
     ['🔍', 'Trivia om jeres egen brok-historik (og lidt verdens-brok ind imellem)'],
     ['🎰', 'Casinobrok: alle skriver ét brok-ord, og hjulet trækker lod om hvis ord der vinder'],
+    ['🌹', 'Rose: skriv en ægte ros til en tilfældig medspiller, gæt bagefter hvem der skrev hvad om hvem'],
     ['🏆', 'Point tælles på tværs af alle runder — flest point vinder'],
   ];
   if(gameInstructionsOpen === null) gameInstructionsOpen = !localStorage.getItem('bk_game_seen_instructions');
@@ -2151,6 +2166,105 @@ function casinobrokHtml(g, cur){
   `;
 }
 
+function roseHtml(g, cur){
+  const myId = profile && profile.memberId;
+  if(cur.phase === 'write'){
+    const targetId = cur.targets ? cur.targets[myId] : null;
+    const targetMember = targetId ? state.members.find(m=>m.id===targetId) : null;
+    const mine = myId && cur.compliments && cur.compliments[myId];
+    const written = Object.keys(cur.compliments||{}).length;
+    return `
+      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · 🌹 Rose</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
+      <div class="game-card rose-card" id="gameCard">
+        <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:0 0 6px;">🌹 Skriv en ægte ros til <span style="color:#ff8fb3;">${escapeHtml(targetMember?targetMember.name:'?')}</span></p>
+        <p class="hint" style="margin:0 0 12px; color:rgba(255,247,232,0.6);">Kort og ægte — noget de er gode til, eller bare noget du sætter pris på.</p>
+        <textarea id="roseInput" rows="2" maxlength="140" placeholder="Din ros..." ${mine?'disabled':''}>${mine?escapeHtml(mine):''}</textarea>
+        ${mine ? '' : `<button class="game-btn rose-btn" id="roseSubmitBtn" style="margin-top:10px;">🌹 Send rosen</button>`}
+      </div>
+      ${gameProgressHtml(written, g.players.length, 'har skrevet')}
+      ${mine ? `<div class="waiting-pill"><span class="waiting-dot"></span> Venter på de andre...</div>` : ''}
+      ${complaintBlockHtml(g, cur)}
+    `;
+  }
+  if(cur.phase === 'skipped'){
+    return `
+      <div class="game-badge">Runde ${g.round}/${g.totalRounds} · 🌹 Rose</div>
+      <div class="empty-state"><span class="emoji">🥀</span><b>Ingen nåede at skrive en ros</b>Ingen sag denne gang — vi går videre til næste runde.</div>
+      ${gameReadyHtml(g, cur)}
+    `;
+  }
+  if(cur.phase === 'match'){
+    const authorForRecipient = {};
+    Object.keys(cur.targets||{}).forEach(a=>{ authorForRecipient[cur.targets[a]] = a; });
+    const recipientIds = Object.keys(authorForRecipient).sort();
+    const cards = recipientIds.map(recipientId=>({ recipientId, text: (cur.compliments||{})[authorForRecipient[recipientId]] }));
+    const already = myId && cur.guesses && cur.guesses[myId];
+    const guessedCount = Object.keys(cur.guesses||{}).length;
+    const players = state.members.filter(m=>g.players.includes(m.id));
+    if(already){
+      return `
+        <div class="game-badge">Runde ${g.round}/${g.totalRounds} · 🌹 Rose — Gæt</div>
+        <p class="hint" style="margin:0 0 10px;">Du har afgivet dine gæt.</p>
+        ${gameProgressHtml(guessedCount, g.players.length, 'har gættet')}
+        <div class="waiting-pill"><span class="waiting-dot"></span> Venter på de andre...</div>
+        ${complaintBlockHtml(g, cur)}
+      `;
+    }
+    const cardsHtml = cards.map(c=>{
+      const recipientMember = state.members.find(m=>m.id===c.recipientId);
+      const chips = players.map(p=>`<div class="name-pill rose-guess-chip" data-rose-recipient="${c.recipientId}" data-rose-author="${p.id}">${escapeHtml(p.name)}</div>`).join('');
+      return `
+        <div class="rose-match-card" data-recipient="${c.recipientId}">
+          <p class="rose-match-text">"${escapeHtml(c.text||'')}"</p>
+          <p class="rose-match-to">Om: <b>${escapeHtml(recipientMember?recipientMember.name:'?')}</b></p>
+          <p class="hint" style="margin:6px 0 6px; font-size:12px;">Hvem skrev den?</p>
+          <div class="rose-guess-chips">${chips}</div>
+        </div>
+      `;
+    }).join('');
+    return `
+      <div class="game-badge">Runde ${g.round}/${g.totalRounds} · 🌹 Rose — Gæt hvem der skrev hvad</div>
+      <p class="hint" style="margin:0 0 10px;">Tryk på et navn under hver ros for at gætte forfatteren.</p>
+      ${cardsHtml}
+      <button class="game-btn rose-btn" id="roseGuessSubmitBtn" style="margin-top:4px;" disabled>🌹 Indsend gæt</button>
+      ${gameProgressHtml(guessedCount, g.players.length, 'har gættet')}
+      ${complaintBlockHtml(g, cur)}
+    `;
+  }
+  // results
+  const authorForRecipient = cur.authorForRecipient || {};
+  const correctCounts = cur.correctCounts || {};
+  const rows = Object.keys(authorForRecipient).sort().map(recipientId=>{
+    const authorId = authorForRecipient[recipientId];
+    const authorMember = state.members.find(m=>m.id===authorId);
+    const recipientMember = state.members.find(m=>m.id===recipientId);
+    const text = (cur.compliments||{})[authorId];
+    return `
+      <div class="feed-item">
+        <div class="avatar">${initials(authorMember?authorMember.name:'?')}</div>
+        <div class="feed-body"><div class="feed-name">${escapeHtml(authorMember?authorMember.name:'?')} ➜ ${escapeHtml(recipientMember?recipientMember.name:'?')}</div><div class="feed-msg">"${escapeHtml(text||'')}"</div></div>
+      </div>
+    `;
+  }).join('');
+  const scoreRows = state.members.filter(m=>g.players.includes(m.id)).map(m=>`
+    <div class="bal-row">
+      <div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${initials(m.name)}</div>
+      <div class="feed-body"><div class="bal-name">${escapeHtml(m.name)}</div></div>
+      <div class="bal-amt">${correctCounts[m.id]||0} rigtige</div>
+    </div>
+  `).join('');
+  return `
+    <div class="game-badge">Runde ${g.round}/${g.totalRounds} · 🌹 Rose — Facit</div>
+    <div class="game-card rose-card" id="gameCard" style="text-align:center;">
+      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:18px; margin:0 0 10px;">🌹 Hvem sagde hvad om hvem</p>
+      ${rows}
+    </div>
+    <div class="section-label">Dine gæt</div>
+    ${scoreRows}
+    ${gameReadyHtml(g, cur)}
+  `;
+}
+
 function gameOverHtml(g, cur){
   const ranked = state.members.filter(m=>g.players.includes(m.id)).sort((a,b)=>(cur.scores[b.id]||0)-(cur.scores[a.id]||0));
   const losers = (cur.loserIds||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
@@ -2297,6 +2411,44 @@ function bindGameHandlers(g){
       lockSubmitBtn(btn, 'Sender...');
       gameApi('submit', { payload: { word } });
     };
+  }
+  if(cur.type === 'rose' && cur.phase === 'write'){
+    const input = document.getElementById('roseInput');
+    const submitBtn = document.getElementById('roseSubmitBtn');
+    if(submitBtn) submitBtn.onclick = ()=>{
+      const text = input.value.trim();
+      if(!text) return;
+      lockSubmitBtn(submitBtn, 'Sender...');
+      gameApi('submit', { payload: { compliment: text } });
+    };
+  }
+  if(cur.type === 'rose' && cur.phase === 'match'){
+    const myId = profile && profile.memberId;
+    const already = myId && cur.guesses && cur.guesses[myId];
+    if(!already){
+      // Gættene sendes samlet ét sted (ikke ét pr. tryk som ved quiplash-
+      // stemmer) — lokal, ikke-gemt valgtilstand indtil "Indsend gæt" trykkes,
+      // så man kan nå at fortryde et navn før man sender det hele.
+      const selections = {};
+      const cards = document.querySelectorAll('.rose-match-card');
+      const submitBtn = document.getElementById('roseGuessSubmitBtn');
+      const updateSubmitState = ()=>{ if(submitBtn) submitBtn.disabled = cards.length === 0 || Object.keys(selections).length < cards.length; };
+      document.querySelectorAll('.rose-guess-chip').forEach(chip=>{
+        chip.onclick = ()=>{
+          const recipientId = chip.dataset.roseRecipient;
+          selections[recipientId] = chip.dataset.roseAuthor;
+          const card = chip.closest('.rose-match-card');
+          card.querySelectorAll('.rose-guess-chip').forEach(x=>x.classList.remove('selected'));
+          chip.classList.add('selected');
+          updateSubmitState();
+        };
+      });
+      if(submitBtn) submitBtn.onclick = ()=>{
+        if(Object.keys(selections).length < cards.length) return;
+        lockSubmitBtn(submitBtn, 'Sender...');
+        gameApi('submit', { payload: { guesses: selections } });
+      };
+    }
   }
 }
 
