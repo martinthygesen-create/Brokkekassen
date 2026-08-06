@@ -321,7 +321,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-04-13';
+const BUILD_TAG = 'build-2026-08-04-14';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1023,11 +1023,13 @@ function openGameAdminMenuSheet(){
   openSheet(`
     <h2>Brokspil-admin ⚙️</h2>
     <p class="hint">${active ? 'Der er et spil i gang lige nu.' : 'Der er ikke noget spil i gang lige nu.'}</p>
+    <button class="sheet-btn test" id="gameAdminTestChanceBtn">🎲 Test Chancen</button>
     ${active ? `<button class="sheet-btn danger" id="gameAdminRestartBtn">🔄 Genstart Brokspillet</button>` : ''}
     ${hasHighscore ? `<button class="sheet-btn danger" id="gameAdminResetStatsBtn">🏆 Nulstil highscore</button>` : ''}
     <button class="sheet-btn ghost" id="gameAdminCloseBtn">Luk menu</button>
     <p class="hint" style="text-align:center; font-size:10.5px; opacity:.5; margin-top:6px;">${BUILD_TAG}</p>
   `, ()=>{
+    document.getElementById('gameAdminTestChanceBtn').onclick = ()=>{ closeSheet(); setTimeout(openChanceTestSheet, 230); };
     const restartBtn = document.getElementById('gameAdminRestartBtn');
     if(restartBtn) restartBtn.onclick = async ()=>{
       closeSheet();
@@ -1045,6 +1047,31 @@ function openGameAdminMenuSheet(){
       }catch(e){ toast(e.message); }
     };
     document.getElementById('gameAdminCloseBtn').onclick = closeSheet;
+  });
+}
+
+// Ren visnings-demo af "Chancen"-animationen — bruger rummets egne
+// medlemmer (op til 4) som chips, ingen rigtig spil-state involveret.
+// Til at kunne se/vise animationen uden at skulle fremtvinge en ægte
+// uafgjort runde midt i et spil.
+function openChanceTestSheet(){
+  const demoMembers = state.members.slice(0, Math.min(4, Math.max(2, state.members.length)));
+  const winner = demoMembers[Math.floor(Math.random() * demoMembers.length)];
+  openSheet(`
+    <h2>Test: Chancen 🎲</h2>
+    <p class="hint">Sådan ser det ud når "Chancen" afgør en uafgjort/2-spiller-runde — ren visning, påvirker intet rigtigt spil.</p>
+    <div class="game-card" style="text-align:center;">
+      <div class="chance-badge">🎲 Chancen afgør det</div>
+      <div class="chance-reel" id="chanceReel">
+        ${demoMembers.map(m => `<div class="chance-chip" data-chance-id="${m.id}"><div class="avatar">${initials(m.name)}</div><div class="chance-chip-name">${escapeHtml(m.name)}</div></div>`).join('')}
+      </div>
+    </div>
+    <button class="sheet-btn ghost" id="chanceTestReplayBtn">🔁 Afspil igen</button>
+    <button class="sheet-btn ghost" id="chanceTestCloseBtn">Luk</button>
+  `, ()=>{
+    playChanceReveal(winner.id);
+    document.getElementById('chanceTestReplayBtn').onclick = ()=>{ closeSheet(); setTimeout(openChanceTestSheet, 230); };
+    document.getElementById('chanceTestCloseBtn').onclick = closeSheet;
   });
 }
 
@@ -1406,7 +1433,7 @@ function quiplashHtml(g, cur){
       ${cur.randomPick ? `
         <div class="chance-badge">🎲 Chancen afgør det</div>
         <div class="chance-reel" id="chanceReel">
-          ${Object.entries(cur.answers||{}).map(([id])=>{
+          ${(cur.chanceCandidates || Object.keys(cur.answers||{})).map(id=>{
             const m = state.members.find(x=>x.id===id);
             return `<div class="chance-chip" data-chance-id="${id}"><div class="avatar">${initials(m?m.name:'?')}</div><div class="chance-chip-name">${escapeHtml(m?m.name:'?')}</div></div>`;
           }).join('')}
