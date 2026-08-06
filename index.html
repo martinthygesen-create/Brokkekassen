@@ -183,7 +183,7 @@
   .wheel-lights{ position:absolute; inset:0; z-index:1; pointer-events:none; }
   .wheel-bulb{ position:absolute; width:7px; height:7px; margin:-3.5px 0 0 -3.5px; border-radius:50%; background:radial-gradient(circle at 35% 30%, #fff6d0, var(--coin) 60%, #b8860b); box-shadow:0 0 6px rgba(255,201,60,.75); animation:bulbTwinkle 1.6s ease-in-out infinite; }
   @keyframes bulbTwinkle{ 0%,100%{ opacity:1; } 50%{ opacity:.45; } }
-  .wheel-svg{ position:relative; z-index:2; width:100%; height:100%; display:block; filter:drop-shadow(0 6px 14px rgba(0,0,0,.5)); transform-origin:110px 110px; }
+  .wheel-svg{ position:relative; z-index:2; width:100%; height:100%; display:block; filter:drop-shadow(0 6px 14px rgba(0,0,0,.5)); transform-origin:50% 50%; }
   .wheel-slice-win{ filter:drop-shadow(0 0 5px rgba(255,201,60,.9)); }
   /* Chancens standard-visning ved uafgjort/2-spiller-skip: whack-a-mole,
      rent tilfældig elimination — ingen valg involveret, matcher hvad
@@ -192,17 +192,24 @@
      spillere selv VÆLGER et brok-ord, og der trækkes lod blandt de valg. */
   .mole-cabinet{ background:linear-gradient(160deg,#3d2b1f,#1a120b); border-radius:24px; padding:20px 14px 16px; box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #8a6b1f; position:relative; }
   .mole-cabinet.win{ box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #FFC93C, 0 0 24px rgba(255,201,60,.5); }
-  .mole-grid{ display:flex; flex-wrap:wrap; justify-content:center; gap:16px; padding:8px 4px; }
-  .mole-hole-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; gap:5px; width:96px; padding-top:30px; }
-  .mole-hole{ position:relative; width:86px; height:86px; border-radius:50%; background:radial-gradient(circle at 50% 30%, #4a3627, #1a120b); overflow:hidden; box-shadow:inset 0 4px 10px rgba(0,0,0,.6); }
-  .mole-hammer{ position:absolute; top:0; left:50%; font-size:36px; transform:translateX(-50%) rotate(-65deg) translateY(-8px); opacity:0; pointer-events:none; z-index:5; transform-origin:80% 90%; }
-  @keyframes hammerWhack{ 0%{ transform:translateX(-50%) rotate(-65deg) translateY(-8px); opacity:1; } 45%{ transform:translateX(-50%) rotate(18deg) translateY(26px); opacity:1; } 62%{ transform:translateX(-50%) rotate(12deg) translateY(21px); opacity:1; } 100%{ transform:translateX(-50%) rotate(-65deg) translateY(-8px); opacity:0; } }
+  .mole-grid{ display:flex; flex-wrap:wrap; justify-content:center; gap:14px; padding:8px 4px; }
+  .mole-hole-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; gap:5px; width:84px; padding-top:38px; }
+  .mole-hole{ position:relative; width:68px; height:68px; border-radius:50%; background:radial-gradient(circle at 50% 30%, #4a3627, #1a120b); overflow:hidden; box-shadow:inset 0 4px 10px rgba(0,0,0,.6); }
+  /* Håndbygget hammer (ikke emoji'en 🔨) — emoji-glyffer skalerer og
+     proportionerer forskelligt på tværs af telefoner/skrifttyper, hvilket
+     gjorde den svær at ramme rigtigt i størrelse. Hoved + skaft som to
+     simple div'er der roterer samlet giver fuld kontrol over proportionerne
+     og en tydeligere silhuet på en lille mobilskærm. */
+  .mole-hammer{ position:absolute; top:-14px; left:50%; width:52px; height:56px; margin-left:-26px; transform:rotate(-60deg); transform-origin:76% 86%; opacity:0; pointer-events:none; z-index:5; }
+  .mole-hammer-head{ position:absolute; top:0; left:6px; width:38px; height:22px; border-radius:6px; background:linear-gradient(160deg,#d99a5b,#8a5a28); box-shadow:0 2px 5px rgba(0,0,0,.45), inset 0 -3px 5px rgba(0,0,0,.3); }
+  .mole-hammer-handle{ position:absolute; top:16px; left:21px; width:9px; height:40px; border-radius:4px; background:linear-gradient(180deg,#8a5a30,#4a2c14); }
+  @keyframes hammerWhack{ 0%{ transform:rotate(-60deg); opacity:1; } 45%{ transform:rotate(24deg) translateY(24px); opacity:1; } 62%{ transform:rotate(16deg) translateY(19px); opacity:1; } 100%{ transform:rotate(-60deg); opacity:0; } }
   .mole-hammer.whacking{ animation:hammerWhack .5s cubic-bezier(.36,.07,.19,.97); }
-  .mole{ position:absolute; left:50%; bottom:-6px; width:62px; height:62px; transform:translate(-50%, 40px); transition:transform .28s cubic-bezier(.34,1.56,.64,1), filter .2s ease; }
-  .mole .avatar{ width:62px; height:62px; font-size:19px; }
-  .mole.mole-up{ transform:translate(-50%, -18px); }
+  .mole{ position:absolute; left:50%; bottom:-6px; width:48px; height:48px; transform:translate(-50%, 32px); transition:transform .28s cubic-bezier(.34,1.56,.64,1), filter .2s ease; }
+  .mole .avatar{ width:48px; height:48px; font-size:16px; }
+  .mole.mole-up{ transform:translate(-50%, -14px); }
   .mole.mole-down{ filter:grayscale(1) brightness(.5); }
-  @keyframes moleWinPop{ 0%{ transform:translate(-50%,-18px) scale(1); } 35%{ transform:translate(-50%,-25px) scale(1.15) rotate(-4deg); } 65%{ transform:translate(-50%,-18px) scale(1.05) rotate(4deg); } 100%{ transform:translate(-50%,-18px) scale(1) rotate(0deg); } }
+  @keyframes moleWinPop{ 0%{ transform:translate(-50%,-14px) scale(1); } 35%{ transform:translate(-50%,-20px) scale(1.15) rotate(-4deg); } 65%{ transform:translate(-50%,-14px) scale(1.05) rotate(4deg); } 100%{ transform:translate(-50%,-14px) scale(1) rotate(0deg); } }
   .mole.mole-win{ animation:moleWinPop .5s ease-out; }
   .mole-quote{ margin:12px 4px 0; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:16px; line-height:1.35; color:var(--cream); padding:12px 16px; background:rgba(255,201,60,0.14); border:1px solid rgba(255,201,60,0.35); border-radius:16px; opacity:0; transform:translateX(70px); }
   @keyframes moleQuoteSlide{ from{ opacity:0; transform:translateX(70px); } to{ opacity:1; transform:translateX(0); } }
@@ -372,7 +379,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-06-28';
+const BUILD_TAG = 'build-2026-08-06-29';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1534,18 +1541,21 @@ function buildWheelChanceHtml(prefix, candidates, winner, bannerText, revealed){
     const mid = i*sliceDeg + sliceDeg/2;
     const p = wheelPolarPoint(cx, cy, r*0.62, mid);
     // Kandidater med et eget `.label` (fx et brok-ord) viser den tekst,
-    // trunkeret så den kan være på en lille cirkel — ellers falder den
-    // tilbage til navne-initialer (den oprindelige brug: en person direkte).
+    // trunkeret så den er kort nok til at stå på ét stykke af hjulet —
+    // ellers falder den tilbage til navne-initialer (den oprindelige brug:
+    // en person direkte).
     // Ordet er selve pointen med at kigge på hjulet under en Casinobrok-
     // reveal (modsat initialer, som bare er dekorativ identifikation) — så
     // det skal være markant større/tydeligere, ikke bare passe ind i en
     // lille cirkel. Vigtigt på mobil, hvor hjulet i forvejen er lille.
     const text = c.label ? (c.label.length > 9 ? c.label.slice(0,8)+'…' : c.label) : initials(c.name);
-    const labelR = c.label ? 27 : 17;
     const fontSize = c.label ? 13.5 : 14;
+    // Ingen rund baggrundscirkel bag teksten længere (så den ikke ser ud
+    // som en malplaceret prik oven på hjulet) — kontrasten mod farve-
+    // stykkerne klares i stedet af et mørkt "omrids" via stroke bag selve
+    // teksten (paint-order tegner stroke FØR fill, så streget ligger bagved).
     return `<g transform="translate(${p.x.toFixed(2)},${p.y.toFixed(2)})">
-      <circle r="${labelR}" fill="rgba(5,32,36,0.55)"></circle>
-      <text text-anchor="middle" dominant-baseline="central" font-family="'Baloo 2',sans-serif" font-weight="800" font-size="${fontSize}" fill="#FFF7E8">${escapeHtml(text)}</text>
+      <text text-anchor="middle" dominant-baseline="central" font-family="'Baloo 2',sans-serif" font-weight="800" font-size="${fontSize}" fill="#FFF7E8" stroke="rgba(5,32,36,0.85)" stroke-width="4" stroke-linejoin="round" paint-order="stroke fill">${escapeHtml(text)}</text>
     </g>`;
   }).join('');
   return `
@@ -1645,7 +1655,7 @@ function buildMoleChanceHtml(prefix, candidates, winner, bannerText, winnerQuote
     const isWin = c.id === winner.id;
     return `
       <div class="mole-hole-wrap">
-        <div class="mole-hammer" data-hammer-id="${c.id}">🔨</div>
+        <div class="mole-hammer" data-hammer-id="${c.id}"><div class="mole-hammer-head"></div><div class="mole-hammer-handle"></div></div>
         <div class="mole-hole">
           <div class="mole ${isWin?'mole-up mole-win':'mole-down'}" data-mole-id="${c.id}" ${isWin?'data-winner="1"':''}><div class="avatar">${initials(c.name)}</div></div>
         </div>
