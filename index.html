@@ -192,18 +192,21 @@
      spillere selv VÆLGER et brok-ord, og der trækkes lod blandt de valg. */
   .mole-cabinet{ background:linear-gradient(160deg,#3d2b1f,#1a120b); border-radius:24px; padding:20px 14px 16px; box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #8a6b1f; position:relative; }
   .mole-cabinet.win{ box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #FFC93C, 0 0 24px rgba(255,201,60,.5); }
-  .mole-grid{ display:flex; flex-wrap:wrap; justify-content:center; gap:14px; padding:6px 4px; }
-  .mole-hole-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; gap:5px; width:72px; padding-top:22px; }
-  .mole-hole{ position:relative; width:64px; height:64px; border-radius:50%; background:radial-gradient(circle at 50% 30%, #4a3627, #1a120b); overflow:hidden; box-shadow:inset 0 4px 10px rgba(0,0,0,.6); }
-  .mole-hammer{ position:absolute; top:0; left:50%; font-size:26px; transform:translateX(-50%) rotate(-65deg) translateY(-6px); opacity:0; pointer-events:none; z-index:5; transform-origin:80% 90%; }
-  @keyframes hammerWhack{ 0%{ transform:translateX(-50%) rotate(-65deg) translateY(-6px); opacity:1; } 45%{ transform:translateX(-50%) rotate(18deg) translateY(20px); opacity:1; } 62%{ transform:translateX(-50%) rotate(12deg) translateY(16px); opacity:1; } 100%{ transform:translateX(-50%) rotate(-65deg) translateY(-6px); opacity:0; } }
+  .mole-grid{ display:flex; flex-wrap:wrap; justify-content:center; gap:16px; padding:8px 4px; }
+  .mole-hole-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; gap:5px; width:96px; padding-top:30px; }
+  .mole-hole{ position:relative; width:86px; height:86px; border-radius:50%; background:radial-gradient(circle at 50% 30%, #4a3627, #1a120b); overflow:hidden; box-shadow:inset 0 4px 10px rgba(0,0,0,.6); }
+  .mole-hammer{ position:absolute; top:0; left:50%; font-size:36px; transform:translateX(-50%) rotate(-65deg) translateY(-8px); opacity:0; pointer-events:none; z-index:5; transform-origin:80% 90%; }
+  @keyframes hammerWhack{ 0%{ transform:translateX(-50%) rotate(-65deg) translateY(-8px); opacity:1; } 45%{ transform:translateX(-50%) rotate(18deg) translateY(26px); opacity:1; } 62%{ transform:translateX(-50%) rotate(12deg) translateY(21px); opacity:1; } 100%{ transform:translateX(-50%) rotate(-65deg) translateY(-8px); opacity:0; } }
   .mole-hammer.whacking{ animation:hammerWhack .5s cubic-bezier(.36,.07,.19,.97); }
-  .mole{ position:absolute; left:50%; bottom:-6px; width:46px; height:46px; transform:translate(-50%, 30px); transition:transform .28s cubic-bezier(.34,1.56,.64,1), filter .2s ease; }
-  .mole .avatar{ width:46px; height:46px; font-size:15px; }
-  .mole.mole-up{ transform:translate(-50%, -14px); }
+  .mole{ position:absolute; left:50%; bottom:-6px; width:62px; height:62px; transform:translate(-50%, 40px); transition:transform .28s cubic-bezier(.34,1.56,.64,1), filter .2s ease; }
+  .mole .avatar{ width:62px; height:62px; font-size:19px; }
+  .mole.mole-up{ transform:translate(-50%, -18px); }
   .mole.mole-down{ filter:grayscale(1) brightness(.5); }
-  @keyframes moleWinPop{ 0%{ transform:translate(-50%,-14px) scale(1); } 35%{ transform:translate(-50%,-20px) scale(1.15) rotate(-4deg); } 65%{ transform:translate(-50%,-14px) scale(1.05) rotate(4deg); } 100%{ transform:translate(-50%,-14px) scale(1) rotate(0deg); } }
+  @keyframes moleWinPop{ 0%{ transform:translate(-50%,-18px) scale(1); } 35%{ transform:translate(-50%,-25px) scale(1.15) rotate(-4deg); } 65%{ transform:translate(-50%,-18px) scale(1.05) rotate(4deg); } 100%{ transform:translate(-50%,-18px) scale(1) rotate(0deg); } }
   .mole.mole-win{ animation:moleWinPop .5s ease-out; }
+  .mole-quote{ margin:12px 4px 0; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:16px; line-height:1.35; color:var(--cream); padding:12px 16px; background:rgba(255,201,60,0.14); border:1px solid rgba(255,201,60,0.35); border-radius:16px; opacity:0; transform:translateX(70px); }
+  @keyframes moleQuoteSlide{ from{ opacity:0; transform:translateX(70px); } to{ opacity:1; transform:translateX(0); } }
+  .mole-quote.show{ animation:moleQuoteSlide .45s cubic-bezier(.34,1.56,.64,1) forwards; }
 
   main{ flex:1; padding:0 16px 130px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
 
@@ -358,7 +361,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-06-25';
+const BUILD_TAG = 'build-2026-08-06-26';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1576,7 +1579,7 @@ function playWheelChanceReveal(prefix){
 // undervejs. Samme "landet som default"-mønster som hjul/spillemaskine:
 // markup'et viser allerede den endelige tilstand (taberne nede, vinderen
 // oppe og fejrer), så et almindeligt gen-render ikke nulstiller visningen.
-function buildMoleChanceHtml(prefix, candidates, winner, bannerText){
+function buildMoleChanceHtml(prefix, candidates, winner, bannerText, winnerQuote){
   if(!winner || !candidates.length) return '';
   // Ren tilfældighed, ingen tekst — kun avatar-bogstavet. En hammer smadrer
   // hver taber-mole ned (se .mole-hammer + playMoleChanceReveal) i stedet
@@ -1597,6 +1600,7 @@ function buildMoleChanceHtml(prefix, candidates, winner, bannerText){
       <div class="mole-cabinet win" id="${prefix}Cabinet">
         <div class="mole-grid" id="${prefix}MoleGrid">${holes}</div>
         <div class="slot-winner-name" id="${prefix}WinnerName" style="opacity:1;">${escapeHtml(winner.name)} vandt! 🍀</div>
+        ${winnerQuote ? `<div class="mole-quote" id="${prefix}Quote">"${escapeHtml(winnerQuote)}"</div>` : ''}
       </div>
     </div>
   `;
@@ -1636,6 +1640,8 @@ function playMoleChanceReveal(prefix){
       if(typeof gsap !== 'undefined') gsap.fromTo(nameEl, {opacity:0, y:6}, {opacity:1, y:0, duration:.4, ease:'power2.out'});
       else nameEl.style.opacity = '1';
     }
+    const quoteEl = document.getElementById(prefix+'Quote');
+    if(quoteEl) setTimeout(()=>quoteEl.classList.add('show'), 250);
     fireConfetti(cabinet);
     revealAnimationLock = false; // gen-render må nu godt køre igen
   };
@@ -1846,6 +1852,7 @@ function quiplashHtml(g, cur){
     ...Object.entries(cur.answers||{}).map(([id,text])=>({id, text, name:(state.members.find(m=>m.id===id)||{}).name})),
     ...(cur.decoys||[]).map(d=>({id:d.id, text:d.text, name:null})),
   ];
+  const winnerId = (cur.winnerIds||[])[0];
   return `
     <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
     <div class="game-card" id="gameCard" style="text-align:center;">
@@ -1853,15 +1860,15 @@ function quiplashHtml(g, cur){
       ${cur.randomPick ? buildMoleChanceHtml('chance',
           (cur.chanceCandidates || Object.keys(cur.answers||{})).map(id=>{
             const mm = state.members.find(x=>x.id===id);
-            return mm ? { id: mm.id, name: mm.name, label: (cur.answers||{})[id] } : null;
+            return mm ? { id: mm.id, name: mm.name } : null;
           }).filter(Boolean),
-          state.members.find(m=>m.id===(cur.winnerIds||[])[0]),
-          '🎲 CHANCEN AFGØR DET'
-        ) : ''}
-      ${allEntries.map(({id,text,name})=>{
+          state.members.find(m=>m.id===winnerId),
+          '🎲 CHANCEN AFGØR DET',
+          !decoyWon ? (cur.answers||{})[winnerId] : ''
+        ) : allEntries.map(({id,text,name})=>{
         const won = (cur.winnerIds||[]).includes(id);
         const isDecoy = !name;
-        return `<div class="feed-item${won && cur.randomPick ? ' quip-slot-win' : ''}" style="${won?'border-color:var(--coin); background:rgba(255,201,60,0.16);':''}">
+        return `<div class="feed-item" style="${won?'border-color:var(--coin); background:rgba(255,201,60,0.16);':''}">
           <div class="avatar">${isDecoy?'🎭':initials(name)}</div>
           <div class="feed-body"><div class="feed-name">${isDecoy?'Opdigtet svar — ingen skrev det':escapeHtml(name)} ${won?'🏆':''}</div><div class="feed-msg">"${escapeHtml(text)}"</div></div>
         </div>`;
