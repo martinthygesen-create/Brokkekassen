@@ -173,6 +173,21 @@
   .wheel-wrap{ position:relative; width:200px; height:200px; margin:8px auto 4px; }
   .wheel-svg{ width:100%; height:100%; display:block; filter:drop-shadow(0 6px 14px rgba(0,0,0,.5)); transform-box:fill-box; transform-origin:50% 50%; }
   .wheel-slice-win{ filter:drop-shadow(0 0 5px rgba(255,201,60,.9)); }
+  /* Chancens standard-visning ved uafgjort/2-spiller-skip: whack-a-mole,
+     rent tilfældig elimination — ingen valg involveret, matcher hvad
+     Chancen faktisk ER lige nu (se buildMoleChanceHtml/playMoleChanceReveal).
+     Hjulet (ovenfor) er i stedet reserveret til en fremtidig funktion hvor
+     spillere selv VÆLGER et brok-ord, og der trækkes lod blandt de valg. */
+  .mole-cabinet{ background:linear-gradient(160deg,#3d2b1f,#1a120b); border-radius:24px; padding:20px 14px 16px; box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #8a6b1f; position:relative; }
+  .mole-cabinet.win{ box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #FFC93C, 0 0 24px rgba(255,201,60,.5); }
+  .mole-grid{ display:flex; flex-wrap:wrap; justify-content:center; gap:14px; padding:6px 4px; }
+  .mole-hole{ position:relative; width:64px; height:64px; border-radius:50%; background:radial-gradient(circle at 50% 30%, #4a3627, #1a120b); overflow:hidden; box-shadow:inset 0 4px 10px rgba(0,0,0,.6); }
+  .mole{ position:absolute; left:50%; bottom:-6px; width:46px; height:46px; transform:translate(-50%, 30px); transition:transform .28s cubic-bezier(.34,1.56,.64,1), filter .2s ease; }
+  .mole .avatar{ width:46px; height:46px; font-size:15px; }
+  .mole.mole-up{ transform:translate(-50%, -14px); }
+  .mole.mole-down{ filter:grayscale(1) brightness(.5); }
+  @keyframes moleWinPop{ 0%{ transform:translate(-50%,-14px) scale(1); } 35%{ transform:translate(-50%,-20px) scale(1.15) rotate(-4deg); } 65%{ transform:translate(-50%,-14px) scale(1.05) rotate(4deg); } 100%{ transform:translate(-50%,-14px) scale(1) rotate(0deg); } }
+  .mole.mole-win{ animation:moleWinPop .5s ease-out; }
 
   main{ flex:1; padding:0 16px 130px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
 
@@ -327,7 +342,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-06-17';
+const BUILD_TAG = 'build-2026-08-06-18';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1070,11 +1085,11 @@ function openChanceTestSheet(){
   openSheet(`
     <h2>Test: Chancen 🎲</h2>
     <p class="hint">Sådan ser det ud når "Chancen" afgør en uafgjort/2-spiller-runde — ren visning, påvirker intet rigtigt spil.</p>
-    ${buildWheelChanceHtml('chance', demoMembers, winner, '🎲 CHANCEN AFGØR DET')}
+    ${buildMoleChanceHtml('chance', demoMembers, winner, '🎲 CHANCEN AFGØR DET')}
     <button class="sheet-btn ghost" id="chanceTestReplayBtn" style="margin-top:14px;">🔁 Afspil igen</button>
     <button class="sheet-btn ghost" id="chanceTestCloseBtn">Luk</button>
   `, ()=>{
-    playWheelChanceReveal('chance');
+    playMoleChanceReveal('chance');
     document.getElementById('chanceTestReplayBtn').onclick = ()=>{ closeSheet(); setTimeout(openChanceTestSheet, 230); };
     document.getElementById('chanceTestCloseBtn').onclick = closeSheet;
   });
@@ -1256,6 +1271,9 @@ function renderGameScreen(){
   }
   celebrateGameRound(g);
   if(isNewGamePhase && g.current && g.current.type === 'quiplash' && g.current.phase === 'results' && g.current.randomPick){
+    playMoleChanceReveal('chance');
+  }
+  if(isNewGamePhase && g.current && g.current.type === 'casinobrok' && g.current.phase === 'results'){
     playWheelChanceReveal('chance');
   }
 }
@@ -1369,9 +1387,15 @@ function buildWheelChanceHtml(prefix, candidates, winner, bannerText){
   const labelsHtml = candidates.map((c,i)=>{
     const mid = i*sliceDeg + sliceDeg/2;
     const p = wheelPolarPoint(cx, cy, r*0.62, mid);
+    // Kandidater med et eget `.label` (fx et brok-ord) viser den tekst,
+    // trunkeret så den kan være på en lille cirkel — ellers falder den
+    // tilbage til navne-initialer (den oprindelige brug: en person direkte).
+    const text = c.label ? (c.label.length > 9 ? c.label.slice(0,8)+'…' : c.label) : initials(c.name);
+    const labelR = c.label ? 20 : 17;
+    const fontSize = c.label ? 10.5 : 14;
     return `<g transform="translate(${p.x.toFixed(2)},${p.y.toFixed(2)})">
-      <circle r="17" fill="rgba(5,32,36,0.55)"></circle>
-      <text text-anchor="middle" dominant-baseline="central" font-family="'Baloo 2',sans-serif" font-weight="800" font-size="14" fill="#FFF7E8">${escapeHtml(initials(c.name))}</text>
+      <circle r="${labelR}" fill="rgba(5,32,36,0.55)"></circle>
+      <text text-anchor="middle" dominant-baseline="central" font-family="'Baloo 2',sans-serif" font-weight="800" font-size="${fontSize}" fill="#FFF7E8">${escapeHtml(text)}</text>
     </g>`;
   }).join('');
   return `
@@ -1429,6 +1453,66 @@ function playWheelChanceReveal(prefix){
   }
 }
 
+// Chancens standard-visning ved uafgjort/2-spiller-skip: whack-a-mole. Ren
+// tilfældig elimination, ingen valg involveret — matcher hvad Chancen
+// FAKTISK er lige nu (se CSS-kommentaren ovenfor). Vinderens muldvarp er
+// markeret med data-winner, så JS'en kan finde den uanset klasse-ændringer
+// undervejs. Samme "landet som default"-mønster som hjul/spillemaskine:
+// markup'et viser allerede den endelige tilstand (taberne nede, vinderen
+// oppe og fejrer), så et almindeligt gen-render ikke nulstiller visningen.
+function buildMoleChanceHtml(prefix, candidates, winner, bannerText){
+  if(!winner || !candidates.length) return '';
+  const holes = candidates.map(c=>{
+    const isWin = c.id === winner.id;
+    return `<div class="mole-hole"><div class="mole ${isWin?'mole-up mole-win':'mole-down'}" data-mole-id="${c.id}" ${isWin?'data-winner="1"':''}><div class="avatar">${initials(c.name)}</div></div></div>`;
+  }).join('');
+  return `
+    <div style="text-align:center;">
+      <div class="slot-banner">${bannerText}</div>
+      <div class="mole-cabinet win" id="${prefix}Cabinet">
+        <div class="mole-grid" id="${prefix}MoleGrid">${holes}</div>
+        <div class="slot-winner-name" id="${prefix}WinnerName" style="opacity:1;">${escapeHtml(winner.name)} vandt! 🍀</div>
+      </div>
+    </div>
+  `;
+}
+
+// Spiller elimination-animationen: alle popper op, så bankes taberne ned
+// én ad gangen i tilfældig rækkefølge (rent visuel spænding — vinderen er
+// allerede afgjort server-side), til kun vinderens muldvarp står tilbage
+// og fejrer. Kører kun én gang pr. ny resultat-fase.
+function playMoleChanceReveal(prefix){
+  const cabinet = document.getElementById(prefix+'Cabinet');
+  if(!cabinet) return;
+  cabinet.classList.remove('win');
+  const nameEl = document.getElementById(prefix+'WinnerName');
+  if(nameEl) nameEl.style.opacity = '0';
+  const moles = [...cabinet.querySelectorAll('.mole')];
+  if(!moles.length) return;
+  const winnerMole = moles.find(m => m.dataset.winner === '1');
+  const losers = moles.filter(m => m.dataset.winner !== '1');
+  moles.forEach(m => { m.classList.remove('mole-down', 'mole-win'); m.classList.add('mole-up'); });
+  const order = losers.slice().sort(() => Math.random() - 0.5);
+  let i = 0;
+  const whackNext = () => {
+    if(i < order.length){
+      order[i].classList.remove('mole-up');
+      order[i].classList.add('mole-down');
+      i++;
+      setTimeout(whackNext, 260 + Math.random()*160);
+    }else{
+      cabinet.classList.add('win');
+      if(winnerMole) winnerMole.classList.add('mole-win');
+      if(nameEl){
+        if(typeof gsap !== 'undefined') gsap.fromTo(nameEl, {opacity:0, y:6}, {opacity:1, y:0, duration:.4, ease:'power2.out'});
+        else nameEl.style.opacity = '1';
+      }
+      fireConfetti(cabinet);
+    }
+  };
+  setTimeout(whackNext, 500);
+}
+
 function gameBodyHtml(g){
   if(!g.active || !g.current) return gameLobbyHtml();
   const cur = g.current;
@@ -1443,6 +1527,7 @@ function gameBodyHtml(g){
   if(cur.type === 'truefalse') return truefalseHtml(g, cur);
   if(cur.type === 'trivia') return triviaHtml(g, cur);
   if(cur.type === 'guessbrok') return guessBrokHtml(g, cur);
+  if(cur.type === 'casinobrok') return casinobrokHtml(g, cur);
   return '';
 }
 
@@ -1505,6 +1590,7 @@ function gameLobbyHtml(){
     ['⚖️', 'Sandt/falsk: én skriver et udsagn om en anden — resten gætter'],
     ['🎯', 'Hvilket brok? Én skriver et RIGTIGT brok blandt 3 opdigtede — resten gætter hvilket der er ægte'],
     ['🔍', 'Trivia om jeres egen brok-historik (og lidt verdens-brok ind imellem)'],
+    ['🎰', 'Casinobrok: alle skriver ét brok-ord, og hjulet trækker lod om hvis ord der vinder'],
     ['🏆', 'Point tælles på tværs af alle runder — flest point vinder'],
   ];
   if(gameInstructionsOpen === null) gameInstructionsOpen = !localStorage.getItem('bk_game_seen_instructions');
@@ -1589,7 +1675,7 @@ function quiplashHtml(g, cur){
     <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
     <div class="game-card" id="gameCard" style="text-align:center;">
       <p style="margin:0 0 10px;">${escapeHtml(cur.prompt)}</p>
-      ${cur.randomPick ? buildWheelChanceHtml('chance',
+      ${cur.randomPick ? buildMoleChanceHtml('chance',
           (cur.chanceCandidates || Object.keys(cur.answers||{})).map(id=>state.members.find(m=>m.id===id)).filter(Boolean),
           state.members.find(m=>m.id===(cur.winnerIds||[])[0]),
           '🎲 CHANCEN AFGØR DET'
@@ -1784,6 +1870,51 @@ function triviaHtml(g, cur){
   `;
 }
 
+function casinobrokHtml(g, cur){
+  if(cur.phase === 'write'){
+    const mine = profile && cur.words[profile.memberId];
+    const written = Object.keys(cur.words||{}).length;
+    return `
+      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · 🎰 Casinobrok</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
+      <div class="game-card" id="gameCard">
+        <label class="field-label" style="color:rgba(255,247,232,0.7);">Skriv ét brok-ord — bare ét ord, ikke en hel sætning. Alle ord havner på hjulet, og det trukne ords forfatter vinder runden.</label>
+        <p class="hint" style="margin:0 0 10px; color:rgba(255,247,232,0.55);">F.eks.: <i>"regnvejr"</i>, <i>"morgenmaden"</i>, <i>"snorken"</i> — I må gerne skrive det samme ord, det er stadig hver jeres eget lod.</p>
+        <input type="text" id="casinoWordInput" maxlength="24" placeholder="Dit brok-ord..." value="${mine?escapeHtml(mine):''}">
+        <button class="game-btn" id="casinoSubmitBtn" style="margin-top:12px;">🎰 Send ordet</button>
+      </div>
+      ${gameProgressHtml(written, g.players.length, 'har skrevet')}
+      ${mine ? `<div class="waiting-pill"><span class="waiting-dot"></span> Venter på de andre...</div>` : ''}
+      ${complaintBlockHtml(g, cur)}
+    `;
+  }
+  if(cur.phase === 'skipped'){
+    return `
+      <div class="game-badge">Runde ${g.round}/${g.totalRounds} · 🎰 Casinobrok</div>
+      <div class="empty-state"><span class="emoji">😴</span><b>Ingen nåede at skrive et ord</b>Ingen sag denne gang — vi går videre til næste spørgsmål.</div>
+      ${gameReadyHtml(g, cur)}
+    `;
+  }
+  const candidates = Object.entries(cur.words||{}).map(([id,word])=>{
+    const m = state.members.find(x=>x.id===id);
+    return { id, name: m?m.name:'?', label: word };
+  });
+  const winner = candidates.find(c=>c.id===cur.winnerId);
+  return `
+    <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
+    <div class="game-card" id="gameCard" style="text-align:center;">
+      ${buildWheelChanceHtml('chance', candidates, winner, '🎰 CASINOBROK TRÆKKER LOD')}
+      ${candidates.map(c=>{
+        const won = c.id === cur.winnerId;
+        return `<div class="feed-item${won?' quip-slot-win':''}" style="${won?'border-color:var(--coin); background:rgba(255,201,60,0.16);':''}">
+          <div class="avatar">${initials(c.name)}</div>
+          <div class="feed-body"><div class="feed-name">${escapeHtml(c.name)} ${won?'🏆':''}</div><div class="feed-msg">"${escapeHtml(c.label)}"</div></div>
+        </div>`;
+      }).join('')}
+    </div>
+    ${gameReadyHtml(g, cur)}
+  `;
+}
+
 function gameOverHtml(g, cur){
   const ranked = state.members.filter(m=>g.players.includes(m.id)).sort((a,b)=>(cur.scores[b.id]||0)-(cur.scores[a.id]||0));
   const losers = (cur.loserIds||[]).map(id=>state.members.find(m=>m.id===id)).filter(Boolean);
@@ -1914,6 +2045,15 @@ function bindGameHandlers(g){
     document.querySelectorAll('[data-choice]').forEach(el=>{
       el.onclick = ()=> gameApi('submit', { payload: { choiceIndex: parseInt(el.dataset.choice,10) } });
     });
+  }
+  if(cur.type === 'casinobrok' && cur.phase === 'write'){
+    const btn = document.getElementById('casinoSubmitBtn');
+    if(btn) btn.onclick = ()=>{
+      const word = document.getElementById('casinoWordInput').value.trim();
+      if(!word) return;
+      lockSubmitBtn(btn, 'Sender...');
+      gameApi('submit', { payload: { word } });
+    };
   }
 }
 

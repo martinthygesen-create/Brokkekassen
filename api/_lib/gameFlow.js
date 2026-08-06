@@ -55,6 +55,9 @@ function getPendingIds(cur, players) {
   if (cur.type === 'guessbrok' && cur.phase === 'guess') {
     return players.filter(id => id !== cur.authorId).filter(id => !(cur.guesses && cur.guesses[id] !== undefined));
   }
+  if (cur.type === 'casinobrok' && cur.phase === 'write') {
+    return players.filter(id => !(cur.words && cur.words[id] !== undefined));
+  }
   return [];
 }
 
@@ -151,6 +154,19 @@ function resolveTriviaAnswer(state, cur) {
   cur.readyIds = [];
 }
 
+// "Casinobrok" — trækker lod (helt tilfældigt, ét lod pr. indsendt ord,
+// uanset om flere spillere skrev samme ordtekst) blandt de indsendte ord og
+// kårer forfatteren bag det trukne ord som rundens vinder.
+function resolveCasinobrok(state, cur) {
+  const ids = Object.keys(cur.words || {});
+  const winnerId = ids.length ? ids[Math.floor(Math.random() * ids.length)] : null;
+  if (winnerId) state.game.scores[winnerId] = (state.game.scores[winnerId] || 0) + ROUND_POINTS;
+  cur.phase = 'results';
+  stampPhase(cur);
+  cur.winnerId = winnerId;
+  cur.readyIds = [];
+}
+
 function goToNextRoundOrEnd(state, players) {
   if (state.game.round >= state.game.totalRounds) endGame(state);
   else { beginRound(state, state.members.filter(m => players.includes(m.id))); stampPhase(state.game.current); }
@@ -214,6 +230,17 @@ function forceResolveCurrentPhase(state, cur, players) {
     stampPhase(cur);
   } else if (cur.type === 'guessbrok' && cur.phase === 'guess') {
     resolveGuessBrok(state, cur);
+  } else if (cur.type === 'casinobrok' && cur.phase === 'write') {
+    // Uden mindst ét indsendt ord er der intet lod at trække — spring
+    // runden over i stedet for at hænge. Ellers trækkes der bare blandt
+    // dem der NÅEDE at skrive.
+    if (Object.keys(cur.words).length < 1) {
+      cur.phase = 'skipped';
+      cur.readyIds = [];
+      stampPhase(cur);
+    } else {
+      resolveCasinobrok(state, cur);
+    }
   } else if (cur.phase === 'results' || cur.phase === 'skipped') {
     goToNextRoundOrEnd(state, players);
   }
@@ -252,6 +279,7 @@ module.exports = {
   resolveTrueFalseGuess,
   resolveGuessBrok,
   resolveTriviaAnswer,
+  resolveCasinobrok,
   goToNextRoundOrEnd,
   endGame,
   expireGamePhaseIfDue,

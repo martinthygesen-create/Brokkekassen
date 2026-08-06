@@ -259,7 +259,7 @@ function pickDecoyBroks(state, n) {
 // medlemmer der reelt er med i DENNE runde af spillet (kan være en delmængde
 // af hele rummet) — trivia-spørgsmål handler stadig om hele rummets rigtige
 // brok-historik, uanset hvem der spiller med lige nu.
-const ROUND_TYPES = ['quiplash', 'truefalse', 'trivia', 'guessbrok'];
+const ROUND_TYPES = ['quiplash', 'truefalse', 'trivia', 'guessbrok', 'casinobrok'];
 
 function beginRound(state, players) {
   state.game.round += 1;
@@ -304,7 +304,7 @@ function beginRound(state, players) {
     // uden meget historik endnu.
     const q = Math.random() < 0.35 ? pickWorldTrivia(state) : generateTriviaQuestion(state);
     state.game.current = { type, phase: 'answer', ...q, choices: {} };
-  } else {
+  } else if (type === 'guessbrok') {
     // "Hvilket brok ville {author} sige?" — forfatteren skriver ét RIGTIGT
     // brok, som blandes sammen med 3 opdigtede forslag. Resten gætter hvilket
     // af de 4 der er det ægte. Fungerer lige så godt med kun 2 spillere som
@@ -313,6 +313,14 @@ function beginRound(state, players) {
     // uden at kræve et vist antal spillere.
     const author = pickAuthor(state, players, 'guessBrokAuthorPickCounts');
     state.game.current = { type, phase: 'write', authorId: author.id, statement: null, options: null, correctIndex: null, guesses: {} };
+  } else {
+    // "Casinobrok" — ALLE spillere skriver hvert sit ene brok-ord (ikke en
+    // hel sætning), og der trækkes bagefter lod blandt de indsendte ord på
+    // hjulet. Vinderen er den der skrev det trukne ord — flere spillere kan
+    // sagtens skrive samme ord, hver indsendelse er sit eget lod uanset
+    // tekst, så det er reelt en tilfældig person der vindes over, bare
+    // camoufleret som et ord-lod i stedet for en direkte navnetrækning.
+    state.game.current = { type, phase: 'write', words: {} };
   }
 }
 

@@ -10,6 +10,7 @@ const {
   resolveTrueFalseGuess,
   resolveGuessBrok,
   resolveTriviaAnswer,
+  resolveCasinobrok,
   goToNextRoundOrEnd,
   expireGamePhaseIfDue,
 } = require('./_lib/gameFlow');
@@ -121,6 +122,11 @@ module.exports = async (req, res) => {
           if (actorId === cur.authorId) throw new ApiError(403, 'du kan ikke gætte på dit eget brok');
           if (Number.isInteger(payload.choiceIndex)) cur.guesses[actorId] = payload.choiceIndex;
           if (Object.keys(cur.guesses).length >= players.length - 1) resolveGuessBrok(state, cur);
+        } else if (cur.type === 'casinobrok' && cur.phase === 'write') {
+          const word = (payload.word || '').toString().trim().slice(0, 24);
+          if (!word) throw new ApiError(400, 'skriv et brok-ord');
+          cur.words[actorId] = word;
+          if (Object.keys(cur.words).length >= players.length) resolveCasinobrok(state, cur);
         } else {
           throw new ApiError(400, 'ugyldig handling lige nu');
         }
