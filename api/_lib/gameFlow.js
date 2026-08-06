@@ -1,0 +1,258 @@
+const { uid } = require('./store');
+const { beginRound } = require('./game');
+
+const ROUND_POINTS = 2;
+
+// Hvor lang tid en fase mindst skal have kørt før en spiller overhovedet kan
+// brokke sig over en langsom medspiller — man skal have lidt is i maven,
+// ikke bare kunne rushe folk med det samme.
+const MIN_COMPLAIN_AGE_MS = 30000;
+// Hvis INGEN brokker sig, gør Brokspillet det selv efter denne stilhed —
+// den reelle "nødbremse", men stadig kun som et synligt brok, aldrig et
+// tavst spring.
+const BROKSPILLET_AUTO_MS = 75000;
+// Når nogen (menneske eller Brokspillet) har brokket sig, hvor lang tid har
+// den langsomme så tilbage før runden tvinges videre uden dem.
+const COMPLAINT_COUNTDOWN_MS = 12000;
+
+// Sætter et tidsstempel på den fase der lige er startet, og nulstiller en
+// evt. brok fra den forrige fase — så en gammel brok-nedtælling aldrig kan
+// nå at ramme en helt ny fase.
+function stampPhase(cur) {
+  cur.phaseStartedAt = Date.now();
+  cur.complaint = null;
+  return cur;
+}
+
+// Hvem mangler stadig at gøre noget for at den aktuelle fase kan gå videre?
+// Bruges både til at afgøre om der er nogen at brokke sig over, og af
+// expireGamePhaseIfDue til at vide hvem Brokspillets automatiske brok skal
+// pege på.
+function getPendingIds(cur, players) {
+  if (!cur) return [];
+  if (cur.phase === 'results' || cur.phase === 'skipped') {
+    return players.filter(id => !(cur.readyIds || []).includes(id));
+  }
+  if (cur.type === 'quiplash' && cur.phase === 'answer') {
+    return players.filter(id => !(cur.answers && cur.answers[id] !== undefined));
+  }
+  if (cur.type === 'quiplash' && cur.phase === 'vote') {
+    return players.filter(id => !(cur.votes && cur.votes[id] !== undefined));
+  }
+  if (cur.type === 'truefalse' && cur.phase === 'write') {
+    return cur.authorId ? [cur.authorId] : [];
+  }
+  if (cur.type === 'truefalse' && cur.phase === 'guess') {
+    const eligible = cur.authorId ? players.filter(id => id !== cur.authorId) : players;
+    return eligible.filter(id => !(cur.guesses && cur.guesses[id] !== undefined));
+  }
+  if (cur.type === 'trivia' && cur.phase === 'answer') {
+    return players.filter(id => !(cur.choices && cur.choices[id] !== undefined));
+  }
+  if (cur.type === 'guessbrok' && cur.phase === 'write') {
+    return cur.authorId ? [cur.authorId] : [];
+  }
+  if (cur.type === 'guessbrok' && cur.phase === 'guess') {
+    return players.filter(id => id !== cur.authorId).filter(id => !(cur.guesses && cur.guesses[id] !== undefined));
+  }
+  return [];
+}
+
+// Ved uafgjort stemning (2+ svar med samme antal stemmer) afgør "Chancen"
+// det i stedet for at dele sejren mellem alle tied kandidater — gælder
+// uanset antal spillere, ikke kun 2-spiller-tilfældet. cur.chanceCandidates
+// holder styr på HVEM der reelt var i spil for den tilfældige udvælgelse,
+// så klienten kan vise en reel med præcis de kandidater (fx kun de 2 der
+// var lige om det ud af 4 spillere), ikke alle der svarede.
+function resolveQuiplashVote(state, cur) {
+  const tally = {};
+  Object.values(cur.votes).forEach(id => (tally[id] = (tally[id] || 0) + 1));
+  const maxVotes = Math.max(0, ...Object.values(tally));
+  const tiedIds = maxVotes > 0 ? Object.keys(tally).filter(id => tally[id] === maxVotes) : [];
+  cur.phase = 'results';
+  stampPhase(cur);
+  cur.readyIds = [];
+  if (tiedIds.length > 1) {
+    const winnerId = tiedIds[Math.floor(Math.random() * tiedIds.length)];
+    state.game.scores[winnerId] = (state.game.scores[winnerId] || 0) + ROUND_POINTS;
+    cur.winnerIds = [winnerId];
+    cur.randomPick = true;
+    cur.chanceCandidates = tiedIds;
+  } else {
+    tiedIds.forEach(id => { state.game.scores[id] = (state.game.scores[id] || 0) + ROUND_POINTS; });
+    cur.winnerIds = tiedIds;
+  }
+}
+
+// Med kun 2 spillere giver afstemning ingen mening — den ENESTE mulige
+// stemme er på modpartens svar, så begge stemmer på den anden og det
+// bliver en tvungen uafgjort hver eneste gang (og lader man dem stemme på
+// sig selv i stedet, stemmer begge rationelt på sig selv, samme uafgjorte
+// resultat). Løsningen er at springe afstemningen helt over ved præcis 2
+// spillere og i stedet lade "Chancen" kåre en vinder direkte.
+function resolveQuiplashRandom(state, cur) {
+  const ids = Object.keys(cur.answers || {});
+  const winnerId = ids.length ? ids[Math.floor(Math.random() * ids.length)] : null;
+  const winnerIds = winnerId ? [winnerId] : [];
+  winnerIds.forEach(id => { state.game.scores[id] = (state.game.scores[id] || 0) + ROUND_POINTS; });
+  cur.phase = 'results';
+  stampPhase(cur);
+  cur.winnerIds = winnerIds;
+  cur.readyIds = [];
+  cur.votes = {};
+  cur.randomPick = true;
+  cur.chanceCandidates = ids;
+}
+
+// Point-fordeling: gæt rigtigt = 1 point. Narrer forfatteren FLERTALLET af
+// gætterne = 1 point til forfatteren. Simpelt og loftbelagt, så det ikke kan
+// løbe løbsk hvis man narrer alle på én gang.
+function resolveTrueFalseGuess(state, cur) {
+  const correctGuessers = Object.keys(cur.guesses).filter(id => cur.guesses[id] === cur.isTrue);
+  const fooledGuessers = Object.keys(cur.guesses).filter(id => cur.guesses[id] !== cur.isTrue);
+  const totalGuessers = correctGuessers.length + fooledGuessers.length;
+  correctGuessers.forEach(id => { state.game.scores[id] = (state.game.scores[id] || 0) + 1; });
+  const authorWon = totalGuessers > 0 && fooledGuessers.length > totalGuessers / 2;
+  if (authorWon && state.game.scores[cur.authorId] !== undefined) {
+    state.game.scores[cur.authorId] += 1;
+  }
+  cur.phase = 'results';
+  stampPhase(cur);
+  cur.correctGuessers = correctGuessers;
+  cur.authorWon = authorWon;
+  cur.readyIds = [];
+}
+
+// Point-fordeling for "Hvilket brok ville {author} sige?": gæt rigtigt
+// (find forfatterens ægte brok blandt de opdigtede) = 1 point. Hvis INGEN
+// finder det ægte, får forfatteren en bonus for at have skrevet et
+// overbevisende opdigtet-agtigt rigtigt brok.
+function resolveGuessBrok(state, cur) {
+  const correctGuessers = Object.keys(cur.guesses).filter(id => cur.guesses[id] === cur.correctIndex);
+  const totalGuessers = Object.keys(cur.guesses).length;
+  correctGuessers.forEach(id => { state.game.scores[id] = (state.game.scores[id] || 0) + 1; });
+  const authorWon = totalGuessers > 0 && correctGuessers.length === 0;
+  if (authorWon && state.game.scores[cur.authorId] !== undefined) {
+    state.game.scores[cur.authorId] += 1;
+  }
+  cur.phase = 'results';
+  stampPhase(cur);
+  cur.correctGuessers = correctGuessers;
+  cur.authorWon = authorWon;
+  cur.readyIds = [];
+}
+
+function resolveTriviaAnswer(state, cur) {
+  const correctGuessers = Object.keys(cur.choices).filter(id => cur.choices[id] === cur.correctIndex);
+  correctGuessers.forEach(id => { state.game.scores[id] = (state.game.scores[id] || 0) + ROUND_POINTS; });
+  cur.phase = 'results';
+  stampPhase(cur);
+  cur.correctGuessers = correctGuessers;
+  cur.readyIds = [];
+}
+
+function goToNextRoundOrEnd(state, players) {
+  if (state.game.round >= state.game.totalRounds) endGame(state);
+  else { beginRound(state, state.members.filter(m => players.includes(m.id))); stampPhase(state.game.current); }
+}
+
+function endGame(state) {
+  const scores = state.game.scores;
+  const memberIds = state.game.players;
+  const minScore = Math.min(...memberIds.map(id => scores[id] || 0));
+  const maxScore = Math.max(...memberIds.map(id => scores[id] || 0));
+  const loserIds = memberIds.filter(id => (scores[id] || 0) === minScore);
+  const winnerIds = memberIds.filter(id => (scores[id] || 0) === maxScore);
+  if (state.game.wager === 'euro') {
+    loserIds.forEach(id => {
+      state.events.push({ id: uid(), memberId: id, message: 'Tabte Brokspillet', ts: Date.now(), votes: [], free: false, gameLoss: true });
+    });
+  }
+
+  // Highscore på tværs af afsluttede spil — kun optalt hvis der reelt var en
+  // vinder (dvs. ikke alle sluttede på 0 point, hvilket ville gøre alle til "vindere").
+  if (!state.gameStats) state.gameStats = {};
+  memberIds.forEach(id => {
+    if (!state.gameStats[id]) state.gameStats[id] = { played: 0, wins: 0 };
+    state.gameStats[id].played += 1;
+  });
+  if (maxScore > 0) {
+    winnerIds.forEach(id => { state.gameStats[id].wins += 1; });
+  }
+
+  state.game.current = { type: 'gameover', scores, loserIds, winnerIds };
+}
+
+// Tvinger den aktuelle fase videre, fordi en brok-nedtælling (menneske eller
+// Brokspillet) løb ud uden at den langsomme nåede det. Samme håndtering pr.
+// runde-type som da dette lå i klientens 'advance'-nødbremse — bare nu
+// udløst af én ting (en brok-nedtælling), ikke af hver klients eget ur.
+function forceResolveCurrentPhase(state, cur, players) {
+  if (cur.type === 'quiplash' && cur.phase === 'answer') {
+    cur.votes = {};
+    if (players.length === 2) {
+      resolveQuiplashRandom(state, cur);
+    } else if (Object.keys(cur.answers).length < 2) {
+      resolveQuiplashVote(state, cur);
+    } else {
+      cur.phase = 'vote';
+      stampPhase(cur);
+    }
+  } else if (cur.type === 'quiplash' && cur.phase === 'vote') {
+    resolveQuiplashVote(state, cur);
+  } else if (cur.type === 'truefalse' && cur.phase === 'write') {
+    cur.phase = 'skipped';
+    cur.readyIds = [];
+    stampPhase(cur);
+  } else if (cur.type === 'truefalse' && cur.phase === 'guess') {
+    resolveTrueFalseGuess(state, cur);
+  } else if (cur.type === 'trivia' && cur.phase === 'answer') {
+    resolveTriviaAnswer(state, cur);
+  } else if (cur.type === 'guessbrok' && cur.phase === 'write') {
+    cur.phase = 'skipped';
+    cur.readyIds = [];
+    stampPhase(cur);
+  } else if (cur.type === 'guessbrok' && cur.phase === 'guess') {
+    resolveGuessBrok(state, cur);
+  } else if (cur.phase === 'results' || cur.phase === 'skipped') {
+    goToNextRoundOrEnd(state, players);
+  }
+}
+
+// Den ENESTE ting der har lov til at rykke runden videre pga. tid — kaldes
+// opportunistisk fra enhver poll/handling (samme mønster som
+// processPendingExpiry for anklager), aldrig af en klients eget ur. Ingen
+// stille spring: der skal altid have været et synligt brok (menneske eller
+// Brokspillet) og en udløbet nedtælling, før noget som helst tvinges videre.
+function expireGamePhaseIfDue(state, players) {
+  const cur = state.game && state.game.current;
+  if (!state.game || !state.game.active || !cur || !cur.phaseStartedAt) return false;
+  const pending = getPendingIds(cur, players);
+  if (pending.length === 0) return false;
+  const now = Date.now();
+  if (!cur.complaint) {
+    if (now - cur.phaseStartedAt < BROKSPILLET_AUTO_MS) return false;
+    cur.complaint = { by: 'brokspillet', targetId: pending[0], startedAt: now };
+    return true;
+  }
+  if (now - cur.complaint.startedAt < COMPLAINT_COUNTDOWN_MS) return false;
+  forceResolveCurrentPhase(state, cur, players);
+  return true;
+}
+
+module.exports = {
+  ROUND_POINTS,
+  MIN_COMPLAIN_AGE_MS,
+  BROKSPILLET_AUTO_MS,
+  COMPLAINT_COUNTDOWN_MS,
+  stampPhase,
+  getPendingIds,
+  resolveQuiplashVote,
+  resolveQuiplashRandom,
+  resolveTrueFalseGuess,
+  resolveGuessBrok,
+  resolveTriviaAnswer,
+  goToNextRoundOrEnd,
+  endGame,
+  expireGamePhaseIfDue,
+};

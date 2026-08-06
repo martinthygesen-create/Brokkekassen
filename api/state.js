@@ -1,5 +1,19 @@
-const { getState, setState, processPendingExpiry, checkSilenceNudge, redactStateFor } = require('./_lib/store');
+const { getState, setState, mutateState, processPendingExpiry, checkSilenceNudge, redactStateFor } = require('./_lib/store');
+const { expireGamePhaseIfDue, BROKSPILLET_AUTO_MS, COMPLAINT_COUNTDOWN_MS } = require('./_lib/gameFlow');
 const { pushToMembers } = require('./_lib/push');
+
+// Billig, ikke-muterende forhåndstjek: er der overhovedet en chance for at
+// spilfasen skal tvinges videre pga. tid? Bruges til at undgå en CAS-runde
+// (mutateState) på HVER eneste poll fra HVER klient hvert 3. sekund — kun
+// når dette siger "måske" betaler vi for den rigtige, atomare mutation.
+function gameExpiryMightBeDue(state) {
+  const g = state.game;
+  if (!g || !g.active || !g.current || !g.current.phaseStartedAt) return false;
+  const cur = g.current;
+  const now = Date.now();
+  if (cur.complaint) return (now - cur.complaint.startedAt) >= COMPLAINT_COUNTDOWN_MS;
+  return (now - cur.phaseStartedAt) >= BROKSPILLET_AUTO_MS;
+}
 
 const SILENCE_LINES = [
   'Er alt for perfekt i dag? 🤔 Ingen har brokket sig i 24 timer... det virker mistænkeligt.',
@@ -15,7 +29,7 @@ module.exports = async (req, res) => {
   const memberId = (req.query.member || '').toString().trim();
   if (!roomId) return res.status(400).json({ error: 'mangler room' });
   try {
-    const state = await getState(roomId);
+    let state = await getState(roomId);
     if (!state) return res.status(404).json({ error: 'ukendt brokkekasse' });
 
     // Klienterne poller herind hvert par sekunder mens appen er åben, så det
@@ -24,6 +38,18 @@ module.exports = async (req, res) => {
     const dueReminders = processPendingExpiry(state);
     const nudgeSilence = checkSilenceNudge(state);
     if (dueReminders.length || nudgeSilence) await setState(roomId, state);
+
+    // Samme opportunistiske mønster for Brokspillets fase-timing — men denne
+    // mutation involverer Math.random() (Chancen, indhold osv.), så den skal
+    // gå gennem den CAS-beskyttede mutateState for ikke at risikere et
+    // lost-update hvis to spilleres polls rammer samtidigt.
+    if (gameExpiryMightBeDue(state)) {
+      const mutated = await mutateState(roomId, async (fresh) => {
+        const players = (fresh.game && fresh.game.players) || fresh.members.map(m => m.id);
+        expireGamePhaseIfDue(fresh, players);
+      });
+      if (mutated) state = mutated.state;
+    }
 
     for (const { pending, memberIds } of dueReminders) {
       const accused = state.members.find(m => m.id === pending.memberId);
