@@ -171,7 +171,7 @@
   .wheel-cabinet.win{ box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #FFC93C, 0 0 24px rgba(255,201,60,.5); }
   .wheel-pointer{ position:absolute; left:50%; top:4px; transform:translateX(-50%); width:0; height:0; border-left:11px solid transparent; border-right:11px solid transparent; border-top:20px solid var(--coin); z-index:3; filter:drop-shadow(0 3px 4px rgba(0,0,0,.6)); }
   .wheel-pointer::before{ content:''; position:absolute; left:50%; top:-24px; transform:translateX(-50%); width:9px; height:9px; border-radius:50%; background:radial-gradient(circle at 35% 30%, #fff6d0, var(--coin) 60%, #b8860b); box-shadow:0 0 6px rgba(255,201,60,.8); }
-  .wheel-wrap{ position:relative; width:200px; height:200px; margin:14px auto 4px; }
+  .wheel-wrap{ position:relative; width:230px; height:230px; margin:14px auto 4px; }
   .wheel-lights{ position:absolute; inset:0; z-index:1; pointer-events:none; }
   .wheel-bulb{ position:absolute; width:7px; height:7px; margin:-3.5px 0 0 -3.5px; border-radius:50%; background:radial-gradient(circle at 35% 30%, #fff6d0, var(--coin) 60%, #b8860b); box-shadow:0 0 6px rgba(255,201,60,.75); animation:bulbTwinkle 1.6s ease-in-out infinite; }
   @keyframes bulbTwinkle{ 0%,100%{ opacity:1; } 50%{ opacity:.45; } }
@@ -346,7 +346,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-06-21';
+const BUILD_TAG = 'build-2026-08-06-22';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1378,7 +1378,10 @@ function wheelPolarPoint(cx, cy, r, angleDeg){
 // pære får sin egen animation-delay, ellers blinker de i takt og ser
 // mekanisk ud i stedet for et rigtigt glimtende lyskæde-mønster.
 function wheelLightsHtml(n){
-  const cx = 100, cy = 100, r = 98;
+  // Pixel-koordinater matcher .wheel-wrap's egen CSS-størrelse (230x230) —
+  // ændres wrap'ens størrelse, skal cx/cy/r ændres tilsvarende, ellers
+  // ryger lysene ud af position i forhold til selve hjulet.
+  const cx = 115, cy = 115, r = 112;
   let html = '';
   for (let i = 0; i < n; i++) {
     const p = wheelPolarPoint(cx, cy, r, (360/n)*i);
@@ -1423,9 +1426,13 @@ function buildWheelChanceHtml(prefix, candidates, winner, bannerText){
     // Kandidater med et eget `.label` (fx et brok-ord) viser den tekst,
     // trunkeret så den kan være på en lille cirkel — ellers falder den
     // tilbage til navne-initialer (den oprindelige brug: en person direkte).
+    // Ordet er selve pointen med at kigge på hjulet under en Casinobrok-
+    // reveal (modsat initialer, som bare er dekorativ identifikation) — så
+    // det skal være markant større/tydeligere, ikke bare passe ind i en
+    // lille cirkel. Vigtigt på mobil, hvor hjulet i forvejen er lille.
     const text = c.label ? (c.label.length > 9 ? c.label.slice(0,8)+'…' : c.label) : initials(c.name);
-    const labelR = c.label ? 20 : 17;
-    const fontSize = c.label ? 10.5 : 14;
+    const labelR = c.label ? 27 : 17;
+    const fontSize = c.label ? 13.5 : 14;
     return `<g transform="translate(${p.x.toFixed(2)},${p.y.toFixed(2)})">
       <circle r="${labelR}" fill="rgba(5,32,36,0.55)"></circle>
       <text text-anchor="middle" dominant-baseline="central" font-family="'Baloo 2',sans-serif" font-weight="800" font-size="${fontSize}" fill="#FFF7E8">${escapeHtml(text)}</text>
@@ -1865,8 +1872,8 @@ function guessBrokHtml(g, cur){
     return `
       <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · 🎯 Det er dig der skriver!</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
       <div class="game-card" id="gameCard">
-        <label class="field-label" style="color:rgba(255,247,232,0.7);">Skriv et RIGTIGT brok — noget I faktisk ville brokke jer over. Vi blander 3 opdigtede forslag ind, og de andre skal gætte hvilket der er ægte.</label>
-        <p class="hint" style="margin:0 0 10px; color:rgba(255,247,232,0.55);">F.eks.: <i>"Morgenmaden lukkede fem minutter før vi nåede ned"</i> — kort og konkret, så det ligner de opdigtede lige så meget som muligt.</p>
+        <p style="font-weight:800; margin:0 0 8px; font-size:16px;">✍️ Skriv et <u>ægte</u> brok</p>
+        <p class="hint" style="margin:0 0 10px; color:rgba(255,247,232,0.55);">F.eks.: <i>"Morgenmaden lukkede fem minutter for tidligt"</i> — kort og konkret.</p>
         <textarea id="gbStatement" rows="2" maxlength="120" placeholder="Skriv dit rigtige brok her..."></textarea>
         <button class="game-btn" id="gbSubmitBtn" style="margin-top:12px;" disabled>🚀 Send brok</button>
       </div>
@@ -1892,7 +1899,7 @@ function guessBrokHtml(g, cur){
     }).join('');
     return `
       <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · ${badgeLabel}</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
-      <p class="hint" style="margin:0 0 10px; color:rgba(255,247,232,0.75);">${isAuthor ? 'Sådan ser de andre spørgsmålet — kan du se hvor godt dit brok gemmer sig?' : `Hvilket af disse ville ${escapeHtml(author?author.name:'?')} faktisk brokke sig over?`}</p>
+      <p style="font-weight:800; margin:0 0 10px; font-size:16px;">${isAuthor ? '👀 Sådan ser de andre det' : `🕵️ Gæt: hvilket er ${escapeHtml(author?author.name:'?')}s ægte brok?`}</p>
       ${opts}
       ${gameProgressHtml(guessedCount, eligible, 'har gættet')}
       ${(hasGuessed || isAuthor) ? `<div class="waiting-pill"><span class="waiting-dot"></span> Venter på de andre...</div>` : ''}
@@ -1953,9 +1960,9 @@ function casinobrokHtml(g, cur){
     return `
       <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · 🎰 Casinobrok</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
       <div class="game-card" id="gameCard">
-        <label class="field-label" style="color:rgba(255,247,232,0.7);">Skriv ét brok-ord — bare ét ord, ikke en hel sætning. Alle ord havner på hjulet, og det trukne ords forfatter vinder runden.</label>
-        <p class="hint" style="margin:0 0 10px; color:rgba(255,247,232,0.55);">F.eks.: <i>"regnvejr"</i>, <i>"morgenmaden"</i>, <i>"snorken"</i> — I må gerne skrive det samme ord, det er stadig hver jeres eget lod.</p>
-        <input type="text" id="casinoWordInput" maxlength="24" placeholder="Dit brok-ord..." value="${mine?escapeHtml(mine):''}" ${mine?'disabled':''}>
+        <p style="font-weight:800; margin:0 0 8px; font-size:16px;">✍️ Skriv <u>ét</u> ord</p>
+        <p class="hint" style="margin:0 0 10px; color:rgba(255,247,232,0.55);">F.eks.: <i>"regnvejr"</i>, <i>"snorken"</i> — samme ord er ok.</p>
+        <input type="text" id="casinoWordInput" maxlength="24" placeholder="Dit ord..." value="${mine?escapeHtml(mine):''}" ${mine?'disabled':''}>
         ${mine ? '' : `<button class="game-btn" id="casinoSubmitBtn" style="margin-top:12px;">🎰 Send ordet</button>`}
       </div>
       ${gameProgressHtml(written, g.players.length, 'har skrevet')}
@@ -2123,9 +2130,16 @@ function bindGameHandlers(g){
     });
   }
   if(cur.type === 'casinobrok' && cur.phase === 'write'){
+    const wordInput = document.getElementById('casinoWordInput');
+    // Ét ord betyder ét ord — fjerner mellemrum mens man skriver, i stedet
+    // for bare at bede pænt om det og håbe det bliver overholdt.
+    if(wordInput) wordInput.addEventListener('input', ()=>{
+      const stripped = wordInput.value.replace(/\s+/g, '');
+      if(stripped !== wordInput.value) wordInput.value = stripped;
+    });
     const btn = document.getElementById('casinoSubmitBtn');
     if(btn) btn.onclick = ()=>{
-      const word = document.getElementById('casinoWordInput').value.trim();
+      const word = document.getElementById('casinoWordInput').value.replace(/\s+/g, '').trim();
       if(!word) return;
       lockSubmitBtn(btn, 'Sender...');
       gameApi('submit', { payload: { word } });
