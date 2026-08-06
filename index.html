@@ -193,9 +193,11 @@
   .mole-cabinet{ background:linear-gradient(160deg,#3d2b1f,#1a120b); border-radius:24px; padding:20px 14px 16px; box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #8a6b1f; position:relative; }
   .mole-cabinet.win{ box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #FFC93C, 0 0 24px rgba(255,201,60,.5); }
   .mole-grid{ display:flex; flex-wrap:wrap; justify-content:center; gap:14px; padding:6px 4px; }
-  .mole-hole-wrap{ display:flex; flex-direction:column; align-items:center; gap:5px; width:72px; }
+  .mole-hole-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; gap:5px; width:72px; padding-top:22px; }
   .mole-hole{ position:relative; width:64px; height:64px; border-radius:50%; background:radial-gradient(circle at 50% 30%, #4a3627, #1a120b); overflow:hidden; box-shadow:inset 0 4px 10px rgba(0,0,0,.6); }
-  .mole-caption{ font-size:10px; font-weight:700; color:rgba(255,247,232,0.6); line-height:1.2; text-align:center; }
+  .mole-hammer{ position:absolute; top:0; left:50%; font-size:26px; transform:translateX(-50%) rotate(-65deg) translateY(-6px); opacity:0; pointer-events:none; z-index:5; transform-origin:80% 90%; }
+  @keyframes hammerWhack{ 0%{ transform:translateX(-50%) rotate(-65deg) translateY(-6px); opacity:1; } 45%{ transform:translateX(-50%) rotate(18deg) translateY(20px); opacity:1; } 62%{ transform:translateX(-50%) rotate(12deg) translateY(16px); opacity:1; } 100%{ transform:translateX(-50%) rotate(-65deg) translateY(-6px); opacity:0; } }
+  .mole-hammer.whacking{ animation:hammerWhack .5s cubic-bezier(.36,.07,.19,.97); }
   .mole{ position:absolute; left:50%; bottom:-6px; width:46px; height:46px; transform:translate(-50%, 30px); transition:transform .28s cubic-bezier(.34,1.56,.64,1), filter .2s ease; }
   .mole .avatar{ width:46px; height:46px; font-size:15px; }
   .mole.mole-up{ transform:translate(-50%, -14px); }
@@ -356,7 +358,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-06-24';
+const BUILD_TAG = 'build-2026-08-06-25';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1576,17 +1578,17 @@ function playWheelChanceReveal(prefix){
 // oppe og fejrer), så et almindeligt gen-render ikke nulstiller visningen.
 function buildMoleChanceHtml(prefix, candidates, winner, bannerText){
   if(!winner || !candidates.length) return '';
+  // Ren tilfældighed, ingen tekst — kun avatar-bogstavet. En hammer smadrer
+  // hver taber-mole ned (se .mole-hammer + playMoleChanceReveal) i stedet
+  // for at den bare synker af sig selv.
   const holes = candidates.map(c=>{
     const isWin = c.id === winner.id;
-    // Kandidater med et eget `.label` (fx quiplash-svaret bag hver mole)
-    // viser en kort smagsprøve under hullet — kun en teaser, ikke fuld
-    // læsbarhed, for med 4+ moles er der ikke plads til mere end få tegn.
-    // Den fulde tekst står allerede i listen under hele reveal'en.
-    const caption = c.label ? (c.label.length > 11 ? c.label.slice(0,10)+'…' : c.label) : '';
     return `
       <div class="mole-hole-wrap">
-        <div class="mole-hole"><div class="mole ${isWin?'mole-up mole-win':'mole-down'}" data-mole-id="${c.id}" ${isWin?'data-winner="1"':''}><div class="avatar">${initials(c.name)}</div></div></div>
-        ${caption ? `<div class="mole-caption">"${escapeHtml(caption)}"</div>` : ''}
+        <div class="mole-hammer" data-hammer-id="${c.id}">🔨</div>
+        <div class="mole-hole">
+          <div class="mole ${isWin?'mole-up mole-win':'mole-down'}" data-mole-id="${c.id}" ${isWin?'data-winner="1"':''}><div class="avatar">${initials(c.name)}</div></div>
+        </div>
       </div>`;
   }).join('');
   return `
@@ -1639,8 +1641,15 @@ function playMoleChanceReveal(prefix){
   };
   const whackNext = () => {
     if(i < order.length){
-      order[i].classList.remove('mole-up');
-      order[i].classList.add('mole-down');
+      const mole = order[i];
+      const hammer = cabinet.querySelector('[data-hammer-id="'+mole.dataset.moleId+'"]');
+      if(hammer) hammer.classList.add('whacking');
+      // Molen dukker først ned i det øjeblik hammeren rammer (ikke i takt
+      // med at den starter sit sving), så det ser ud som et rigtigt slag.
+      setTimeout(()=>{
+        mole.classList.remove('mole-up');
+        mole.classList.add('mole-down');
+      }, 220);
       i++;
       setTimeout(whackNext, perKnockDelay);
     }else{
@@ -1771,6 +1780,17 @@ function gameLobbyHtml(){
   `;
 }
 
+// Ved en 2-spiller "vinder-hån"-runde (cur.isWinnerTaunt) er "modstanderen"
+// en helt bestemt person, men HVEM afhænger af hvem der kigger — kan derfor
+// ikke bages ind i cur.prompt server-side (samme streng vises til begge),
+// og indsættes i stedet her ud fra hvem den anden spiller er for MIG.
+function quiplashPromptText(g, cur){
+  if(!cur.isWinnerTaunt) return cur.prompt || '';
+  const otherId = (g.players||[]).find(id => id !== (profile && profile.memberId));
+  const other = otherId ? state.members.find(m=>m.id===otherId) : null;
+  return (cur.prompt || '').replace(/\{target\}/g, other ? other.name : 'modstanderen');
+}
+
 function quiplashHtml(g, cur){
   if(cur.phase === 'answer'){
     const answered = Object.keys(cur.answers||{}).length;
@@ -1778,7 +1798,7 @@ function quiplashHtml(g, cur){
     return `
       <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · 🎭 Skriv-og-stem</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
       <div class="game-card" id="gameCard">
-        <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:0 0 14px; line-height:1.3;">${escapeHtml(cur.prompt)}</p>
+        <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:0 0 14px; line-height:1.3;">${escapeHtml(quiplashPromptText(g, cur))}</p>
         <textarea id="quipInput" rows="2" maxlength="120" placeholder="Dit svar..." ${mine?'disabled':''}>${mine?escapeHtml(mine):''}</textarea>
         ${mine ? '' : `<button class="game-btn" id="quipSubmitBtn" style="margin-top:10px;">🔒 Lås dit svar</button>`}
       </div>
@@ -1807,7 +1827,7 @@ function quiplashHtml(g, cur){
     `).join('');
     return `
       <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Stem på det bedste svar</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
-      <p class="hint" style="margin:0 0 10px; color:rgba(255,247,232,0.75);">${escapeHtml(cur.prompt)}</p>
+      <p class="hint" style="margin:0 0 10px; color:rgba(255,247,232,0.75);">${escapeHtml(quiplashPromptText(g, cur))}</p>
       <p style="font-weight:700; margin:0 0 10px; font-size:14px;">🗳️ Stem på det bedste svar!</p>
       ${myAnswer ? `<div class="bal-row" style="opacity:.45; cursor:default;">
         <div class="avatar" style="width:34px;height:34px;font-size:12.5px;">✍️</div>
@@ -1829,7 +1849,7 @@ function quiplashHtml(g, cur){
   return `
     <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
     <div class="game-card" id="gameCard" style="text-align:center;">
-      <p style="margin:0 0 10px;">${escapeHtml(cur.prompt)}</p>
+      <p style="margin:0 0 10px;">${escapeHtml(quiplashPromptText(g, cur))}</p>
       ${cur.randomPick ? buildMoleChanceHtml('chance',
           (cur.chanceCandidates || Object.keys(cur.answers||{})).map(id=>{
             const mm = state.members.find(x=>x.id===id);

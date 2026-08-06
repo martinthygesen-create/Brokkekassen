@@ -45,6 +45,24 @@ const QUIPLASH_PROMPTS = [
   'Om 10 år brokker {target} sig stadig over...',
 ];
 
+// Kun brugt ved PRÆCIS 2 spillere — der er ingen rigtig afstemning ved 2
+// (se resolveQuiplashRandom i gameFlow.js), så runden ender ALTID direkte i
+// Chancen/whack-a-mole. Derfor et sejrs-hån i stedet for et roast af et
+// tilfældigt trukket emne — men med kun 2 spillere ER modstanderen jo en
+// helt bestemt person, så {target} indsættes stadig, bare KLIENT-side (se
+// index.html) — hvem "den anden spiller" er afhænger af hvem der kigger,
+// så det kan ikke bages ind i én fælles prompt-streng server-side.
+const WINNER_TAUNT_PROMPTS = [
+  'Du vandt lige over {target}. Hvad råber du?',
+  'Sig din frækkeste sejrskommentar til {target}',
+  'Hvad er det første du siger til {target}, når du vinder?',
+];
+
+function pickWinnerTauntPrompt(state) {
+  const idx = pickFromBag(state, 'winnerTaunt', WINNER_TAUNT_PROMPTS.length);
+  return WINNER_TAUNT_PROMPTS[idx];
+}
+
 // Opdigtede "vrangforestillinger" der blandes ind blandt de ægte svar i
 // afstemnings-fasen — generiske nok til at kunne passe som svar på næsten
 // alle QUIPLASH_PROMPTS ovenfor, uden at være skrevet til noget bestemt
@@ -382,8 +400,16 @@ function beginRound(state, players) {
   // og rotationen holder også her på tværs af flere spil.
   const type = ROUND_TYPES[pickFromBag(state, 'roundType', ROUND_TYPES.length)];
   if (type === 'quiplash') {
-    const { prompt, targetId } = pickQuiplashPrompt(state, players);
-    state.game.current = { type, phase: 'answer', prompt, targetId, answers: {} };
+    // Ved præcis 2 spillere er der ingen rigtig afstemning (se
+    // resolveQuiplashRandom) — runden ender ALTID i Chancen, så prompten er
+    // et generisk sejrs-hån i stedet for et roast af et tilfældigt trukket
+    // emne. {target} indsættes klient-side (se index.html), ikke her.
+    if (players.length === 2) {
+      state.game.current = { type, phase: 'answer', prompt: pickWinnerTauntPrompt(state), targetId: null, isWinnerTaunt: true, answers: {} };
+    } else {
+      const { prompt, targetId } = pickQuiplashPrompt(state, players);
+      state.game.current = { type, phase: 'answer', prompt, targetId, answers: {} };
+    }
   } else if (type === 'truefalse') {
     // Ved kun 2 spillere falder byrden med at digte et frisk udsagn HVER
     // eneste gang på den samme ene person igen og igen (der er jo kun de 2
@@ -437,4 +463,4 @@ function beginRound(state, players) {
   }
 }
 
-module.exports = { pickRandom, shuffle, pickWeighted, buildOptions, pickFromBag, pickQuiplashPrompt, pickWorldTrivia, pickWorldTrueFalse, pickDecoyBroks, pickQuiplashDecoys, generateTriviaQuestion, beginRound };
+module.exports = { pickRandom, shuffle, pickWeighted, buildOptions, pickFromBag, pickQuiplashPrompt, pickWinnerTauntPrompt, pickWorldTrivia, pickWorldTrueFalse, pickDecoyBroks, pickQuiplashDecoys, generateTriviaQuestion, beginRound };
