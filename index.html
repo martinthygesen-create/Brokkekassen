@@ -167,11 +167,15 @@
   /* Chancens nye standard-visning: et lykkehjul, i samme mørke/guld
      kabinet-stil som spillemaskinen ovenfor (som stadig ligger urørt som
      reserve — se buildSlotCabinetHtml/playSlotChanceReveal). */
-  .wheel-cabinet{ background:linear-gradient(160deg,#2e2a24,#141414); border-radius:24px; padding:20px 12px 16px; box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #8a6b1f; position:relative; }
+  .wheel-cabinet{ background:radial-gradient(circle at 50% 38%, #3a2f1a, #141414 72%); border-radius:24px; padding:22px 12px 16px; box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #8a6b1f; position:relative; }
   .wheel-cabinet.win{ box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #FFC93C, 0 0 24px rgba(255,201,60,.5); }
-  .wheel-pointer{ position:absolute; left:50%; top:2px; transform:translateX(-50%); width:0; height:0; border-left:10px solid transparent; border-right:10px solid transparent; border-top:18px solid var(--coin); z-index:3; filter:drop-shadow(0 2px 3px rgba(0,0,0,.5)); }
-  .wheel-wrap{ position:relative; width:200px; height:200px; margin:8px auto 4px; }
-  .wheel-svg{ width:100%; height:100%; display:block; filter:drop-shadow(0 6px 14px rgba(0,0,0,.5)); transform-box:fill-box; transform-origin:50% 50%; }
+  .wheel-pointer{ position:absolute; left:50%; top:4px; transform:translateX(-50%); width:0; height:0; border-left:11px solid transparent; border-right:11px solid transparent; border-top:20px solid var(--coin); z-index:3; filter:drop-shadow(0 3px 4px rgba(0,0,0,.6)); }
+  .wheel-pointer::before{ content:''; position:absolute; left:50%; top:-24px; transform:translateX(-50%); width:9px; height:9px; border-radius:50%; background:radial-gradient(circle at 35% 30%, #fff6d0, var(--coin) 60%, #b8860b); box-shadow:0 0 6px rgba(255,201,60,.8); }
+  .wheel-wrap{ position:relative; width:200px; height:200px; margin:14px auto 4px; }
+  .wheel-lights{ position:absolute; inset:0; z-index:1; pointer-events:none; }
+  .wheel-bulb{ position:absolute; width:7px; height:7px; margin:-3.5px 0 0 -3.5px; border-radius:50%; background:radial-gradient(circle at 35% 30%, #fff6d0, var(--coin) 60%, #b8860b); box-shadow:0 0 6px rgba(255,201,60,.75); animation:bulbTwinkle 1.6s ease-in-out infinite; }
+  @keyframes bulbTwinkle{ 0%,100%{ opacity:1; } 50%{ opacity:.45; } }
+  .wheel-svg{ position:relative; z-index:2; width:100%; height:100%; display:block; filter:drop-shadow(0 6px 14px rgba(0,0,0,.5)); transform-origin:110px 110px; }
   .wheel-slice-win{ filter:drop-shadow(0 0 5px rgba(255,201,60,.9)); }
   /* Chancens standard-visning ved uafgjort/2-spiller-skip: whack-a-mole,
      rent tilfældig elimination — ingen valg involveret, matcher hvad
@@ -342,7 +346,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-06-19';
+const BUILD_TAG = 'build-2026-08-06-20';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1366,17 +1370,43 @@ function wheelPolarPoint(cx, cy, r, angleDeg){
   const rad = angleDeg * Math.PI/180; // 0° = kl. 12 (toppen), stigende med uret
   return { x: cx + r*Math.sin(rad), y: cy - r*Math.cos(rad) };
 }
+// Vegas-lys rundt om hjulet — statiske pærer (roterer IKKE med hjulet, de
+// sidder fast på kabinettet, som på en rigtig lykkehjul-maskine). Hver
+// pære får sin egen animation-delay, ellers blinker de i takt og ser
+// mekanisk ud i stedet for et rigtigt glimtende lyskæde-mønster.
+function wheelLightsHtml(n){
+  const cx = 100, cy = 100, r = 98;
+  let html = '';
+  for (let i = 0; i < n; i++) {
+    const p = wheelPolarPoint(cx, cy, r, (360/n)*i);
+    html += `<div class="wheel-bulb" style="left:${p.x.toFixed(1)}px; top:${p.y.toFixed(1)}px; animation-delay:${(i%4)*0.25}s;"></div>`;
+  }
+  return html;
+}
+
 function buildWheelChanceHtml(prefix, candidates, winner, bannerText){
   if(!winner || !candidates.length) return '';
-  const n = candidates.length;
+  // Med kun 2-3 rigtige kandidater ser hjulet kedeligt/mønt-kast-agtigt ud
+  // delt i 2-3 store stykker. Gentager kandidaterne til mindst 6 SYNLIGE
+  // stykker i stedet — ændrer IKKE de reelle odds, hver kandidat får stadig
+  // nøjagtig samme SAMLEDE andel af hjulet, bare fordelt på flere mindre
+  // stykker i stedet for én stor kile.
+  const MIN_SLICES = 6;
+  const repeats = Math.max(1, Math.ceil(MIN_SLICES / candidates.length));
+  const visual = [];
+  for (let rep = 0; rep < repeats; rep++) visual.push(...candidates);
+  const n = visual.length;
   const sliceDeg = 360/n;
   const cx = 110, cy = 110, r = 104;
-  const winnerIdx = Math.max(0, candidates.findIndex(c=>c.id===winner.id));
+  // Altid FØRSTE forekomst af vinderen — deterministisk, ikke tilfældig ved
+  // hvert render, ellers ville "landet som default"-tilstanden (se
+  // playWheelChanceReveal) hoppe til et andet stykke ved hvert stille poll.
+  const winnerIdx = Math.max(0, visual.findIndex(c=>c.id===winner.id));
   const midWinner = winnerIdx*sliceDeg + sliceDeg/2;
   // Vinklen hjulet skal roteres til for at vinderens midte lander under
   // pilen (som sidder fast kl. 12, dvs. 0°) — se playWheelChanceReveal.
   const restAngle = ((-midWinner) % 360 + 360) % 360;
-  const slicesHtml = candidates.map((c,i)=>{
+  const slicesHtml = visual.map((c,i)=>{
     const start = i*sliceDeg, end = (i+1)*sliceDeg;
     const color = WHEEL_COLORS[i % WHEEL_COLORS.length];
     const p1 = wheelPolarPoint(cx,cy,r,start), p2 = wheelPolarPoint(cx,cy,r,end);
@@ -1384,7 +1414,7 @@ function buildWheelChanceHtml(prefix, candidates, winner, bannerText){
     const path = `M${cx},${cy} L${p1.x.toFixed(2)},${p1.y.toFixed(2)} A${r},${r} 0 ${largeArc} 1 ${p2.x.toFixed(2)},${p2.y.toFixed(2)} Z`;
     return `<path d="${path}" fill="${color}" class="wheel-slice${i===winnerIdx?' wheel-slice-win':''}" stroke="#052024" stroke-width="2"></path>`;
   }).join('');
-  const labelsHtml = candidates.map((c,i)=>{
+  const labelsHtml = visual.map((c,i)=>{
     const mid = i*sliceDeg + sliceDeg/2;
     const p = wheelPolarPoint(cx, cy, r*0.62, mid);
     // Kandidater med et eget `.label` (fx et brok-ord) viser den tekst,
@@ -1404,6 +1434,7 @@ function buildWheelChanceHtml(prefix, candidates, winner, bannerText){
       <div class="wheel-cabinet win" id="${prefix}Cabinet">
         <div class="wheel-pointer"></div>
         <div class="wheel-wrap">
+          <div class="wheel-lights">${wheelLightsHtml(14)}</div>
           <svg id="${prefix}WheelSvg" class="wheel-svg" viewBox="0 0 220 220" style="transform:rotate(${restAngle}deg);" data-rest-angle="${restAngle}">
             ${slicesHtml}
             ${labelsHtml}
@@ -1421,6 +1452,12 @@ function buildWheelChanceHtml(prefix, candidates, winner, bannerText){
 // hele omgange plus den vinkel markup'et allerede sagde det skulle lande
 // på (data-rest-angle), så det ALTID lander præcis samme sted som den
 // statiske, uanimerede visning. Kører kun én gang pr. ny resultat-fase.
+// Snurrer hjulet via en almindelig CSS `transition` på `transform`, IKKE
+// via GSAP — GSAP's `rotate`-property på et rod-<svg>-element viste sig i
+// praksis upålideligt på iOS Safari (nedtællingen/landingen virkede fint,
+// men selve spinnet var usynligt — kun den statiske slut-tilstand blev
+// vist). Almindelig `transform:rotate()` + `transition` er langt mere
+// robust cross-browser, og er allerede den vej der fungerede i test.
 function playWheelChanceReveal(prefix){
   const cabinet = document.getElementById(prefix+'Cabinet');
   if(!cabinet) return;
@@ -1440,17 +1477,15 @@ function playWheelChanceReveal(prefix){
     }
     fireConfetti(cabinet);
   };
-  if(typeof gsap !== 'undefined'){
-    gsap.fromTo(svg, { rotate: 0 }, { rotate: finalAngle, duration: 3.2, ease: 'power3.out', onComplete: onDone });
-  }else{
-    svg.style.transition = 'none';
-    svg.style.transform = 'rotate(0deg)';
+  svg.style.transition = 'none';
+  svg.style.transform = 'rotate(0deg)';
+  requestAnimationFrame(()=>{
     requestAnimationFrame(()=>{
       svg.style.transition = 'transform 3.2s cubic-bezier(.16,.84,.28,1)';
       svg.style.transform = `rotate(${finalAngle}deg)`;
     });
-    setTimeout(onDone, 3200);
-  }
+  });
+  setTimeout(onDone, 3200);
 }
 
 // Chancens standard-visning ved uafgjort/2-spiller-skip: whack-a-mole. Ren
