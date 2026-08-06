@@ -361,7 +361,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-06-26';
+const BUILD_TAG = 'build-2026-08-06-27';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1086,12 +1086,16 @@ function openGameAdminMenuSheet(){
     <h2>Brokspil-admin ⚙️</h2>
     <p class="hint">${active ? 'Der er et spil i gang lige nu.' : 'Der er ikke noget spil i gang lige nu.'}</p>
     <button class="sheet-btn test" id="gameAdminTestChanceBtn">🎲 Test Chancen</button>
+    <button class="sheet-btn test" id="gameAdminTestWheelBtn">🎡 Test hjulet</button>
+    <button class="sheet-btn test" id="gameAdminTestSlotBtn">🎰 Test spillemaskinen</button>
     ${active ? `<button class="sheet-btn danger" id="gameAdminRestartBtn">🔄 Genstart Brokspillet</button>` : ''}
     ${hasHighscore ? `<button class="sheet-btn danger" id="gameAdminResetStatsBtn">🏆 Nulstil highscore</button>` : ''}
     <button class="sheet-btn ghost" id="gameAdminCloseBtn">Luk menu</button>
     <p class="hint" style="text-align:center; font-size:10.5px; opacity:.5; margin-top:6px;">${BUILD_TAG}</p>
   `, ()=>{
     document.getElementById('gameAdminTestChanceBtn').onclick = ()=>{ closeSheet(); setTimeout(openChanceTestSheet, 230); };
+    document.getElementById('gameAdminTestWheelBtn').onclick = ()=>{ closeSheet(); setTimeout(openWheelTestSheet, 230); };
+    document.getElementById('gameAdminTestSlotBtn').onclick = ()=>{ closeSheet(); setTimeout(openSlotTestSheet, 230); };
     const restartBtn = document.getElementById('gameAdminRestartBtn');
     if(restartBtn) restartBtn.onclick = async ()=>{
       closeSheet();
@@ -1129,6 +1133,46 @@ function openChanceTestSheet(){
     playMoleChanceReveal('chance');
     document.getElementById('chanceTestReplayBtn').onclick = ()=>{ closeSheet(); setTimeout(openChanceTestSheet, 230); };
     document.getElementById('chanceTestCloseBtn').onclick = closeSheet;
+  });
+}
+
+// Ren visnings-demo af Casinobrok-hjulet — bruger rummets egne medlemmer
+// med opdigtede brok-ord som "label" (det hjulet reelt viser i et rigtigt
+// spil), ingen rigtig spil-state involveret.
+function openWheelTestSheet(){
+  const demoMembers = state.members.slice(0, Math.min(4, Math.max(2, state.members.length)));
+  const demoWords = ['myggestik', 'regnvejr', 'morgenmad', 'sne-ski'];
+  const candidates = demoMembers.map((m,i)=>({ id: m.id, name: m.name, label: demoWords[i % demoWords.length] }));
+  const winner = candidates[Math.floor(Math.random() * candidates.length)];
+  openSheet(`
+    <h2>Test: Hjulet 🎡</h2>
+    <p class="hint">Sådan ser Casinobrok-hjulet ud — ren visning, påvirker intet rigtigt spil.</p>
+    ${buildWheelChanceHtml('wheelTest', candidates, winner, '🎡 CASINOBROK', false)}
+    <button class="sheet-btn ghost" id="wheelTestReplayBtn" style="margin-top:14px;">🔁 Afspil igen</button>
+    <button class="sheet-btn ghost" id="wheelTestCloseBtn">Luk</button>
+  `, ()=>{
+    scheduleWheelChanceReveal('wheelTest', Date.now());
+    document.getElementById('wheelTestReplayBtn').onclick = ()=>{ closeSheet(); setTimeout(openWheelTestSheet, 230); };
+    document.getElementById('wheelTestCloseBtn').onclick = closeSheet;
+  });
+}
+
+// Ren visnings-demo af den (i øjeblikket ubrugte, reserverede) spillemaskine
+// — se buildSlotCabinetHtml/playSlotChanceReveal. Samme ren-visning-princip
+// som de to andre test-knapper.
+function openSlotTestSheet(){
+  const demoMembers = state.members.slice(0, Math.min(4, Math.max(2, state.members.length)));
+  const winner = demoMembers[Math.floor(Math.random() * demoMembers.length)];
+  openSheet(`
+    <h2>Test: Spillemaskinen 🎰</h2>
+    <p class="hint">Reserve-mekanik, bruges ikke i et rigtigt spil endnu — ren visning.</p>
+    ${buildSlotCabinetHtml('slotTest', demoMembers, winner, '🎰 SPILLEMASKINEN')}
+    <button class="sheet-btn ghost" id="slotTestReplayBtn" style="margin-top:14px;">🔁 Afspil igen</button>
+    <button class="sheet-btn ghost" id="slotTestCloseBtn">Luk</button>
+  `, ()=>{
+    playSlotChanceReveal('slotTest');
+    document.getElementById('slotTestReplayBtn').onclick = ()=>{ closeSheet(); setTimeout(openSlotTestSheet, 230); };
+    document.getElementById('slotTestCloseBtn').onclick = closeSheet;
   });
 }
 
