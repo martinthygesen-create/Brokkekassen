@@ -126,6 +126,21 @@
   @keyframes waitingBlink{ 0%,100%{opacity:.25;} 50%{opacity:1;} }
   @keyframes slotWinPop{ 0%{ transform:scale(1) rotate(0deg); } 30%{ transform:scale(1.06) rotate(-1.5deg); } 55%{ transform:scale(1.03) rotate(1.5deg); } 100%{ transform:scale(1) rotate(0deg); } }
   .quip-slot-win{ animation:slotWinPop .5s ease-out; }
+  /* "Chancen" — den visuelle afgørelse når der ikke er nogen rigtig
+     afstemning (fx kun 2 spillere, eller en uafgjort stemning) og en
+     vinder i stedet trækkes tilfældigt. En reel af chips highlighter én
+     ad gangen i et stadig langsommere tempo (som et rullende terningkast/
+     hjul), så det føles som en spændende begivenhed man kan følge med i,
+     i stedet for en usynlig beslutning der bare dukker op færdig. */
+  .chance-badge{ display:inline-flex; align-items:center; gap:6px; background:rgba(255,201,60,0.16); border:1px solid rgba(255,201,60,0.35); color:var(--coin); font-family:'Baloo 2',sans-serif; font-weight:800; font-size:13px; padding:6px 14px; border-radius:100px; margin:0 0 12px; }
+  .chance-reel{ display:flex; justify-content:center; gap:12px; margin:4px 0 16px; }
+  .chance-chip{ display:flex; flex-direction:column; align-items:center; gap:6px; padding:8px; border-radius:16px; transition:background .15s ease, transform .15s ease; }
+  .chance-chip .avatar{ width:44px; height:44px; font-size:15px; transition:box-shadow .15s ease; }
+  .chance-chip-name{ font-size:11px; font-weight:700; color:rgba(255,247,232,0.6); }
+  .chance-chip.active{ background:rgba(255,201,60,0.18); transform:scale(1.08); }
+  .chance-chip.active .avatar{ box-shadow:0 0 0 3px var(--coin); }
+  .chance-chip.active .chance-chip-name{ color:var(--coin); }
+  .chance-chip.chance-winner{ animation:slotWinPop .5s ease-out; }
   .game-card{ background:linear-gradient(160deg, rgba(255,201,60,0.18), rgba(255,107,74,0.10)); border:1px solid rgba(255,201,60,0.35); border-radius:22px; padding:20px; box-shadow:0 10px 24px rgba(0,0,0,.18); }
   .game-card p{ color:var(--cream); }
   .game-btn{ display:block; width:100%; background:linear-gradient(160deg, var(--coral), #e14d2e); color:#fff; border:none; border-radius:100px; padding:15px; font-family:'Baloo 2',sans-serif; font-weight:700; font-size:16px; box-shadow:0 8px 18px rgba(255,107,74,0.35); cursor:pointer; margin-top:14px; }
@@ -306,7 +321,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-04-12';
+const BUILD_TAG = 'build-2026-08-04-13';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1195,6 +1210,40 @@ function renderGameScreen(){
     gameTimerInterval = null;
   }
   celebrateGameRound(g);
+  if(isNewGamePhase && g.current && g.current.type === 'quiplash' && g.current.phase === 'results' && g.current.randomPick){
+    playChanceReveal(g.current.winnerIds && g.current.winnerIds[0]);
+  }
+}
+
+// "Chancen": highlighter spillernes chips i rækkefølge, i et stadig
+// langsommere tempo (som et hjul der ruller ud), og lander til sidst på
+// den rigtige vinder (allerede afgjort server-side — dette er ren
+// visuel spænding, ikke selve afgørelsen). Kører kun én gang pr. ny
+// resultat-fase, styret af isNewGamePhase i renderGameScreen.
+function playChanceReveal(winnerId){
+  const reel = document.getElementById('chanceReel');
+  if(!reel) return;
+  const chips = [...reel.querySelectorAll('.chance-chip')];
+  if(!chips.length) return;
+  const winnerIdx = Math.max(0, chips.findIndex(c => c.dataset.chanceId === winnerId));
+  // Antal "stop" aftager i hastighed hen mod slutningen, ligesom et
+  // rigtigt lykkehjul/terningkast — ikke bare et jævnt tempo hele vejen.
+  const delays = [90,90,90,110,110,140,170,210,260,320,400];
+  let step = 0;
+  const totalSteps = delays.length + winnerIdx; // sørger for at lande PRÆCIS på vinderen til sidst
+  const tick = () => {
+    chips.forEach(c => c.classList.remove('active'));
+    chips[step % chips.length].classList.add('active');
+    step++;
+    if(step < totalSteps){
+      setTimeout(tick, delays[Math.min(step, delays.length - 1)]);
+    }else{
+      chips.forEach(c => c.classList.remove('active'));
+      const winnerChip = chips[winnerIdx];
+      if(winnerChip){ winnerChip.classList.add('active', 'chance-winner'); }
+    }
+  };
+  tick();
 }
 
 function gameBodyHtml(g){
@@ -1354,7 +1403,15 @@ function quiplashHtml(g, cur){
     <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
     <div class="game-card" id="gameCard" style="text-align:center;">
       <p style="margin:0 0 10px;">${escapeHtml(cur.prompt)}</p>
-      ${cur.randomPick ? `<p class="hint" style="margin:0 0 10px;">🎰 Kun 2 spillere — I stemmer ikke, vinderen trækkes tilfældigt</p>` : ''}
+      ${cur.randomPick ? `
+        <div class="chance-badge">🎲 Chancen afgør det</div>
+        <div class="chance-reel" id="chanceReel">
+          ${Object.entries(cur.answers||{}).map(([id])=>{
+            const m = state.members.find(x=>x.id===id);
+            return `<div class="chance-chip" data-chance-id="${id}"><div class="avatar">${initials(m?m.name:'?')}</div><div class="chance-chip-name">${escapeHtml(m?m.name:'?')}</div></div>`;
+          }).join('')}
+        </div>
+      ` : ''}
       ${Object.entries(cur.answers||{}).map(([id,text])=>{
         const m = state.members.find(x=>x.id===id);
         const won = (cur.winnerIds||[]).includes(id);
@@ -1463,7 +1520,8 @@ function guessBrokHtml(g, cur){
       <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · 🎯 Det er dig der skriver!</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
       <div class="game-card" id="gameCard">
         <label class="field-label" style="color:rgba(255,247,232,0.7);">Skriv et RIGTIGT brok — noget I faktisk ville brokke jer over. Vi blander 3 opdigtede forslag ind, og de andre skal gætte hvilket der er ægte.</label>
-        <textarea id="gbStatement" rows="2" maxlength="120" placeholder="Fx: Der var ikke plads til alle håndklæderne i skabet igen..."></textarea>
+        <p class="hint" style="margin:0 0 10px; color:rgba(255,247,232,0.55);">F.eks.: <i>"Morgenmaden lukkede fem minutter før vi nåede ned"</i> — kort og konkret, så det ligner de opdigtede lige så meget som muligt.</p>
+        <textarea id="gbStatement" rows="2" maxlength="120" placeholder="Skriv dit rigtige brok her..."></textarea>
         <button class="game-btn" id="gbSubmitBtn" style="margin-top:12px;" disabled>🚀 Send brok</button>
       </div>
     `;
@@ -1473,17 +1531,20 @@ function guessBrokHtml(g, cur){
     const eligible = g.players.length - 1;
     const myGuess = profile && cur.guesses[profile.memberId] !== undefined;
     const badgeLabel = isAuthor ? '🎯 Hvilket brok?' : (myGuess ? '🎯 Hvilket brok?' : '🎯 Gæt: hvilket er ægte?');
-    const opts = (cur.options||[]).map((label,i)=>`
-      <div class="bal-row game-pick" data-choice="${i}" style="cursor:pointer; ${myGuess===i?'outline:2px solid var(--coin);':''}">
+    const opts = (cur.options||[]).map((label,i)=>{
+      const isMine = isAuthor && i === cur.correctIndex;
+      return `
+      <div class="bal-row${isAuthor ? '' : ' game-pick'}" data-choice="${i}" style="${isAuthor ? '' : 'cursor:pointer;'} ${myGuess===i?'outline:2px solid var(--coin);':''} ${isMine?'outline:2px solid rgba(255,201,60,0.5); background:rgba(255,201,60,0.08);':''}">
         <div class="avatar" style="width:34px;height:34px;font-size:12.5px; background:linear-gradient(160deg, var(--coin), var(--coin-dark)); color:var(--ink);">${String.fromCharCode(65+i)}</div>
         <div class="feed-body"><div class="bal-name">"${escapeHtml(label)}"</div></div>
-        ${myGuess===i?'<span style="font-size:18px;">✓</span>':''}
+        ${isMine ? '<span style="font-size:12px; font-weight:700; color:var(--coin);">✍️ din</span>' : (myGuess===i?'<span style="font-size:18px;">✓</span>':'')}
       </div>
-    `).join('');
+    `;
+    }).join('');
     return `
       <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · ${badgeLabel}</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
-      <p class="hint" style="margin:0 0 10px; color:rgba(255,247,232,0.75);">Hvilket af disse ville ${escapeHtml(author?author.name:'?')} faktisk brokke sig over?</p>
-      ${isAuthor ? `<p class="hint" style="color:rgba(255,247,232,0.6); margin-bottom:10px;">Du skrev det — vent på de andres gæt.</p>` : opts}
+      <p class="hint" style="margin:0 0 10px; color:rgba(255,247,232,0.75);">${isAuthor ? 'Sådan ser de andre spørgsmålet — kan du se hvor godt dit brok gemmer sig?' : `Hvilket af disse ville ${escapeHtml(author?author.name:'?')} faktisk brokke sig over?`}</p>
+      ${opts}
       ${gameProgressHtml(guessedCount, eligible, 'har gættet')}
       ${(myGuess !== undefined || isAuthor) ? `<div class="waiting-pill"><span class="waiting-dot"></span> Venter på de andre...</div>` : ''}
     `;
