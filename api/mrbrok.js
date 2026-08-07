@@ -13,7 +13,12 @@ const { pushToMembers } = require('./_lib/push');
 
 const MIN_PLAYERS = 3;
 const DEFAULT_WARMUP = 2;
-const ALLOWED_WARMUP = [1, 2, 3, 4, 5, 6];
+// 1 er bevidst fjernet som mulighed — 2 rolige runder (1 imitation + 1 Q&A)
+// var for kort til reelt at nå at danne sig en mening, oven i at det også
+// gjorde et 3-spiller-spils allerede hårde eliminations-matematik (se
+// mrbrokFlow.js) endnu hårdere. Standarden (2) er kalibreret til et typisk
+// 4-personers spil på ca. 10-14 minutter i alt — se minWarmupForPlayers.
+const ALLOWED_WARMUP = [2, 3, 4, 5, 6];
 
 // Worst case (MrBrok never fanget ved et forkert gæt) tager
 // (players.length - 2) afstemningsrunder før spillet tvinges til en
@@ -24,7 +29,7 @@ const ALLOWED_WARMUP = [1, 2, 3, 4, 5, 6];
 // i store grupper. +1 for imitations-runden, som ikke er en af de
 // konfigurerede warmupRounds (se mrbrokFlow.js's advanceClue).
 function minWarmupForPlayers(n) {
-  return Math.max(1, n - 3);
+  return Math.max(2, n - 3);
 }
 
 module.exports = async (req, res) => {

@@ -508,7 +508,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-59';
+const BUILD_TAG = 'build-2026-08-07-60';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -541,7 +541,7 @@ let mrbrokWarmup = 2; // antal rene clue-runder før den første afstemning — 
 // praksis bliver løftet af serveren. Se den fils kommentar for hvorfor:
 // rolige runder skal udgøre mindst halvdelen af værst-tænkelige spillængde.
 function mrbrokMinWarmup(playerCount){
-  return Math.max(1, playerCount - 3);
+  return Math.max(2, playerCount - 3);
 }
 let mrbrokSelectedPlayers = null;
 let mrbrokInstructionsOpen = null; // null = ikke afgjort endnu denne session — "sådan foregår det" foldes automatisk ud første gang, sammen efterfølgende
@@ -3421,11 +3421,11 @@ function mrbrokLobbyHtml(){
       ${(()=>{
         const minWarmup = mrbrokMinWarmup(mrbrokSelectedPlayers.length);
         if(mrbrokWarmup < minWarmup) mrbrokWarmup = minWarmup;
-        const options = [1,2,3,4,5,6].filter(n => n >= minWarmup);
+        const options = [2,3,4,5,6].filter(n => n >= minWarmup);
         return `<div class="segmented" style="margin-bottom:0;">
           ${options.map(n=>`<div class="seg ${mrbrokWarmup===n?'active':''}" data-mrbrok-warmup="${n}">${n}</div>`).join('')}
         </div>
-        ${minWarmup > 1 ? `<p class="hint" style="margin:6px 0 0; color:rgba(255,247,232,0.55);">Løftet op til mindst ${minWarmup} pga. antal spillere — ellers fylder udstemning mere end selve spillet.</p>` : ''}`;
+        <p class="hint" style="margin:6px 0 0; color:rgba(255,247,232,0.55);">2 giver et spil på ca. 10-14 minutter for en typisk gruppe.${minWarmup > 2 ? ` Løftet op til mindst ${minWarmup} pga. antal spillere — ellers fylder udstemning mere end selve spillet.` : ''}</p>`;
       })()}
     </div>
     <button class="game-btn" id="startMrbrokBtn" ${enough?'':'disabled'}>🕵️ Start MrBrok (${mrbrokSelectedPlayers.length} spillere)</button>
