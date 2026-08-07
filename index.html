@@ -472,7 +472,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-50';
+const BUILD_TAG = 'build-2026-08-07-51';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -3336,7 +3336,7 @@ function mrbrokClueHtml(m, cur){
   // all-in på karakteren. Fra runde 2 skifter det til den forsigtige
   // vagt-men-troværdig Q&A-stil (se mrbrokTopicBanner/showMrbrokRoleReveal).
   const isImitationRound = cur.round === 1;
-  const roundLabel = isImitationRound ? ' · 🎭 imitations-runde' : (cur.round <= m.warmupRounds ? ' · nysgerrig runde' : '');
+  const roundLabel = isImitationRound ? ' · 🎭 imitations-runde' : (cur.round <= m.warmupRounds + 1 ? ' · nysgerrig runde' : '');
   const badge = `<div class="game-badge">Runde ${m.round} · Tur ${turnNo}/${totalTurns}${roundLabel}</div>`;
 
   if(isSpeaker){

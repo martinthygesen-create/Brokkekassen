@@ -123,7 +123,13 @@ function advanceClue(state) {
   if (next < cur.order.length) {
     m.current = { type: 'clue', round: cur.round, order: cur.order, turnIndex: next, speakerId: cur.order[next] };
     stampPhase(m.current);
-  } else if (cur.round < m.warmupRounds) {
+  // Runde 1 er ALTID imitations-runden (se index.html's isImitationRound) —
+  // en bonus-runde OVEN I de konfigurerede nysgerrige runder, ikke en af
+  // dem. +1 her sikrer at m.warmupRounds fortsat betyder "så mange RIGTIGE
+  // Q&A-runder", uanset værdi — ellers ville fx warmupRounds=1 gøre at
+  // spillet gik direkte fra imitations-runden til afstemning, uden at den
+  // faktiske deduktions-runde nogensinde blev spillet.
+  } else if (cur.round < m.warmupRounds + 1) {
     beginClueRound(state, cur.round + 1);
   } else {
     m.current = { type: 'vote', round: cur.round, votes: {} };
