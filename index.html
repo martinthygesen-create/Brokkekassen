@@ -389,7 +389,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-06-33';
+const BUILD_TAG = 'build-2026-08-06-34';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1255,7 +1255,6 @@ function openGameAdminMenuSheet(){
     <button class="sheet-btn test" id="gameAdminTestChanceBtn">🎲 Test Chancen</button>
     <button class="sheet-btn test" id="gameAdminTestWheelBtn">🎡 Test hjulet</button>
     <button class="sheet-btn test" id="gameAdminTestSlotBtn">🎰 Test spillemaskinen</button>
-    <button class="sheet-btn test" id="gameAdminTestLinkBtn">🧪 Test-link (spil med flere)</button>
     ${active ? '' : `<button class="sheet-btn test" id="gameAdminBotTestBtn">🤖 Test-spil med 3 bots</button>`}
     ${active ? `<button class="sheet-btn danger" id="gameAdminRestartBtn">🔄 Genstart Brokspillet</button>` : ''}
     ${hasHighscore ? `<button class="sheet-btn danger" id="gameAdminResetStatsBtn">🏆 Nulstil highscore</button>` : ''}
@@ -1265,7 +1264,6 @@ function openGameAdminMenuSheet(){
     document.getElementById('gameAdminTestChanceBtn').onclick = ()=>{ closeSheet(); setTimeout(openChanceTestSheet, 230); };
     document.getElementById('gameAdminTestWheelBtn').onclick = ()=>{ closeSheet(); setTimeout(openWheelTestSheet, 230); };
     document.getElementById('gameAdminTestSlotBtn').onclick = ()=>{ closeSheet(); setTimeout(openSlotTestSheet, 230); };
-    document.getElementById('gameAdminTestLinkBtn').onclick = ()=>{ closeSheet(); setTimeout(openMultiplayerTestLinkSheet, 230); };
     const botBtn = document.getElementById('gameAdminBotTestBtn');
     if(botBtn) botBtn.onclick = ()=> startBotTestGame('game');
     const restartBtn = document.getElementById('gameAdminRestartBtn');
@@ -2666,13 +2664,11 @@ function openMrbrokAdminMenuSheet(){
   openSheet(`
     <h2>MrBrok-admin ⚙️</h2>
     <p class="hint">${active ? 'Der er et spil i gang lige nu.' : 'Der er ikke noget spil i gang lige nu.'}</p>
-    <button class="sheet-btn test" id="mrbrokAdminTestLinkBtn">🧪 Test-link (spil med flere)</button>
     ${active ? '' : `<button class="sheet-btn test" id="mrbrokAdminBotTestBtn">🤖 Test-spil med 3 bots</button>`}
     ${active ? `<button class="sheet-btn danger" id="mrbrokAdminRestartBtn">🔄 Genstart MrBrok</button>` : ''}
     <button class="sheet-btn ghost" id="mrbrokAdminCloseBtn">Luk menu</button>
     <p class="hint" style="text-align:center; font-size:10.5px; opacity:.5; margin-top:6px;">${BUILD_TAG}</p>
   `, ()=>{
-    document.getElementById('mrbrokAdminTestLinkBtn').onclick = ()=>{ closeSheet(); setTimeout(openMultiplayerTestLinkSheet, 230); };
     const botBtn = document.getElementById('mrbrokAdminBotTestBtn');
     if(botBtn) botBtn.onclick = ()=> startBotTestGame('mrbrok');
     const restartBtn = document.getElementById('mrbrokAdminRestartBtn');
@@ -3457,31 +3453,6 @@ function openShareSheet(){
     };
     document.getElementById('shareNativeBtn').onclick = doShare;
     document.getElementById('closeShareBtn').onclick = closeSheet;
-  });
-}
-
-// Samme link/kode som openShareSheet, men fra spil-admin-menuerne — til at
-// selv teste et spil med flere "deltagere" uden at skulle have rigtige
-// venner klar: åbn linket i et par inkognito-vinduer (eller andre enheder)
-// og join med et andet navn i hver, så kan man spille alle roller selv.
-// Genbruger bare join-flowets eksisterende navn-dedup — intet nyt backend
-// nødvendigt.
-function openMultiplayerTestLinkSheet(){
-  openSheet(`
-    <h2>Test med flere spillere 🧪</h2>
-    <p class="hint">Åbn linket i et par inkognito-vinduer (eller på andre enheder), og join med et nyt navn i hvert — så kan du spille alle roller selv, ingen rigtige venner nødvendigt.</p>
-    <div style="text-align:center; margin:2px 0 18px;">
-      <p style="margin:0 0 2px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:rgba(5,32,36,0.4);">Kode</p>
-      <div id="testLinkCodeBox" style="cursor:pointer; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:32px; letter-spacing:.04em; color:var(--sea); padding:4px 0;">${roomId}</div>
-    </div>
-    <button class="sheet-btn primary" id="testLinkShareBtn">📤 Del/kopiér link</button>
-    <button class="sheet-btn ghost" id="testLinkCloseBtn">Luk</button>
-  `, ()=>{
-    document.getElementById('testLinkCodeBox').onclick = ()=>{
-      navigator.clipboard.writeText(roomId).then(()=>toast('Kode kopieret! 🔢')).catch(()=>prompt('Kopiér koden manuelt:', roomId));
-    };
-    document.getElementById('testLinkShareBtn').onclick = doShare;
-    document.getElementById('testLinkCloseBtn').onclick = closeSheet;
   });
 }
 
