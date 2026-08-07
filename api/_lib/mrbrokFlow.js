@@ -72,13 +72,15 @@ function endMrbrokGame(state, mrBrokWon) {
       state.events.push({ id: uid(), memberId: id, message: 'Tabte MrBrok', ts: Date.now(), votes: [], free: false, gameLoss: true });
     });
   }
+  // Bot-testspillere tælles aldrig med i highscoren.
   if (!state.mrbrokStats) state.mrbrokStats = {};
-  m.players.forEach(id => {
+  const realPlayerIds = m.players.filter(id => !(state.members.find(x => x.id === id) || {}).isBot);
+  realPlayerIds.forEach(id => {
     if (!state.mrbrokStats[id]) state.mrbrokStats[id] = { played: 0, wins: 0 };
     state.mrbrokStats[id].played += 1;
   });
   const winnerIds = mrBrokWon ? [m.mrBrokId] : m.players.filter(id => id !== m.mrBrokId);
-  winnerIds.forEach(id => { state.mrbrokStats[id].wins += 1; });
+  winnerIds.filter(id => realPlayerIds.includes(id)).forEach(id => { state.mrbrokStats[id].wins += 1; });
 
   m.current = {
     type: 'gameover',

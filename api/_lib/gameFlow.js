@@ -237,13 +237,15 @@ function endGame(state) {
 
   // Highscore på tværs af afsluttede spil — kun optalt hvis der reelt var en
   // vinder (dvs. ikke alle sluttede på 0 point, hvilket ville gøre alle til "vindere").
+  // Bot-testspillere tælles aldrig med i highscoren.
   if (!state.gameStats) state.gameStats = {};
-  memberIds.forEach(id => {
+  const realMemberIds = memberIds.filter(id => !(state.members.find(m => m.id === id) || {}).isBot);
+  realMemberIds.forEach(id => {
     if (!state.gameStats[id]) state.gameStats[id] = { played: 0, wins: 0 };
     state.gameStats[id].played += 1;
   });
   if (maxScore > 0) {
-    winnerIds.forEach(id => { state.gameStats[id].wins += 1; });
+    winnerIds.filter(id => realMemberIds.includes(id)).forEach(id => { state.gameStats[id].wins += 1; });
   }
 
   state.game.current = { type: 'gameover', scores, loserIds, winnerIds };

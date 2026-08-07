@@ -259,10 +259,12 @@
   .rose-guess-chips{ display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; }
   .rose-guess-chip{ padding:8px 14px; border-radius:100px; border:2px solid rgba(255,143,179,0.4); background:rgba(255,247,232,0.06); color:var(--cream); font-weight:700; font-size:13px; cursor:pointer; }
   /* Et kort der allerede har et gæt (eller er ens EGET, se roseHtml) fylder
-     bevidst mindre og dæmpes visuelt — ellers bliver skærmen alt for tung
-     med fulde navne-gitre under hvert eneste kort, selv de allerede afgjorte. */
-  .rose-match-card.rose-match-locked, .rose-match-card.rose-match-mine{ padding:10px 16px; opacity:.6; }
-  .rose-match-card.rose-match-locked .rose-match-text, .rose-match-card.rose-match-mine .rose-match-text{ font-size:13.5px; margin-bottom:3px; }
+     bevidst mindre og collapser — men skal stadig kunne LÆSES uden besvær:
+     dæmp kun baggrund/kant (giver "afgjort"-følelsen), ikke selve teksten. */
+  .rose-match-card.rose-match-locked, .rose-match-card.rose-match-mine{ padding:10px 16px; background:rgba(255,143,179,0.05); border-color:rgba(255,143,179,0.16); }
+  .rose-match-card.rose-match-locked .rose-match-text, .rose-match-card.rose-match-mine .rose-match-text{ font-size:13.5px; margin-bottom:3px; color:rgba(255,247,232,0.92); }
+  .rose-match-card.rose-match-locked .rose-match-to, .rose-match-card.rose-match-mine .rose-match-to{ color:rgba(255,247,232,0.8); }
+  .rose-match-card.rose-match-locked .rose-match-to b, .rose-match-card.rose-match-mine .rose-match-to b{ color:#ffb3cd; }
   .rose-match-change{ cursor:pointer; text-decoration:underline; font-weight:700; color:#ff8fb3; margin-left:4px; }
 
   main{ flex:1; padding:0 16px 130px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
@@ -399,14 +401,21 @@
      dem. Respekterer nu samme safe-area-inset-mønster som .offline-banner,
      plus nok klaring til at stå UNDER både titel og badge på alle tre
      header-varianter (kasse/spil/mrbrok). */
-  .toast{ position:fixed; top:calc(env(safe-area-inset-top) + 96px); left:50%; transform:translateX(-50%) translateY(-6px); background:linear-gradient(160deg, #0d4b52, var(--ink)); color:var(--cream); padding:13px 20px; border-radius:18px; font-size:14px; font-weight:600; z-index:80; box-shadow:0 10px 28px rgba(0,0,0,.35), 0 0 0 1px rgba(255,247,232,0.08) inset; opacity:0; transition:opacity .3s ease, transform .3s cubic-bezier(.2,.9,.3,1.2); pointer-events:none; max-width:88vw; text-align:center; line-height:1.4; }
+  .toast{ position:fixed; top:calc(env(safe-area-inset-top) + 96px); left:50%; transform:translateX(-50%) translateY(-6px) scale(.9); background:linear-gradient(160deg, #0d4b52, var(--ink)); color:var(--cream); padding:13px 20px; border-radius:18px; font-size:14px; font-weight:600; z-index:80; box-shadow:0 10px 28px rgba(0,0,0,.35), 0 0 0 1px rgba(255,247,232,0.08) inset; opacity:0; transition:opacity .28s ease, transform .28s ease; pointer-events:none; max-width:88vw; text-align:center; line-height:1.4; }
+  /* Et lille bounce/pop i stedet for en flad fade — føles mere som en
+     fejring når man vinder/taber en runde, i stedet for at bare dukke op. */
+  @keyframes toastPop{
+    0%{ transform:translateX(-50%) translateY(-10px) scale(.85); }
+    55%{ transform:translateX(-50%) translateY(9px) scale(1.06); }
+    100%{ transform:translateX(-50%) translateY(6px) scale(1); }
+  }
 
   /* Rolig, ikke-alarmerende banner når nettet mangler — understreger at
      data bare er "sidst kendte" og IKKE væk/nulstillet, i modsætning til
      hvis siden bare stille viste en tom/frisk kasse. */
   .offline-banner{ position:fixed; top:0; left:0; right:0; z-index:90; background:linear-gradient(90deg, var(--coin-dark), var(--coin)); color:var(--ink); font-size:12.5px; font-weight:700; text-align:center; padding:calc(8px + env(safe-area-inset-top)) 16px 8px; transform:translateY(-100%); transition:transform .25s ease; }
   .offline-banner.show{ transform:translateY(0); }
-  .toast.show{opacity:1; transform:translateX(-50%) translateY(6px);}
+  .toast.show{opacity:1; animation:toastPop .5s cubic-bezier(.34,1.56,.64,1) forwards;}
   .confetti{ position:fixed; inset:0; pointer-events:none; z-index:95; }
   .spinner{ width:16px;height:16px;border-radius:50%; border:2px solid rgba(255,255,255,.4); border-top-color:#fff; display:inline-block; animation:spin .7s linear infinite; }
   @keyframes spin{to{transform:rotate(360deg);}}
@@ -424,7 +433,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-06-37';
+const BUILD_TAG = 'build-2026-08-07-38';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1045,6 +1054,15 @@ function scheduleBotOnce(key, fn, delayMs){
   setTimeout(()=>{ botScheduledKeys.delete(key); fn(); }, delayMs);
 }
 
+// Botterne skal virke som om de rent faktisk "tænker sig om" én ad gangen,
+// ikke svare alle på samme tid — ellers ser man kun et glimt af en fase, før
+// den allerede er slået om til resultater. Hver bot i samme fase får derfor
+// sin egen tur i køen (index i-baseret trin) i stedet for alle på samme
+// tilfældige 0.9-2.7s vindue.
+function botActionDelay(indexInPhase){
+  return 1600 + indexInPhase * 2200 + Math.random() * 1400;
+}
+
 async function botSubmit(kind, actorId, payload){
   try{
     const r = await api(kind, { action:'submit', roomId, actorId, payload });
@@ -1076,8 +1094,8 @@ function driveBotsForGame(g){
   if(!cur || cur.type === 'gameover') return;
   const phaseKey = g.round + ':' + cur.type + ':' + (cur.phase||'');
   const pending = getPendingIdsClient(cur, g.players||[]);
-  pending.filter(isBotMember).forEach(botId=>{
-    scheduleBotOnce('game:'+phaseKey+':'+botId, ()=>runGameBotAction(cur, botId), 900+Math.random()*1800);
+  pending.filter(isBotMember).forEach((botId,i)=>{
+    scheduleBotOnce('game:'+phaseKey+':'+botId, ()=>runGameBotAction(cur, botId), botActionDelay(i));
   });
 }
 
@@ -1117,8 +1135,8 @@ function driveBotsForMrbrok(m){
   if(!cur || cur.type === 'gameover') return;
   const phaseKey = m.round + ':' + cur.type + ':' + (cur.turnIndex !== undefined ? cur.turnIndex : '');
   const pending = getPendingMrbrokIdsClient(m, cur);
-  pending.filter(isBotMember).forEach(botId=>{
-    scheduleBotOnce('mrbrok:'+phaseKey+':'+botId, ()=>runMrbrokBotAction(m, cur, botId), 900+Math.random()*1800);
+  pending.filter(isBotMember).forEach((botId,i)=>{
+    scheduleBotOnce('mrbrok:'+phaseKey+':'+botId, ()=>runMrbrokBotAction(m, cur, botId), botActionDelay(i));
   });
 }
 
@@ -1979,7 +1997,7 @@ function gameBodyHtml(g){
 function gameHighscoreHtml(){
   const stats = state.gameStats || {};
   const ranked = state.members
-    .filter(m => stats[m.id] && stats[m.id].played > 0)
+    .filter(m => !m.isBot && stats[m.id] && stats[m.id].played > 0)
     .sort((a,b) => (stats[b.id].wins - stats[a.id].wins) || (stats[b.id].played - stats[a.id].played));
   if(!ranked.length) return '';
   const rows = ranked.map((m,i)=>`
@@ -2878,7 +2896,7 @@ function mrbrokBodyHtml(m){
 function mrbrokHighscoreHtml(){
   const stats = state.mrbrokStats || {};
   const ranked = state.members
-    .filter(mm => stats[mm.id] && stats[mm.id].played > 0)
+    .filter(mm => !mm.isBot && stats[mm.id] && stats[mm.id].played > 0)
     .sort((a,b) => (stats[b.id].wins - stats[a.id].wins) || (stats[b.id].played - stats[a.id].played));
   if(!ranked.length) return '';
   const rows = ranked.map((mm,i)=>`
