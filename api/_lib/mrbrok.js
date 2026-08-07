@@ -59,23 +59,21 @@ function pickTopic(state) {
   return MRBROK_TOPICS[idx];
 }
 
-// Forslag til HVORDAN man svarer i karakter når man bliver grillet (aldrig
-// et konkret svar/ord) — vises kun til den der har turen lige nu, via
-// "Brug for et hint?"-knappen, ren client-side hjælp (se index.html).
-// Skrevet til den NUVÆRENDE mekanik (rolle + i-karakter afhøring, se
-// MRBROK_TOPICS ovenfor) — IKKE til den gamle "beskriv en vinkel på et
-// abstrakt emne"-udgave, som disse tidligere var formuleret til. Holdes
-// her sammen med resten af MrBroks indhold, selvom de reelt kunne have
-// ligget rent client-side — samlet ét sted er lettere at redigere/udvide.
+// Forslag til hvordan man svarer VAGT NOK til ikke at hjælpe MrBrok, men
+// KLART NOK til at overbevise de andre (aldrig et konkret svar/ord) —
+// vises kun til den der har turen lige nu, via "Brug for et hint?"-
+// knappen, ren client-side hjælp (se index.html). Ingen "spil en karakter
+// med stemmen"-tips her — det er et andet spil (se diskussionen i
+// commit-historikken); MrBrok er en afsløringsleg, ikke en improv-øvelse.
+// Holdes her sammen med resten af MrBroks indhold, selvom de reelt kunne
+// have ligget rent client-side — samlet ét sted er lettere at redigere/udvide.
 const MRBROK_CLUE_TIPS = [
-  'Svar med din rolles attitude — vis følelsen i stemmen, ikke kun i ordene',
-  'Overdriv en lille smule — det er trods alt et brok',
-  'Find på én konkret (opdigtet) detalje i stedet for at svare generelt',
+  'Nævn én konkret (men ikke afslørende) detalje i stedet for at svare generelt',
   'Hold svaret kort — giv ikke det hele væk på én gang',
   'Klag over en PERSON i situationen, ikke bare selve tingen',
-  'Suk eller ryst på hovedet før du svarer — spil rollen, ikke kun teksten',
+  'Svar på en følelse ved det, ikke selve tingen',
   'Vend spørgsmålet en anelse — svar på det du helst vil brokke dig over',
-  'Nævn hvor tit "det her" sker for dig i rollen',
+  'Nævn hvor tit "det her" sker for dig',
   'Beskriv hvordan du plejer at reagere i situationen',
   'Er du MrBrok: lyt til hvad de andre lige har sagt, og genbrug deres ord',
   'Er du MrBrok: svar selvsikkert og vagt i stedet for at prøve at være præcis',

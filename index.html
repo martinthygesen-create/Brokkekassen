@@ -472,7 +472,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-46';
+const BUILD_TAG = 'build-2026-08-07-47';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -3128,13 +3128,13 @@ function maybeShowMrbrokRoleSplash(m){
 
 function showMrbrokRoleReveal(m, inner, close){
   const items = m.youAreMrBrok ? [
-    ['🎭', 'Du kender ikke rollen de andre har — vælg selv en karakter og bliv i den hele spillet.'],
-    ['👂', 'Lyt grundigt efter deres tone og detaljer, og genbrug dem i dine egne svar.'],
+    ['🎯', 'Målet: hold dig skjult — eller gæt rollen rigtigt hvis du bliver afsløret.'],
+    ['👂', 'Du kender ikke rollen — lyt til de andres svar og gæt dig frem derfra.'],
     ['😎', 'Bedre at lyde selvsikker og vag end tydeligt forvirret.'],
   ] : [
-    ['🎭', 'Bliv i karakter — brug stemmen, ikke bare ordene.'],
-    ['🤏', 'Giv ikke det hele væk på én gang — gem noget til næste tur.'],
-    ['🕵️', 'MrBrok lytter og prøver at kopiere dig — pas på med at være for konkret.'],
+    ['🎯', 'Målet: afslør MrBrok — uden selv at afsløre rollen så tydeligt at MrBrok kan snige sig med.'],
+    ['🤏', 'Svar vagt nok til ikke at hjælpe MrBrok — men klart nok til at de andre tror på dig.'],
+    ['🕵️', 'MrBrok lytter med — pas på med at være for konkret.'],
   ];
   const reveal = m.youAreMrBrok
     ? `<div style="font-size:44px;">🕵️</div><h3>Du er MrBrok!</h3>`
@@ -3156,7 +3156,7 @@ function mrbrokTopicBanner(m){
     return `<div class="game-card" style="text-align:center; border-color:rgba(255,201,60,0.5); background:rgba(255,201,60,0.08);">
       <div style="font-size:26px;">🕵️</div>
       <p style="font-family:'Baloo 2',sans-serif; font-weight:800; margin:4px 0 0;">Du er MrBrok!</p>
-      <p class="hint" style="color:rgba(255,247,232,0.7);">Du kender IKKE rollen de andre har — vælg selv en karakter, og lyt godt efter deres tone for at kopiere den.</p>
+      <p class="hint" style="color:rgba(255,247,232,0.7);">Du kender IKKE rollen de andre har — lyt godt til deres svar og gæt dig frem, uden at blive afsløret.</p>
     </div>`;
   }
   const [role, domain] = (m.topic || '?').split(' — ');
@@ -3188,12 +3188,13 @@ function mrbrokLobbyHtml(){
   }).join('');
   const enough = mrbrokSelectedPlayers.length >= 3;
   const steps = [
-    ['🎭', 'Alle undtagen én får en rolle med et bredt brok-domæne — fx "sur stewardesse, besværlige passagerer"'],
-    ['🗣️', 'Gå på skift og bliv grillet i karakter — de andre spørger, du svarer HØJT uden at bekræfte eller lyve. Intet skrives ned'],
-    ['🕵️', 'MrBrok kender ikke rollen — skal vælge sin egen karakter og lytte for at kopiere de andres tone'],
-    ['🤔', 'Efter et par runder begynder I at stemme — den mest mistænkelige ryger ud'],
+    ['🎯', 'Målet: Afslør MrBrok — uden selv at afsløre rollen så tydeligt at MrBrok kan snige sig med'],
+    ['🎭', 'Alle undtagen én får den samme rolle med et bredt brok-domæne — fx "sur stewardesse, besværlige passagerer"'],
+    ['🗣️', 'Gå på skift og bliv spurgt om rollen HØJT — svar vagt nok til ikke at hjælpe MrBrok, men klart nok til at de andre tror på dig. Intet skrives ned'],
+    ['🕵️', 'MrBrok kender ikke rollen — skal lytte og gætte sig frem uden at blive afsløret'],
+    ['🤔', 'Efter et par nysgerrige runder begynder I at stemme — den mest mistænkelige ryger ud'],
     ['🍿', 'Stemt ud? Så kigger du med resten af spillet'],
-    ['🎯', 'Fanges MrBrok, får de ét sidste gæt for at stjæle sejren alligevel'],
+    ['🎯', 'Fanges MrBrok, får de ét sidste gæt på rollen for at stjæle sejren alligevel'],
   ];
   // Foldes automatisk ud første gang nogen ser lobbyen på denne enhed, og
   // sammen alle gange efter — så det ikke bare bliver fyld man scroller
@@ -3271,9 +3272,9 @@ function mrbrokClueHtml(m, cur){
       ${mrbrokTopicBanner(m)}
       ${mrbrokTurnOrderHtml(m, cur)}
       <div class="game-card" id="mrbrokCard" style="text-align:center; border-color:rgba(255,201,60,0.5); background:rgba(255,201,60,0.08);">
-        <div style="font-size:26px;">🎭</div>
-        <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:4px 0 6px;">Du bliver grillet!</p>
-        <p class="hint" style="color:rgba(255,247,232,0.75); margin:0 0 14px;">Lad de andre stille dig ET spørgsmål i karakter — svar HØJT, brug stemmen, uden at bekræfte eller lyve for tydeligt. Intet skrives ned.</p>
+        <div style="font-size:26px;">🎯</div>
+        <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:4px 0 6px;">Din tur!</p>
+        <p class="hint" style="color:rgba(255,247,232,0.75); margin:0 0 14px;">Lad de andre stille dig ET spørgsmål om rollen — svar HØJT, vagt nok til ikke at hjælpe MrBrok, men klart nok til at de andre tror på dig. Intet skrives ned.</p>
         <button class="game-btn ghost" id="mrbrokTipBtn" style="margin-top:0;">💡 Brug for et hint til et svar?</button>
         ${mrbrokTipText ? `<p class="hint" style="margin:10px 0 0; color:rgba(255,201,60,0.9); font-weight:600;">${escapeHtml(mrbrokTipText)}</p>` : ''}
         <button class="game-btn" id="mrbrokDoneBtn" style="margin-top:14px;">✅ Færdig, min tur er ovre</button>
@@ -3290,7 +3291,7 @@ function mrbrokClueHtml(m, cur){
       <div class="empty-state" style="padding:30px 20px;">
         <span class="emoji">👂</span>
         <b style="font-size:26px;">${escapeHtml(speaker?speaker.name:'?')}</b>
-        bliver grillet — stil dem et spørgsmål i karakter
+        har turen — stil dem et spørgsmål om rollen
       </div>
     </div>
     ${mrbrokComplaintBlockHtml(m, cur)}
