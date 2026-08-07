@@ -456,7 +456,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-40';
+const BUILD_TAG = 'build-2026-08-07-42';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1095,6 +1095,14 @@ function botActionDelay(indexInPhase){
   return 1600 + indexInPhase * 2200 + Math.random() * 1400;
 }
 
+// MrBrok-runder viser et EMNE-kort man skal nå at læse (og ved clue-fasen:
+// alles clues indtil videre) FØR det er ens egen tur — 1.6s var rigeligt
+// hurtigt til at bottene allerede var i gang, mens man stadig sad og læste.
+// Fem sekunders bund-forsinkelse for FØRSTE bot giver reel læsetid.
+function mrbrokBotActionDelay(indexInPhase){
+  return 5000 + indexInPhase * 2200 + Math.random() * 1400;
+}
+
 async function botSubmit(kind, actorId, payload){
   try{
     const r = await api(kind, { action:'submit', roomId, actorId, payload });
@@ -1168,7 +1176,7 @@ function driveBotsForMrbrok(m){
   const phaseKey = m.round + ':' + cur.type + ':' + (cur.turnIndex !== undefined ? cur.turnIndex : '');
   const pending = getPendingMrbrokIdsClient(m, cur);
   pending.filter(isBotMember).forEach((botId,i)=>{
-    scheduleBotOnce('mrbrok:'+phaseKey+':'+botId, ()=>runMrbrokBotAction(m, cur, botId), botActionDelay(i));
+    scheduleBotOnce('mrbrok:'+phaseKey+':'+botId, ()=>runMrbrokBotAction(m, cur, botId), mrbrokBotActionDelay(i));
   });
 }
 
@@ -1487,6 +1495,10 @@ function openSlotTestSheet(){
 // brok-nedtælling — ren kosmetik, udløser aldrig selv noget.
 const MIN_COMPLAIN_AGE_MS = 30000;
 const COMPLAINT_COUNTDOWN_MS = 12000;
+// MrBrok er mere snak-tungt end Brokspillet — se samme konstant server-side
+// i api/_lib/mrbrokFlow.js. Skal matche PRÆCIS, ellers tæller klienten ned
+// til et andet tidspunkt end serveren rent faktisk tvinger videre på.
+const MRBROK_COMPLAINT_COUNTDOWN_MS = 30000;
 
 function getPendingIdsClient(cur, players){
   if(!cur) return [];
@@ -1535,11 +1547,11 @@ function complaintBlockHtml(g, cur){
   return `<button class="complain-btn" id="complainBtn" data-target="${pending[0]}" style="transform:scale(${(1+growth*0.16).toFixed(2)}); opacity:${(0.6+growth*0.4).toFixed(2)};">${label}</button>`;
 }
 
-function startComplaintCountdown(cur){
+function startComplaintCountdown(cur, isMrbrok){
   clearInterval(complaintCountdownInterval);
   complaintCountdownInterval = null;
   if(!cur || !cur.complaint) return;
-  const deadline = cur.complaint.startedAt + COMPLAINT_COUNTDOWN_MS;
+  const deadline = cur.complaint.startedAt + (isMrbrok ? MRBROK_COMPLAINT_COUNTDOWN_MS : COMPLAINT_COUNTDOWN_MS);
   const tick = ()=>{
     const el = document.getElementById('complaintCountdown');
     if(!el){ clearInterval(complaintCountdownInterval); complaintCountdownInterval = null; return; }
@@ -2989,7 +3001,7 @@ function renderMrbrokScreen(){
   const complaintKey = cur && cur.complaint ? (mrbrokAnimKey + ':' + cur.complaint.startedAt) : null;
   if(complaintKey !== lastComplaintKeyMrbrok){
     lastComplaintKeyMrbrok = complaintKey;
-    startComplaintCountdown(cur);
+    startComplaintCountdown(cur, true);
   }
 }
 
@@ -3284,7 +3296,7 @@ function mrbrokOverHtml(m, cur){
       <div style="font-size:34px;">🫵</div>
       <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:6px 0;">MrBrok var... ${escapeHtml(mrbrokMember?mrbrokMember.name:'?')}!</p>
       <p class="hint" style="color:rgba(255,247,232,0.6);">Emnet var: <b style="color:rgba(255,247,232,0.85);">${escapeHtml(cur.topic||'?')}</b></p>
-      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; margin-top:8px; color:${cur.mrBrokWon?'var(--coin)':'var(--sea)'};">${cur.mrBrokWon ? '👑 MrBrok vandt!' : '👑 De andre afslørede MrBrok!'}</p>
+      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; margin-top:8px; color:${cur.mrBrokWon?'var(--coin)':'var(--coral)'};">${cur.mrBrokWon ? '👑 MrBrok vandt!' : '👑 De andre afslørede MrBrok!'}</p>
       ${stealLine}
       ${m.wager==='euro' ? `<p class="hint" style="color:rgba(255,247,232,0.7);">${cur.mrBrokWon ? 'De andre lægger 1€ hver i puljen.' : 'MrBrok lægger 1€ i puljen.'}</p>` : '<p class="hint" style="color:rgba(255,247,232,0.7);">Kun for sjov denne gang.</p>'}
     </div>

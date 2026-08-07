@@ -8,6 +8,11 @@ const { uid } = require('./store');
 const { shuffle } = require('./game');
 const { stampPhase, MIN_COMPLAIN_AGE_MS, BROKSPILLET_AUTO_MS, COMPLAINT_COUNTDOWN_MS } = require('./gameFlow');
 
+// MrBrok er mere snak-tungt end Brokspillet (folk siger deres clue højt og
+// skal nå at tænke sig om) — Brokspillets 12-sekunders nødbremse-nedtælling
+// virkede for hastigt/pressende her, så MrBrok får sin egen, længere.
+const MRBROK_COMPLAINT_COUNTDOWN_MS = 30000;
+
 // Point-fordeling for det personlige gætte-regnskab (ikke selve sejren, se
 // endMrbrokGame): korrekt stemme (på den RIGTIGE MrBrok) fordobles pr.
 // afstemningsrunde (1,2,4,8...), forkert stemme koster -1. MrBrok selv
@@ -167,7 +172,7 @@ function expireMrbrokPhaseIfDue(state) {
     cur.complaint = { by: 'brokspillet', targetId: pending[0], startedAt: now };
     return true;
   }
-  if (now - cur.complaint.startedAt < COMPLAINT_COUNTDOWN_MS) return false;
+  if (now - cur.complaint.startedAt < MRBROK_COMPLAINT_COUNTDOWN_MS) return false;
   forceResolveMrbrokPhase(state);
   return true;
 }
