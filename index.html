@@ -377,6 +377,11 @@
   .name-grid{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;}
   .name-pill{ padding:10px 16px; border-radius:100px; border:2px solid rgba(5,32,36,0.12); background:#fff; color:var(--ink); font-weight:700; font-size:14.5px; cursor:pointer; }
   .name-pill.selected{ background:var(--coral); border-color:var(--coral); color:#fff; }
+  /* MrBrok's tur-rækkefølge — fast 2-kolonne gitter med lige store knapper,
+     i stedet for det delte .name-grid's flex-wrap som gav uforudsigelige
+     rækker afhængig af navnelængde. */
+  .mrbrok-turn-grid{ display:grid; grid-template-columns:repeat(2, 1fr); gap:8px; }
+  .mrbrok-turn-pill{ text-align:center; padding:10px 8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .name-pill.voted{ background:var(--sea); border-color:var(--sea); color:#fff; }
   .name-pill:disabled{opacity:.4;}
 
@@ -495,7 +500,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-57';
+const BUILD_TAG = 'build-2026-08-07-58';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -3435,9 +3440,13 @@ function mrbrokTurnOrderHtml(m, cur){
     const style = isCurrent
       ? 'background:var(--coin); border-color:var(--coin); color:var(--noir);'
       : (isDone ? 'opacity:.45; text-decoration:line-through;' : 'opacity:.75;');
-    return `<div class="name-pill" style="${style}">${isDone?'✓ ':''}${escapeHtml(mm?mm.name:'?')}</div>`;
+    return `<div class="name-pill mrbrok-turn-pill" style="${style}">${isDone?'✓ ':''}${escapeHtml(mm?mm.name:'?')}</div>`;
   }).join('');
-  return `<div class="name-grid" style="margin-bottom:14px;">${chips}</div>`;
+  // Egen grid i stedet for det delte .name-grid's flex-wrap — med varierende
+  // navnelængder gav flex-wrap uforudsigelige rækker (fx 2 på første række,
+  // så 1 hver på de næste), i stedet for et pænt, forudsigeligt gitter med
+  // lige store knapper.
+  return `<div class="mrbrok-turn-grid" style="margin-bottom:14px;">${chips}</div>`;
 }
 
 function mrbrokClueHtml(m, cur){
