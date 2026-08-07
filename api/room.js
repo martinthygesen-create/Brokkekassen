@@ -8,7 +8,7 @@ module.exports = async (req, res) => {
     const { action } = req.body || {};
 
     if (action === 'join') {
-      const { roomId, name, email } = req.body || {};
+      const { roomId, name, email, isBot } = req.body || {};
       if (!roomId || !name || !name.trim()) return res.status(400).json({ error: 'mangler navn' });
       const state = await getState(roomId);
       if (!state) return res.status(404).json({ error: 'ukendt brokkekasse' });
@@ -16,7 +16,10 @@ module.exports = async (req, res) => {
       const cleanName = name.trim().slice(0, 24);
       let member = state.members.find(m => m.name.toLowerCase() === cleanName.toLowerCase());
       if (!member) {
-        member = { id: uid(), name: cleanName, email: email ? email.trim().slice(0, 80) : null };
+        // isBot markerer et rent test-medlem (se admin-menuernes "Test-spil
+        // med bots") — spilles automatisk af klienten der satte det i gang,
+        // aldrig af en rigtig person. Ingen andre server-side forskelle.
+        member = { id: uid(), name: cleanName, email: email ? email.trim().slice(0, 80) : null, isBot: !!isBot };
         state.members.push(member);
         await setState(roomId, state);
       }

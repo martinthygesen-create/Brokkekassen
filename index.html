@@ -389,7 +389,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-06-32';
+const BUILD_TAG = 'build-2026-08-06-33';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -421,6 +421,13 @@ let mrbrokInstructionsOpen = null; // null = ikke afgjort endnu denne session �
 let gameInstructionsOpen = null; // samme mønster for Brokspillets egen lobby
 let mrbrokKnownMemberIds = null;
 let mrbrokTipText = null; // client-only "hint til vinkel"-forslag — nulstilles ved ny tur, se mrbrokClueHtml/bindMrbrokHandlers
+
+// Bot-testspil — se startBotTestGame/driveBotsIfNeeded. botAutoplay er kun
+// sat i DENNE browser-fane (ikke gemt/delt), og styrer om vi overhovedet
+// gider tjekke for bot-ture ved hvert render — ren performance-genvej, når
+// man ikke er i gang med at teste med bots.
+let botAutoplay = false;
+let botScheduledKeys = new Set(); // undgår at planlægge samme bot-handling flere gange mens den venter sin tilfældige forsinkelse ud
 let brokListSubTab = 'alltime'; // 'today' | 'alltime' — undersort inde i Broklisten-fanen; alltime er det vigtigste og vises først
 let polling = null;
 let toastTimer = null;
@@ -961,7 +968,136 @@ function todayBalances(){
   return map;
 }
 
+/* ============ BOT-TESTSPIL ============ */
+// Lader admin teste Brokspillet/MrBrok solo: 3 bot-medlemmer tilføjes til
+// rummet og spiller automatisk deres egne ture (kort tilfældig forsinkelse,
+// så det ikke føles helt mekanisk) — admin skal kun styre sin EGEN tur og
+// kan følge alle skridt undervejs, ligegyldigt hvem der ender med at vinde.
+const BOT_NAMES = ['🤖 Bot Anna', '🤖 Bot Bo', '🤖 Bot Cille'];
+const BOT_FILLER_ANSWERS = ['Det er da til at grine ad, ærlig talt', 'Nogen må gøre noget ved det snart', 'Sker hver eneste gang, uden undtagelse', 'Ked af at sige det, men sådan er det bare', 'Ren galskab, hver evig eneste gang'];
+const BOT_FILLER_WORDS = ['regnvejr', 'morgenmad', 'myggestik', 'trafikkø', 'snorken'];
+const BOT_FILLER_STATEMENTS = ['Jeg har prøvet det tre gange i denne uge', 'Det skete faktisk i går aftes', 'Alle andre vidste det, bare ikke mig'];
+const BOT_FILLER_COMPLIMENTS = ['Du er altid god til at få humøret op igen', 'Du lytter bedre end de fleste jeg kender', 'Du finder altid en løsning, uanset hvad'];
+function pickBotFiller(list){ return list[Math.floor(Math.random()*list.length)]; }
+function isBotMember(id){ const mm = state.members.find(m=>m.id===id); return !!(mm && mm.isBot); }
+
+async function ensureTestBots(){
+  for(const name of BOT_NAMES){
+    try{
+      const r = await api('room', { action:'join', roomId, name, isBot:true });
+      if(r && r.state) state = r.state;
+    }catch(e){ /* en fejlet bot-oprettelse må ikke stoppe resten */ }
+  }
+}
+
+async function startBotTestGame(kind){
+  closeSheet();
+  toast('🤖 Tilføjer bot-spillere...');
+  await ensureTestBots();
+  const botIds = state.members.filter(m=>m.isBot).map(m=>m.id);
+  const playerIds = [profile.memberId, ...botIds];
+  botAutoplay = true;
+  if(kind === 'game') await gameApi('start', { wager:'fun', playerIds, totalRounds:5 });
+  else await mrbrokApi('start', { wager:'fun', playerIds, warmupRounds:1 });
+  toast('🤖 Bots spiller automatisk — du styrer kun din egen tur');
+}
+
+function scheduleBotOnce(key, fn, delayMs){
+  if(botScheduledKeys.has(key)) return;
+  botScheduledKeys.add(key);
+  setTimeout(()=>{ botScheduledKeys.delete(key); fn(); }, delayMs);
+}
+
+async function botSubmit(kind, actorId, payload){
+  try{
+    const r = await api(kind, { action:'submit', roomId, actorId, payload });
+    if(r && r.state){ state = r.state; render(); }
+  }catch(e){ /* prøves automatisk igen ved næste render, hvis stadig pending */ }
+}
+async function botReady(actorId){
+  try{
+    const r = await api('game', { action:'ready', roomId, actorId });
+    if(r && r.state){ state = r.state; render(); }
+  }catch(e){}
+}
+
+function driveBotsIfNeeded(){
+  if(!botAutoplay || !state) return;
+  // Kaldes fra render()'s allerførste linje ved HVER eneste gen-tegning —
+  // en uventet fejl her (fx en runde-type/felt-kombination der ikke er
+  // dækket endnu) må ALDRIG vælte selve render()-kaldet, for så ville hele
+  // appen fryse midt i et almindeligt spil med rigtige spillere, bare fordi
+  // et bot-testspil kørte ved siden af tidligere i samme fane.
+  try{
+    if(state.game && state.game.active && state.game.current) driveBotsForGame(state.game);
+    if(state.mrbrok && state.mrbrok.active && state.mrbrok.current) driveBotsForMrbrok(state.mrbrok);
+  }catch(e){ console.error('driveBotsIfNeeded fejlede (ufarligt, prøves igen ved næste render):', e); }
+}
+
+function driveBotsForGame(g){
+  const cur = g.current;
+  if(!cur || cur.type === 'gameover') return;
+  const phaseKey = g.round + ':' + cur.type + ':' + (cur.phase||'');
+  const pending = getPendingIdsClient(cur, g.players||[]);
+  pending.filter(isBotMember).forEach(botId=>{
+    scheduleBotOnce('game:'+phaseKey+':'+botId, ()=>runGameBotAction(cur, botId), 900+Math.random()*1800);
+  });
+}
+
+async function runGameBotAction(cur, botId){
+  if(cur.phase === 'results' || cur.phase === 'skipped') return botReady(botId);
+  if(cur.type === 'quiplash' && cur.phase === 'answer') return botSubmit('game', botId, { text: pickBotFiller(BOT_FILLER_ANSWERS) });
+  if(cur.type === 'quiplash' && cur.phase === 'vote'){
+    const options = [...Object.keys(cur.answers||{}).filter(id=>id!==botId), ...(cur.decoys||[]).map(d=>d.id)];
+    if(!options.length) return;
+    return botSubmit('game', botId, { votedFor: pickBotFiller(options) });
+  }
+  if(cur.type === 'truefalse' && cur.phase === 'write'){
+    const players = state.game.players || [];
+    return botSubmit('game', botId, { targetId: pickBotFiller(players), statement: pickBotFiller(BOT_FILLER_STATEMENTS), isTrue: Math.random() < 0.5 });
+  }
+  if(cur.type === 'truefalse' && cur.phase === 'guess') return botSubmit('game', botId, { guess: Math.random() < 0.5 });
+  if(cur.type === 'trivia' && cur.phase === 'answer') return botSubmit('game', botId, { choiceIndex: Math.floor(Math.random()*4) });
+  if(cur.type === 'guessbrok' && cur.phase === 'write') return botSubmit('game', botId, { statement: pickBotFiller(BOT_FILLER_STATEMENTS) });
+  if(cur.type === 'guessbrok' && cur.phase === 'guess'){
+    const n = (cur.options||[]).length || 4;
+    return botSubmit('game', botId, { choiceIndex: Math.floor(Math.random()*n) });
+  }
+  if(cur.type === 'casinobrok' && cur.phase === 'write') return botSubmit('game', botId, { word: pickBotFiller(BOT_FILLER_WORDS) });
+  if(cur.type === 'rose' && cur.phase === 'write') return botSubmit('game', botId, { compliment: pickBotFiller(BOT_FILLER_COMPLIMENTS) });
+  if(cur.type === 'rose' && cur.phase === 'match'){
+    const targets = cur.targets || {};
+    const recipientIds = Object.keys(targets).map(a=>targets[a]);
+    const authorIds = Object.keys(targets);
+    const guesses = {};
+    recipientIds.forEach(rid=>{ guesses[rid] = pickBotFiller(authorIds); });
+    return botSubmit('game', botId, { guesses });
+  }
+}
+
+function driveBotsForMrbrok(m){
+  const cur = m.current;
+  if(!cur || cur.type === 'gameover') return;
+  const phaseKey = m.round + ':' + cur.type + ':' + (cur.turnIndex !== undefined ? cur.turnIndex : '');
+  const pending = getPendingMrbrokIdsClient(m, cur);
+  pending.filter(isBotMember).forEach(botId=>{
+    scheduleBotOnce('mrbrok:'+phaseKey+':'+botId, ()=>runMrbrokBotAction(m, cur, botId), 900+Math.random()*1800);
+  });
+}
+
+async function runMrbrokBotAction(m, cur, botId){
+  if(cur.type === 'clue') return botSubmit('mrbrok', botId, {});
+  if(cur.type === 'vote'){
+    const options = (m.activeIds||[]).filter(id=>id!==botId);
+    if(!options.length) return;
+    return botSubmit('mrbrok', botId, { votedForId: pickBotFiller(options) });
+  }
+  if(cur.type === 'steal' && !cur.guess) return botSubmit('mrbrok', botId, { guess: pickBotFiller(BOT_FILLER_STATEMENTS) });
+  if(cur.type === 'steal' && cur.guess) return botSubmit('mrbrok', botId, { closeEnough: Math.random() < 0.5 });
+}
+
 function render(){
+  driveBotsIfNeeded();
   // Forsvar mod at stå i en visning der er slået fra i dette rum.
   if(activeApp === 'spil' && !state.gameEnabled) activeApp = 'kasse';
   if(activeApp === 'mrbrok' && !state.mrbrokEnabled) activeApp = 'kasse';
@@ -1084,6 +1220,11 @@ function openAppMenuSheet(){
 
 /* ============ BROKSPILLET ============ */
 async function gameApi(action, extra){
+  // Bot-autoplay er scoped til ÉT testspil ad gangen — når spillet afsluttes
+  // (manuelt eller genstartet fra admin), slukkes det igen, så det ikke ved
+  // et uheld bliver ved med at styre bot-medlemmer ind i et senere rigtigt
+  // spil med rigtige venner uden at nogen bad om det.
+  if(action === 'end') botAutoplay = false;
   try{
     const r = await api('game', Object.assign({ action, roomId, actorId: profile.memberId }, extra||{}));
     state = r.state;
@@ -1115,6 +1256,7 @@ function openGameAdminMenuSheet(){
     <button class="sheet-btn test" id="gameAdminTestWheelBtn">🎡 Test hjulet</button>
     <button class="sheet-btn test" id="gameAdminTestSlotBtn">🎰 Test spillemaskinen</button>
     <button class="sheet-btn test" id="gameAdminTestLinkBtn">🧪 Test-link (spil med flere)</button>
+    ${active ? '' : `<button class="sheet-btn test" id="gameAdminBotTestBtn">🤖 Test-spil med 3 bots</button>`}
     ${active ? `<button class="sheet-btn danger" id="gameAdminRestartBtn">🔄 Genstart Brokspillet</button>` : ''}
     ${hasHighscore ? `<button class="sheet-btn danger" id="gameAdminResetStatsBtn">🏆 Nulstil highscore</button>` : ''}
     <button class="sheet-btn ghost" id="gameAdminCloseBtn">Luk menu</button>
@@ -1124,6 +1266,8 @@ function openGameAdminMenuSheet(){
     document.getElementById('gameAdminTestWheelBtn').onclick = ()=>{ closeSheet(); setTimeout(openWheelTestSheet, 230); };
     document.getElementById('gameAdminTestSlotBtn').onclick = ()=>{ closeSheet(); setTimeout(openSlotTestSheet, 230); };
     document.getElementById('gameAdminTestLinkBtn').onclick = ()=>{ closeSheet(); setTimeout(openMultiplayerTestLinkSheet, 230); };
+    const botBtn = document.getElementById('gameAdminBotTestBtn');
+    if(botBtn) botBtn.onclick = ()=> startBotTestGame('game');
     const restartBtn = document.getElementById('gameAdminRestartBtn');
     if(restartBtn) restartBtn.onclick = async ()=>{
       closeSheet();
@@ -1227,6 +1371,7 @@ function getPendingIdsClient(cur, players){
   if(cur.type === 'guessbrok' && cur.phase === 'guess') return players.filter(id=>id!==cur.authorId).filter(id=>!(cur.guesses && cur.guesses[id] !== undefined));
   if(cur.type === 'rose' && cur.phase === 'write') return players.filter(id=>cur.compliments && cur.compliments[id] === undefined);
   if(cur.type === 'rose' && cur.phase === 'match') return players.filter(id=>cur.guesses && cur.guesses[id] === undefined);
+  if(cur.type === 'casinobrok' && cur.phase === 'write') return players.filter(id=>!(cur.words && cur.words[id] !== undefined));
   return [];
 }
 
@@ -2508,6 +2653,7 @@ const MRBROK_CLUE_TIPS = [
 ];
 
 async function mrbrokApi(action, extra){
+  if(action === 'end') botAutoplay = false; // se samme kommentar i gameApi
   try{
     const r = await api('mrbrok', Object.assign({ action, roomId, actorId: profile.memberId }, extra||{}));
     state = r.state;
@@ -2521,11 +2667,14 @@ function openMrbrokAdminMenuSheet(){
     <h2>MrBrok-admin ⚙️</h2>
     <p class="hint">${active ? 'Der er et spil i gang lige nu.' : 'Der er ikke noget spil i gang lige nu.'}</p>
     <button class="sheet-btn test" id="mrbrokAdminTestLinkBtn">🧪 Test-link (spil med flere)</button>
+    ${active ? '' : `<button class="sheet-btn test" id="mrbrokAdminBotTestBtn">🤖 Test-spil med 3 bots</button>`}
     ${active ? `<button class="sheet-btn danger" id="mrbrokAdminRestartBtn">🔄 Genstart MrBrok</button>` : ''}
     <button class="sheet-btn ghost" id="mrbrokAdminCloseBtn">Luk menu</button>
     <p class="hint" style="text-align:center; font-size:10.5px; opacity:.5; margin-top:6px;">${BUILD_TAG}</p>
   `, ()=>{
     document.getElementById('mrbrokAdminTestLinkBtn').onclick = ()=>{ closeSheet(); setTimeout(openMultiplayerTestLinkSheet, 230); };
+    const botBtn = document.getElementById('mrbrokAdminBotTestBtn');
+    if(botBtn) botBtn.onclick = ()=> startBotTestGame('mrbrok');
     const restartBtn = document.getElementById('mrbrokAdminRestartBtn');
     if(restartBtn) restartBtn.onclick = async ()=>{
       closeSheet();
