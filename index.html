@@ -264,7 +264,7 @@
      er muldvarpene og hullerne der skal fange øjet, ikke en mørk kasse
      omkring dem. Mindre padding så hullerne fylder kabinettet ud, samme
      "fyld pladsen" -tankegang som hjulet fik i wheel-wrap-fixet. */
-  .mole-cabinet{ background:linear-gradient(160deg,#8a6238,#5c4128); border-radius:24px; padding:14px 6px 12px; box-shadow:0 12px 26px rgba(0,0,0,.35), inset 0 0 0 3px #d9a84a; position:relative; }
+  .mole-cabinet{ background:linear-gradient(160deg,#8a6238,#5c4128); border-radius:24px; padding:14px 6px 12px; box-shadow:0 12px 26px rgba(0,0,0,.35), inset 0 0 0 3px #d9a84a; position:relative; width:100%; box-sizing:border-box; overflow-x:hidden; }
   .mole-cabinet.win{ box-shadow:0 12px 26px rgba(0,0,0,.35), inset 0 0 0 3px #FFC93C, 0 0 24px rgba(255,201,60,.5); }
   /* Fast 2 pr. række (ikke "så mange der er plads til") — ellers skifter
      antallet af pr.-række afhængig af skærmbredde og kandidatantal, hvilket
@@ -273,10 +273,16 @@
      ude i venstre side. Hullerne var tidligere langt smallere end hjulets
      bredde (210px total vs. wheel-wrap's 270px) — det er DET "går ikke til
      kant"-indtrykket. Bredere huller/wrapper matcher nu samme totalbredde.*/
-  .mole-grid{ display:grid; grid-template-columns: repeat(2, 1fr); justify-items:center; gap:14px; padding:8px 2px; }
+  .mole-grid{ display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); justify-items:center; gap:10px; padding:8px 2px; }
   .mole-hole-wrap:last-child:nth-child(odd){ grid-column: 1 / -1; }
-  .mole-hole-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; gap:5px; width:128px; padding-top:44px; }
-  .mole-hole{ position:relative; width:104px; height:104px; border-radius:50%; background:radial-gradient(circle at 50% 30%, #5c4128, #241a10); overflow:hidden; box-shadow:inset 0 4px 10px rgba(0,0,0,.6); }
+  /* Fast px-bredde overflowede skærmen på smallere telefoner (128px×2 +
+     mellemrum + kabinet-padding kunne blive bredere end selve viewportet,
+     så anden muldvarp blev klippet af). minmax(0,1fr) på gridet + procent-
+     bredde her betyder hullerne altid retter sig efter den PLADS der
+     faktisk er, med en øvre grænse så de heller ikke bliver kæmpestore på
+     brede skærme. */
+  .mole-hole-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; gap:5px; width:100%; max-width:132px; padding-top:44px; }
+  .mole-hole{ position:relative; width:100%; max-width:104px; aspect-ratio:1/1; border-radius:50%; background:radial-gradient(circle at 50% 30%, #5c4128, #241a10); overflow:hidden; box-shadow:inset 0 4px 10px rgba(0,0,0,.6); }
   .mole-countdown{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:10; pointer-events:none; }
   .mole-countdown-num{ font-family:'Baloo 2',sans-serif; font-weight:800; font-size:64px; color:#FFC93C; text-shadow:0 4px 14px rgba(0,0,0,.55); }
   /* Håndbygget hammer (ikke emoji'en 🔨) — emoji-glyffer skalerer og
@@ -472,7 +478,7 @@
   .offline-banner{ position:fixed; top:0; left:0; right:0; z-index:90; background:linear-gradient(90deg, var(--coin-dark), var(--coin)); color:var(--ink); font-size:12.5px; font-weight:700; text-align:center; padding:calc(8px + env(safe-area-inset-top)) 16px 8px; transform:translateY(-100%); transition:transform .25s ease; }
   .offline-banner.show{ transform:translateY(0); }
   .toast.show{opacity:1; animation:toastPop .5s cubic-bezier(.34,1.56,.64,1) forwards;}
-  .confetti{ position:fixed; inset:0; pointer-events:none; z-index:95; }
+  .confetti{ position:fixed; inset:0; pointer-events:none; z-index:95; overflow:hidden; }
   .spinner{ width:16px;height:16px;border-radius:50%; border:2px solid rgba(255,255,255,.4); border-top-color:#fff; display:inline-block; animation:spin .7s linear infinite; }
   @keyframes spin{to{transform:rotate(360deg);}}
 </style>
@@ -489,7 +495,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-56';
+const BUILD_TAG = 'build-2026-08-07-57';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
