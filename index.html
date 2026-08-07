@@ -70,6 +70,20 @@
     background-attachment:fixed; background-repeat:no-repeat;
     background-color: var(--noir);
   }
+  /* Rose-bonusrunden får sin egen tydeligt lyserøde/marmorerede baggrund
+     mens den står på (skiftes tilbage til det fælles teal så snart runden
+     er slut) — hele pointen er at det IKKE skal ligne resten af Brokspillet,
+     så det er klart uden at skulle læse noget at "nu handler det ikke om
+     brok". Samme mønster/klasse-placering som theme-mrbrok. */
+  html.theme-rose{
+    background:
+      radial-gradient(ellipse at 15% -10%, rgba(255,200,220,0.32) 0%, transparent 55%),
+      radial-gradient(ellipse at 100% 15%, rgba(255,143,179,0.28) 0%, transparent 60%),
+      radial-gradient(ellipse at 50% 90%, rgba(255,180,205,0.16) 0%, transparent 65%),
+      linear-gradient(180deg, #6b2648 0%, #3a1530 100%);
+    background-attachment:fixed; background-repeat:no-repeat;
+    background-color: #3a1530;
+  }
   body{
     margin:0; font-family:'Work Sans', system-ui, sans-serif;
     background:transparent;
@@ -92,13 +106,15 @@
      Brokspillet får en varm guld-glød (matcher mønt-temaet), MrBrok en
      lidt mystisk lilla-glød (matcher detektiv-temaet). Kun headeren
      nuanceres — resten af skærmen holder sig til det fælles tema. */
-  header.theme-spil::before, header.theme-mrbrok::before{
+  header.theme-spil::before, header.theme-mrbrok::before, header.theme-rose::before{
     content:''; position:absolute; inset:-10px -10px auto -10px; height:110px; pointer-events:none; z-index:-1;
     -webkit-mask-image:linear-gradient(180deg, #000 0%, transparent 100%); mask-image:linear-gradient(180deg, #000 0%, transparent 100%);
   }
   header.theme-spil::before{ background:radial-gradient(ellipse at 30% 0%, rgba(255,201,60,0.28), transparent 70%); }
   header.theme-mrbrok::before{ background:radial-gradient(ellipse at 30% 0%, rgba(255,201,60,0.2), transparent 70%); }
+  header.theme-rose::before{ background:radial-gradient(ellipse at 30% 0%, rgba(255,143,179,0.4), transparent 70%); }
   header.theme-spil #btnAppMenu, header.theme-spil #btnGameAdminMenu{ border-color:rgba(255,201,60,0.4); }
+  header.theme-rose #btnAppMenu, header.theme-rose #btnGameAdminMenu{ border-color:rgba(255,143,179,0.5); }
   header.theme-mrbrok #btnAppMenu, header.theme-mrbrok #btnGameAdminMenu, header.theme-mrbrok #btnMrbrokAdminMenu{ border-color:rgba(255,201,60,0.3); }
   .day-chip{ display:inline-block; font-size:12px; font-weight:600; background:rgba(255,247,232,0.1); border:1px solid rgba(255,247,232,0.18); padding:5px 10px; border-radius:100px; white-space:nowrap; vertical-align:middle; }
 
@@ -237,12 +253,17 @@
      end resten af Brokspillet, så det tydeligt føles som noget andet end brok. */
   .rose-card{ background:linear-gradient(160deg, rgba(255,143,179,0.22), rgba(255,107,74,0.08)); border:1px solid rgba(255,143,179,0.4); }
   .rose-btn{ background:linear-gradient(160deg, #ff8fb3, #e14d7a); box-shadow:0 8px 18px rgba(255,143,179,0.35); }
-  .rose-match-card{ background:rgba(255,143,179,0.1); border:1px solid rgba(255,143,179,0.3); border-radius:18px; padding:14px 16px; margin-bottom:12px; }
+  .rose-match-card{ background:rgba(255,143,179,0.1); border:1px solid rgba(255,143,179,0.3); border-radius:18px; padding:14px 16px; margin-bottom:12px; transition:opacity .2s ease, padding .2s ease; }
   .rose-match-text{ font-family:'Baloo 2',sans-serif; font-weight:700; font-size:15.5px; margin:0 0 6px; color:var(--cream); }
   .rose-match-to{ font-size:12.5px; margin:0; color:rgba(255,247,232,0.65); }
   .rose-guess-chips{ display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; }
   .rose-guess-chip{ padding:8px 14px; border-radius:100px; border:2px solid rgba(255,143,179,0.4); background:rgba(255,247,232,0.06); color:var(--cream); font-weight:700; font-size:13px; cursor:pointer; }
-  .rose-guess-chip.selected{ background:#ff8fb3; border-color:#ff8fb3; color:#3d1120; }
+  /* Et kort der allerede har et gæt (eller er ens EGET, se roseHtml) fylder
+     bevidst mindre og dæmpes visuelt — ellers bliver skærmen alt for tung
+     med fulde navne-gitre under hvert eneste kort, selv de allerede afgjorte. */
+  .rose-match-card.rose-match-locked, .rose-match-card.rose-match-mine{ padding:10px 16px; opacity:.6; }
+  .rose-match-card.rose-match-locked .rose-match-text, .rose-match-card.rose-match-mine .rose-match-text{ font-size:13.5px; margin-bottom:3px; }
+  .rose-match-change{ cursor:pointer; text-decoration:underline; font-weight:700; color:#ff8fb3; margin-left:4px; }
 
   main{ flex:1; padding:0 16px 130px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
 
@@ -397,7 +418,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-06-35';
+const BUILD_TAG = 'build-2026-08-06-36';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -429,6 +450,8 @@ let mrbrokInstructionsOpen = null; // null = ikke afgjort endnu denne session �
 let gameInstructionsOpen = null; // samme mønster for Brokspillets egen lobby
 let mrbrokKnownMemberIds = null;
 let mrbrokTipText = null; // client-only "hint til vinkel"-forslag — nulstilles ved ny tur, se mrbrokClueHtml/bindMrbrokHandlers
+let roseMatchSelections = {}; // GLOBAL (ikke lokal i bindGameHandlers) så et almindeligt poll-gen-render ikke visker synlige gæt ud, se roseHtml
+let roseMatchSelectionsKey = null; // hvilken runde roseMatchSelections hører til — nulstilles kun ved en ny runde
 
 // Bot-testspil — se startBotTestGame/driveBotsIfNeeded. botAutoplay er kun
 // sat i DENNE browser-fane (ikke gemt/delt), og styrer om vi overhovedet
@@ -1115,9 +1138,15 @@ function render(){
   // fælles teal (bliver en blød fade takket være transition på body), og
   // kun headerens accent forbliver mørk/guld foroven.
   const isMrbrokTheme = activeApp === 'mrbrok' && !(state.mrbrok && state.mrbrok.active);
+  // Rose-runden skal tydeligt IKKE ligne resten af Brokspillet mens den
+  // står på — se CSS-kommentaren ved html.theme-rose. Kun aktiv præcis så
+  // længe den aktuelle runde faktisk ER type 'rose', falder automatisk
+  // tilbage til det fælles teal så snart runden er slut.
+  const isRoseTheme = activeApp === 'spil' && state.game && state.game.active && state.game.current && state.game.current.type === 'rose';
   // Klassen sættes på <html>, ikke <body> — se CSS-kommentaren ved
   // html{background:...} for hvorfor det er html's baggrund der tæller.
   document.documentElement.classList.toggle('theme-mrbrok', isMrbrokTheme);
+  document.documentElement.classList.toggle('theme-rose', isRoseTheme);
   // OS-statusbaren (og browserens egen UI-chrome) males IKKE af sidens CSS —
   // den bruger kun den statiske <meta theme-color>-værdi, som ellers stod
   // fast på teal uanset skærm. Det gav en hård søm øverst hver gang MrBroks
@@ -1126,7 +1155,7 @@ function render(){
   // faste farve var mørkere end selve gradientens top. Matcher den nu til
   // den farve der rent faktisk er øverst i den aktive baggrund.
   const themeColorMeta = document.querySelector('meta[name="theme-color"]');
-  if(themeColorMeta) themeColorMeta.setAttribute('content', isMrbrokTheme ? '#0A1416' : '#12666b');
+  if(themeColorMeta) themeColorMeta.setAttribute('content', isMrbrokTheme ? '#0A1416' : (isRoseTheme ? '#3a1530' : '#12666b'));
   if(activeApp === 'spil') return renderGameScreen();
   if(activeApp === 'mrbrok') return renderMrbrokScreen();
   const prevMain = document.getElementById('main');
@@ -1519,8 +1548,9 @@ function renderGameScreen(){
     lastCountdownRound = g.round;
     playRoundCountdown();
   }
+  const isRose = g.active && g.current && g.current.type === 'rose';
   app.innerHTML = `
-    <header class="theme-spil">
+    <header class="theme-spil${isRose?' theme-rose':''}">
       <div class="title" style="font-size:30px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
         <span>Brok<span>spillet</span> 👉</span>
         <button id="btnAppMenu" title="Menu" style="width:32px; height:32px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.85); border-radius:100px; flex:0 0 auto;">☰</button>
@@ -2322,8 +2352,8 @@ function casinobrokHtml(g, cur){
     return `
       <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · 🎰 Casinobrok</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
       <div class="game-card" id="gameCard">
-        <p style="font-family:'Baloo 2',sans-serif; font-weight:800; margin:0 0 8px; font-size:19px;">✍️ Skriv <u>ét</u> ord</p>
-        <p class="hint" style="margin:0 0 10px; color:rgba(255,247,232,0.55);">F.eks.: <i>"regnvejr"</i>, <i>"snorken"</i> — samme ord er ok.</p>
+        <p style="font-family:'Baloo 2',sans-serif; font-weight:800; margin:0 0 8px; font-size:19px;">✍️ Skriv dit eget brokord</p>
+        <p class="hint" style="margin:0 0 10px; color:rgba(255,247,232,0.55);">Ét ord — hjulet trækker bagefter lod om hvis ord der vinder. F.eks.: <i>"regnvejr"</i>, <i>"snorken"</i> — samme ord er ok.</p>
         <input type="text" id="casinoWordInput" maxlength="24" placeholder="Dit ord..." value="${mine?escapeHtml(mine):''}" ${mine?'disabled':''}>
         ${mine ? '' : `<button class="game-btn" id="casinoSubmitBtn" style="margin-top:12px;">🎰 Send ordet</button>`}
       </div>
@@ -2409,8 +2439,42 @@ function roseHtml(g, cur){
         ${complaintBlockHtml(g, cur)}
       `;
     }
+    // Den ros JEG selv skrev behøver ikke nogen gætte-UI for MIG — jeg ved jo
+    // allerede hvem der skrev den (mig selv). Fylder derfor ingenting og
+    // tælles automatisk som "rigtig" i mit eget valg-sæt.
+    const myAuthoredRecipientId = myId && cur.targets ? cur.targets[myId] : null;
+    // roseMatchSelections er et GLOBALT, VEDVARENDE valg — ikke en lokal
+    // variabel der nulstilles ved hvert gen-render. Før den fix her boede
+    // valgene kun i en lukning inde i bindGameHandlers, så et helt
+    // almindeligt poll (fx fordi en anden spiller reagerede) byggede hele
+    // skærmen om fra bunden og viskede synlige valg ud, selvom man lige
+    // havde trykket på alle fire — meget forvirrende ("jeg trykkede på alt,
+    // og så blev det nulstillet"). Nulstilles kun ved en NY runde.
+    if(roseMatchSelectionsKey !== g.round){
+      roseMatchSelectionsKey = g.round;
+      roseMatchSelections = {};
+      if(myAuthoredRecipientId) roseMatchSelections[myAuthoredRecipientId] = myId;
+    }
     const cardsHtml = cards.map(c=>{
       const recipientMember = state.members.find(m=>m.id===c.recipientId);
+      if(c.recipientId === myAuthoredRecipientId){
+        return `
+          <div class="rose-match-card rose-match-mine" data-recipient="${c.recipientId}">
+            <p class="rose-match-text">"${escapeHtml(c.text||'')}"</p>
+            <p class="rose-match-to">Om: <b>${escapeHtml(recipientMember?recipientMember.name:'?')}</b> · ✓ din egen — ved du jo selv</p>
+          </div>
+        `;
+      }
+      const chosenId = roseMatchSelections[c.recipientId];
+      if(chosenId){
+        const chosenMember = state.members.find(m=>m.id===chosenId);
+        return `
+          <div class="rose-match-card rose-match-locked" data-recipient="${c.recipientId}">
+            <p class="rose-match-text">"${escapeHtml(c.text||'')}"</p>
+            <p class="rose-match-to">Om: <b>${escapeHtml(recipientMember?recipientMember.name:'?')}</b> · Gæt: <b>${escapeHtml(chosenMember?chosenMember.name:'?')}</b> <span class="rose-match-change" data-rose-change="${c.recipientId}">✏️ skift</span></p>
+          </div>
+        `;
+      }
       const chips = players.map(p=>`<div class="name-pill rose-guess-chip" data-rose-recipient="${c.recipientId}" data-rose-author="${p.id}">${escapeHtml(p.name)}</div>`).join('');
       return `
         <div class="rose-match-card" data-recipient="${c.recipientId}">
@@ -2421,11 +2485,12 @@ function roseHtml(g, cur){
         </div>
       `;
     }).join('');
+    const allChosen = cards.every(c => roseMatchSelections[c.recipientId] !== undefined);
     return `
       <div class="game-badge">Runde ${g.round}/${g.totalRounds} · 🌹 Rose — Gæt hvem der skrev hvad</div>
       <p class="hint" style="margin:0 0 10px;">Tryk på et navn under hver ros for at gætte forfatteren.</p>
       ${cardsHtml}
-      <button class="game-btn rose-btn" id="roseGuessSubmitBtn" style="margin-top:4px;" disabled>🌹 Indsend gæt</button>
+      <button class="game-btn rose-btn" id="roseGuessSubmitBtn" style="margin-top:4px;" ${allChosen?'':'disabled'}>🌹 Indsend gæt</button>
       ${gameProgressHtml(guessedCount, g.players.length, 'har gættet')}
       ${complaintBlockHtml(g, cur)}
     `;
@@ -2625,27 +2690,29 @@ function bindGameHandlers(g){
     const myId = profile && profile.memberId;
     const already = myId && cur.guesses && cur.guesses[myId];
     if(!already){
-      // Gættene sendes samlet ét sted (ikke ét pr. tryk som ved quiplash-
-      // stemmer) — lokal, ikke-gemt valgtilstand indtil "Indsend gæt" trykkes,
-      // så man kan nå at fortryde et navn før man sender det hele.
-      const selections = {};
+      // Gættene lever i roseMatchSelections (global, se roseHtml) i stedet
+      // for en lokal variabel her — ellers overlever de ikke det næste
+      // almindelige poll-gen-render. Et klik gen-tegner HELE skærmen (samme
+      // mønster som fx mrbrokInstructionsOpen), så det valgte kort straks
+      // klapper sammen til den dæmpede, låste visning.
       const cards = document.querySelectorAll('.rose-match-card');
-      const submitBtn = document.getElementById('roseGuessSubmitBtn');
-      const updateSubmitState = ()=>{ if(submitBtn) submitBtn.disabled = cards.length === 0 || Object.keys(selections).length < cards.length; };
       document.querySelectorAll('.rose-guess-chip').forEach(chip=>{
         chip.onclick = ()=>{
-          const recipientId = chip.dataset.roseRecipient;
-          selections[recipientId] = chip.dataset.roseAuthor;
-          const card = chip.closest('.rose-match-card');
-          card.querySelectorAll('.rose-guess-chip').forEach(x=>x.classList.remove('selected'));
-          chip.classList.add('selected');
-          updateSubmitState();
+          roseMatchSelections[chip.dataset.roseRecipient] = chip.dataset.roseAuthor;
+          render();
         };
       });
+      document.querySelectorAll('[data-rose-change]').forEach(btn=>{
+        btn.onclick = ()=>{
+          delete roseMatchSelections[btn.dataset.roseChange];
+          render();
+        };
+      });
+      const submitBtn = document.getElementById('roseGuessSubmitBtn');
       if(submitBtn) submitBtn.onclick = ()=>{
-        if(Object.keys(selections).length < cards.length) return;
+        if(Object.keys(roseMatchSelections).length < cards.length) return;
         lockSubmitBtn(submitBtn, 'Sender...');
-        gameApi('submit', { payload: { guesses: selections } });
+        gameApi('submit', { payload: { guesses: roseMatchSelections } });
       };
     }
   }
