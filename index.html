@@ -456,7 +456,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-42';
+const BUILD_TAG = 'build-2026-08-07-43';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -485,6 +485,7 @@ let mrbrokWager = 'fun';
 let mrbrokWarmup = 2; // 1 | 2 | 3 — antal rene clue-runder før den første afstemning
 let mrbrokSelectedPlayers = null;
 let mrbrokInstructionsOpen = null; // null = ikke afgjort endnu denne session — "sådan foregår det" foldes automatisk ud første gang, sammen efterfølgende
+let mrbrokRecapOpenRounds = new Set(); // hvilke runder i "Sådan gik det" der har fået vist deres stemme-detaljer
 let gameInstructionsOpen = null; // samme mønster for Brokspillets egen lobby
 let mrbrokKnownMemberIds = null;
 let mrbrokTipText = null; // client-only "hint til vinkel"-forslag — nulstilles ved ny tur, se mrbrokClueHtml/bindMrbrokHandlers
@@ -3255,11 +3256,17 @@ function mrbrokStealHtml(m, cur){
   `;
 }
 
+// Den vigtigste linje pr. runde er HVEM der røg ud og om det var MrBrok —
+// det skal man kunne se med det samme. Hvem-stemte-på-hvem er nyttig
+// nysgerrighed, ikke hovedpointen, så det er nu skjult bag et tryk i
+// stedet for at fylde lige så meget som selve resultatet i hver eneste
+// runde-boks.
 function mrbrokRecapHtml(m, cur){
   if(!cur.voteHistory || !cur.voteHistory.length) return '';
-  const rows = cur.voteHistory.map(h=>{
+  const rows = cur.voteHistory.map((h,i)=>{
     const eliminated = state.members.find(mm=>mm.id===h.eliminatedId);
     const wasMrBrok = h.eliminatedId === cur.mrBrokId;
+    const isOpen = mrbrokRecapOpenRounds.has(i);
     const votes = Object.entries(h.votes||{}).map(([voterId,votedForId])=>{
       const voter = state.members.find(mm=>mm.id===voterId);
       const votedFor = state.members.find(mm=>mm.id===votedForId);
@@ -3267,9 +3274,11 @@ function mrbrokRecapHtml(m, cur){
       return `<span style="display:inline-block; margin:2px 6px 2px 0; padding:3px 9px; border-radius:100px; font-size:11.5px; background:${right?'rgba(255,201,60,0.18)':'rgba(255,247,232,0.08)'};">${escapeHtml(voter?voter.name:'?')} → ${escapeHtml(votedFor?votedFor.name:'?')} ${right?'✓':''}</span>`;
     }).join('');
     return `<div class="game-card" style="text-align:left; margin-bottom:8px;">
-      <p style="font-weight:700; margin:0 0 6px;">Runde ${h.round}${h.tie?' · uafgjort, Chancen valgte':''}</p>
-      <p class="hint" style="margin:0 0 8px; color:rgba(255,247,232,0.8);">${wasMrBrok?'🕵️':'😬'} <b style="color:rgba(255,247,232,0.9);">${escapeHtml(eliminated?eliminated.name:'?')}</b> blev stemt ud${wasMrBrok?' — det var MrBrok!':' (ikke MrBrok)'}</p>
-      <div>${votes}</div>
+      <p class="hint" style="margin:0 0 4px; color:rgba(255,247,232,0.55); font-size:11.5px;">Runde ${h.round}${h.tie?' · uafgjort, Chancen valgte':''}</p>
+      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:16px; margin:0;">${wasMrBrok?'🕵️':'😬'} ${escapeHtml(eliminated?eliminated.name:'?')} blev stemt ud${wasMrBrok?' — det var MrBrok!':''}</p>
+      ${!wasMrBrok?'<p class="hint" style="margin:2px 0 0; color:rgba(255,247,232,0.6);">(ikke MrBrok)</p>':''}
+      <div data-mrbrok-recap-toggle="${i}" style="margin-top:8px; font-size:12px; font-weight:700; color:rgba(255,247,232,0.55); cursor:pointer; text-decoration:underline;">${isOpen?'Skjul stemmer':'Vis hvem stemte hvordan'}</div>
+      ${isOpen?`<div style="margin-top:6px;">${votes}</div>`:''}
     </div>`;
   }).join('');
   return `<div class="section-label">📜 Sådan gik det</div>${rows}`;
@@ -3339,6 +3348,15 @@ function bindMrbrokHandlers(m){
 
   const complainBtn = document.getElementById('complainBtn');
   if(complainBtn) complainBtn.onclick = ()=> mrbrokApi('complain', { payload: { targetId: complainBtn.dataset.target } });
+
+  document.querySelectorAll('[data-mrbrok-recap-toggle]').forEach(el=>{
+    el.onclick = ()=>{
+      const i = parseInt(el.dataset.mrbrokRecapToggle, 10);
+      if(mrbrokRecapOpenRounds.has(i)) mrbrokRecapOpenRounds.delete(i);
+      else mrbrokRecapOpenRounds.add(i);
+      render();
+    };
+  });
 
   if(!cur) return;
 
