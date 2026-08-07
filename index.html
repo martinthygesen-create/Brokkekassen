@@ -158,10 +158,20 @@
      "dømt"-rystning i stedet for bare flad tekst. */
   @keyframes gameoverWinnerPop{ 0%{ transform:scale(.7); opacity:0; } 55%{ transform:scale(1.14); opacity:1; } 75%{ transform:scale(.96); } 100%{ transform:scale(1); } }
   .gameover-winner-pop{ animation:gameoverWinnerPop .6s cubic-bezier(.34,1.56,.64,1); display:inline-block; }
+  /* Det oprindelige pop var overstået på under et sekund og frøs derefter
+     helt stille — nem at overse hvis man kigger væk et øjeblik. En blid,
+     LØBENDE glød efter pop'et holder vinderen synligt fejret resten af
+     tiden man står på skærmen, ikke kun det første halve sekund. */
+  @keyframes gameoverWinnerGlow{ 0%,100%{ filter:drop-shadow(0 0 0 rgba(255,201,60,0)); } 50%{ filter:drop-shadow(0 0 10px rgba(255,201,60,.85)); } }
+  .gameover-winner-glow{ display:inline-block; animation:gameoverWinnerGlow 1.6s ease-in-out .6s infinite; }
   @keyframes gameoverLoserShake{ 0%,100%{ transform:translateX(0) rotate(0deg); } 15%{ transform:translateX(-6px) rotate(-2deg); } 30%{ transform:translateX(5px) rotate(2deg); } 45%{ transform:translateX(-4px) rotate(-1.5deg); } 60%{ transform:translateX(3px) rotate(1deg); } 75%{ transform:translateX(-2px) rotate(-.5deg); } }
   .gameover-loser-shake{ animation:gameoverLoserShake .7s ease-in-out .5s; }
   @keyframes gameoverLoserDroop{ 0%{ transform:translateY(0) rotate(0deg); } 100%{ transform:translateY(4px) rotate(-8deg); } }
   .gameover-loser-droop{ display:inline-block; animation:gameoverLoserDroop .6s ease-out 1.1s forwards; }
+  /* Samme idé som vinderens glød: en langsom, evig sørgmodig vippen i
+     stedet for at fryse helt stille lige efter den korte rysten+drop. */
+  @keyframes gameoverLoserSway{ 0%,100%{ transform:translateY(4px) rotate(-8deg); } 50%{ transform:translateY(7px) rotate(-11deg); } }
+  .gameover-loser-sway{ display:inline-block; animation:gameoverLoserSway 2.2s ease-in-out 1.7s infinite; }
   /* "Chancen" genbruger nu selve spillemaskine-designet fra Brokkekassens
      daglige lodtrækning (.slot-cabinet/.slot-window/.reel osv. herunder) i
      stedet for sin egen chip-reel — samme genkendelige "🎰 3 hjul lander på
@@ -213,6 +223,12 @@
   .wheel-my-word-pulse{ animation:wheelMyWordGlow .7s ease-in-out 3; }
   @keyframes wheelMyWordTextPulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.4); } }
   .wheel-my-word-text-pulse{ transform-box:fill-box; transform-origin:center; animation:wheelMyWordTextPulse .7s ease-in-out 3; }
+  /* Selve vinder-flashet efter landing — samme glød som "bekræft mit ord",
+     men tydeligt LÆNGERE og et par ekstra gentagelser, så det faktisk
+     bliver set midt i konfetti-regnen i stedet for at være overstået på
+     under et sekund. */
+  .wheel-winner-flash{ animation:wheelMyWordGlow .8s ease-in-out 5; }
+  .wheel-winner-text-flash{ transform-box:fill-box; transform-origin:center; animation:wheelMyWordTextPulse .8s ease-in-out 5; }
   /* Chancens standard-visning ved uafgjort/2-spiller-skip: whack-a-mole,
      rent tilfældig elimination — ingen valg involveret, matcher hvad
      Chancen faktisk ER lige nu (se buildMoleChanceHtml/playMoleChanceReveal).
@@ -401,13 +417,14 @@
   .sheet .divider{ color:rgba(5,32,36,0.4); }
   .sheet .divider::before, .sheet .divider::after{ background:rgba(5,32,36,0.14); }
 
-  /* top var tidligere en fast 16px — for tæt på toppen, så en toast (som
-     fyres HVER runde ved en sejr, se celebrateGameRound) konsekvent
-     overlappede header-titlen og runde-badgen i stedet for at stå fri af
-     dem. Respekterer nu samme safe-area-inset-mønster som .offline-banner,
-     plus nok klaring til at stå UNDER både titel og badge på alle tre
-     header-varianter (kasse/spil/mrbrok). */
-  .toast{ position:fixed; top:calc(env(safe-area-inset-top) + 96px); left:50%; transform:translateX(-50%) translateY(-6px) scale(.9); background:linear-gradient(160deg, #0d4b52, var(--ink)); color:var(--cream); padding:13px 20px; border-radius:18px; font-size:14px; font-weight:600; z-index:80; box-shadow:0 10px 28px rgba(0,0,0,.35), 0 0 0 1px rgba(255,247,232,0.08) inset; opacity:0; transition:opacity .28s ease, transform .28s ease; pointer-events:none; max-width:88vw; text-align:center; line-height:1.4; }
+  /* top var oprindeligt en fast 16px, hvilket overlappede header-titlen.
+     At skubbe den NED under header/badge (næste forsøg) løste dét, men
+     ramte i stedet ind i selve rundens indhold hver gang en ny runde
+     dukkede op mens toasten stadig hang i luften. Rigtige løsning: lad
+     den i stedet flyde HELT øverst, foran/over headeren (som en kort
+     notifikations-banner) — så den aldrig konkurrerer med rundens tekst
+     nedenunder, uanset timing. */
+  .toast{ position:fixed; top:calc(env(safe-area-inset-top) + 10px); left:50%; transform:translateX(-50%) translateY(-6px) scale(.9); background:linear-gradient(160deg, #0d4b52, var(--ink)); color:var(--cream); padding:13px 20px; border-radius:18px; font-size:14px; font-weight:600; z-index:80; box-shadow:0 10px 28px rgba(0,0,0,.35), 0 0 0 1px rgba(255,247,232,0.08) inset; opacity:0; transition:opacity .28s ease, transform .28s ease; pointer-events:none; max-width:88vw; text-align:center; line-height:1.4; }
   /* Et lille bounce/pop i stedet for en flad fade — føles mere som en
      fejring når man vinder/taber en runde, i stedet for at bare dukke op. */
   @keyframes toastPop{
@@ -439,7 +456,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-39';
+const BUILD_TAG = 'build-2026-08-07-40';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1581,11 +1598,11 @@ function celebrateGameRound(g){
   if(cur.type === 'gameover'){
     toast(`👑 ${winnerNames.join(' & ')} vandt hele spillet! Hån frit resten af aftenen.`);
     const winnerNameEl = document.getElementById('gameoverWinnerName');
-    if(winnerNameEl) winnerNameEl.classList.add('gameover-winner-pop');
+    if(winnerNameEl) winnerNameEl.classList.add('gameover-winner-pop', 'gameover-winner-glow');
     const loserNameEl = document.getElementById('gameoverLoserName');
     if(loserNameEl) loserNameEl.classList.add('gameover-loser-shake');
     const loserEmojiEl = document.getElementById('gameoverLoserEmoji');
-    if(loserEmojiEl) loserEmojiEl.classList.add('gameover-loser-droop');
+    if(loserEmojiEl) loserEmojiEl.classList.add('gameover-loser-droop', 'gameover-loser-sway');
   }else{
     toast(randomTaunt(winnerNames.join(' & ')));
   }
@@ -1845,7 +1862,7 @@ function buildWheelChanceHtml(prefix, candidates, winner, bannerText, revealed){
   return `
     <div style="text-align:center;">
       <div class="slot-banner">${bannerText}</div>
-      <div class="wheel-cabinet${revealed?' win':''}" id="${prefix}Cabinet">
+      <div class="wheel-cabinet${revealed?' win':''}" id="${prefix}Cabinet" data-winner-cid="${winner.id}">
         <div class="wheel-pointer"></div>
         <div class="wheel-wrap">
           <div class="wheel-lights">${wheelLightsHtml(14)}</div>
@@ -1923,6 +1940,16 @@ function playWheelChanceReveal(prefix){
     if(nameEl){
       if(typeof gsap !== 'undefined') gsap.fromTo(nameEl, {opacity:0, y:6}, {opacity:1, y:0, duration:.4, ease:'power2.out'});
       else nameEl.style.opacity = '1';
+    }
+    // Selve det vindende ord på hjulet stod bare der med et statisk glow
+    // efter landing — nem at overse midt i konfetti-regnen. Lader det
+    // rent faktisk BLINKE et par gange (genbruger samme glow/skalerings-
+    // keyframes som "bekræft mit eget ord"-pulset før spinnet), så det er
+    // tydeligt HVILKET stykke der vandt, ikke kun at hjulet er stoppet.
+    const winnerCid = cabinet.dataset.winnerCid;
+    if(winnerCid){
+      cabinet.querySelectorAll('path[data-cid="'+winnerCid+'"]').forEach(el=>el.classList.add('wheel-winner-flash'));
+      cabinet.querySelectorAll('g[data-cid="'+winnerCid+'"] text').forEach(el=>el.classList.add('wheel-winner-text-flash'));
     }
     fireConfetti(cabinet);
     revealAnimationLock = false; // gen-render må nu godt køre igen (fx en anden spillers "klar"-tryk imens vi ventede)
