@@ -472,7 +472,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-49';
+const BUILD_TAG = 'build-2026-08-07-50';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -3000,7 +3000,11 @@ function mrbrokComplaintBlockHtml(m, cur){
   const myId = profile.memberId;
   const anonymize = cur.type === 'clue';
   if(cur.complaint){
-    const byName = cur.complaint.by === 'brokspillet' ? 'MrBrok' : ((state.members.find(mm=>mm.id===cur.complaint.by)||{}).name || 'Nogen');
+    // "MrBrok" er allerede navnet på den hemmelige rolle i DETTE spil — at
+    // bruge samme navn til den automatiske nedtælling (som i Brokspillet
+    // hedder "Brokspillet") ville læse som om selve rollen "brokker sig",
+    // hvilket er forvirrende/lyder som et hint. Kaldes derfor "Spillet" her.
+    const byName = cur.complaint.by === 'brokspillet' ? 'Spillet' : ((state.members.find(mm=>mm.id===cur.complaint.by)||{}).name || 'Nogen');
     const targetName = (state.members.find(mm=>mm.id===cur.complaint.targetId)||{}).name || 'nogen';
     const line = anonymize
       ? `${cur.complaint.by === 'brokspillet' ? '🎙️' : '🐌'} Turen bruger lang tid`
@@ -3141,7 +3145,7 @@ function showMrbrokRoleReveal(m, inner, close){
   const items = m.youAreMrBrok ? [
     ['🎭', 'Runde 1 er en imitations-runde — vælg en attitude og performer den, ingen kan tjekke dig endnu.'],
     ['🎯', 'Fra runde 2: Målet er at holde dig skjult — eller gætte rollen rigtigt hvis du bliver afsløret.'],
-    ['👂', 'Du kender ikke rollen — lyt til de andres svar og gæt dig frem derfra.'],
+    ['🎪', 'Læg dig op ad det de andre siger — brug deres tone og detaljer som dine egne. Det er sådan du undgår at blive afsløret.'],
   ] : [
     ['🎭', 'Runde 1 er en imitations-runde — brok dig som din karakter, performance er pointen her.'],
     ['🎯', 'Fra runde 2: Målet er at afsløre MrBrok — uden selv at afsløre rollen så tydeligt at MrBrok kan snige sig med.'],
@@ -3218,7 +3222,7 @@ function mrbrokTopicBanner(m){
     return `<div class="game-card" style="text-align:center; border-color:rgba(255,201,60,0.5); background:rgba(255,201,60,0.08);">
       <div style="font-size:26px;">🕵️</div>
       <p style="font-family:'Baloo 2',sans-serif; font-weight:800; margin:4px 0 0;">Du er MrBrok!</p>
-      <p class="hint" style="color:rgba(255,247,232,0.7);">Du kender IKKE rollen de andre har — lyt godt til deres svar og gæt dig frem, uden at blive afsløret.</p>
+      <p class="hint" style="color:rgba(255,247,232,0.7);">Du kender IKKE rollen de andre har — læg dig op ad deres tone og svar for ikke at blive afsløret.</p>
     </div>`;
   }
   const [role, domain] = (m.topic || '?').split(' — ');
@@ -3254,7 +3258,7 @@ function mrbrokLobbyHtml(){
     ['🎭', 'Alle undtagen én får den samme rolle med et bredt brok-domæne — fx "sur stewardesse, besværlige passagerer"'],
     ['🎉', 'Runde 1 er en imitations-runde — brok dig som karakteren ville, ingen kan blive fanget i noget endnu'],
     ['🗣️', 'Fra runde 2: gå på skift og bliv spurgt om rollen HØJT — svar vagt nok til ikke at hjælpe MrBrok, men klart nok til at de andre tror på dig. Intet skrives ned'],
-    ['🕵️', 'MrBrok kender ikke rollen — skal lytte og gætte sig frem uden at blive afsløret'],
+    ['🕵️', 'MrBrok kender ikke rollen — skal lægge sig op ad de andres tone og svar for ikke at blive afsløret'],
     ['🤔', 'Efter et par nysgerrige runder begynder I at stemme — den mest mistænkelige ryger ud'],
     ['🍿', 'Stemt ud? Så kigger du med resten af spillet'],
     ['🎯', 'Fanges MrBrok, får de ét sidste gæt på rollen for at stjæle sejren alligevel'],
@@ -3338,7 +3342,7 @@ function mrbrokClueHtml(m, cur){
   if(isSpeaker){
     const prompt = isImitationRound
       ? 'Brok dig som din karakter ville gøre — ingen spørgsmål denne runde, bare vis os hvem du er. Overdriv gerne, ingen kan blive fanget i noget endnu. Intet skrives ned.'
-      : 'Lad de andre stille dig ET spørgsmål om rollen — svar HØJT, vagt nok til ikke at hjælpe MrBrok, men klart nok til at de andre tror på dig. Intet skrives ned.';
+      : 'De andre spørger dig om rollen — svar HØJT, vagt nok til ikke at hjælpe MrBrok, men klart nok til at de andre tror på dig. Intet skrives ned.';
     return `
       ${badge}
       ${mrbrokTopicBanner(m)}
