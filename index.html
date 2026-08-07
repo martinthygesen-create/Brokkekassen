@@ -472,7 +472,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-47';
+const BUILD_TAG = 'build-2026-08-07-48';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -503,6 +503,8 @@ let mrbrokSelectedPlayers = null;
 let mrbrokInstructionsOpen = null; // null = ikke afgjort endnu denne session — "sådan foregår det" foldes automatisk ud første gang, sammen efterfølgende
 let mrbrokRecapOpenRounds = new Set(); // hvilke runder i "Sådan gik det" der har fået vist deres stemme-detaljer
 let mrbrokRoleSplashShownFor = null; // m.startedAt for det spil rolle-splashen sidst blev vist til — ét skærmbillede pr. NYT spil, ikke pr. runde
+let mrbrokEliminationShownFor = null; // m.startedAt — nulstiller mrbrokEliminationShownCount ved et nyt spil
+let mrbrokEliminationShownCount = 0; // hvor mange eliminationer vi allerede har vist en afsløring for
 let gameInstructionsOpen = null; // samme mønster for Brokspillets egen lobby
 let mrbrokKnownMemberIds = null;
 let mrbrokTipText = null; // client-only "hint til vinkel"-forslag — nulstilles ved ny tur, se mrbrokClueHtml/bindMrbrokHandlers
@@ -1096,7 +1098,7 @@ async function startBotTestGame(kind){
   botAutoplay = true;
   botTestStartedAt = Date.now();
   if(kind === 'game') await gameApi('start', { wager:'fun', playerIds, totalRounds:5 });
-  else await mrbrokApi('start', { wager:'fun', playerIds, warmupRounds:1 });
+  else await mrbrokApi('start', { wager:'fun', playerIds, warmupRounds:2 });
   toast('🤖 Bots spiller automatisk — du styrer kun din egen tur');
 }
 
@@ -1253,11 +1255,11 @@ function renderInner(){
   if(activeApp === 'spil' && !state.gameEnabled) activeApp = 'kasse';
   if(activeApp === 'mrbrok' && !state.mrbrokEnabled) activeApp = 'kasse';
   if(activeApp === 'kasse' && !state.kasseEnabled) activeApp = state.gameEnabled ? 'spil' : (state.mrbrokEnabled ? 'mrbrok' : 'kasse');
-  // Det mørke "efterforskningslokale" hører kun til lobbyen, før spillet er
-  // i gang — når selve spillet starter, falder baggrunden tilbage til det
-  // fælles teal (bliver en blød fade takket være transition på body), og
-  // kun headerens accent forbliver mørk/guld foroven.
-  const isMrbrokTheme = activeApp === 'mrbrok' && !(state.mrbrok && state.mrbrok.active);
+  // Det mørke "efterforskningslokale" gælder nu HELE MrBrok — både lobby og
+  // selve spillet, ikke kun før det starter. Skiftede tilbage til det
+  // fælles teal midt i spillet gjorde det svært at se det som "sit eget"
+  // spil (matcher heller ikke rolle-splashens mørke/guld look).
+  const isMrbrokTheme = activeApp === 'mrbrok';
   // Rose-runden skal tydeligt IKKE ligne resten af Brokspillet mens den
   // står på — se CSS-kommentaren ved html.theme-rose. Kun aktiv præcis så
   // længe den aktuelle runde faktisk ER type 'rose', falder automatisk
@@ -3046,6 +3048,7 @@ function renderMrbrokScreen(){
     startComplaintCountdown(cur, true);
   }
   maybeShowMrbrokRoleSplash(m);
+  maybeShowMrbrokEliminationReveal(m);
 }
 
 function mrbrokBodyHtml(m){
@@ -3149,6 +3152,57 @@ function showMrbrokRoleReveal(m, inner, close){
   `;
   if(typeof gsap !== 'undefined') gsap.fromTo(inner, {opacity:0, scale:.95}, {opacity:1, scale:1, duration:.35, ease:'back.out(1.6)'});
   document.getElementById('mrbrokSplashCloseBtn').onclick = close;
+}
+
+// Hvis den stemte-ud person IKKE var MrBrok, gik spillet hidtil bare
+// stiltiende videre til næste clue-runde uden nogen reelt fik at vide
+// hvad der skete — ingen bekræftelse på om gættet var rigtigt, hvilket er
+// kernefeedback i den slags spil. Bruger SAMME mørke/guld afslørings-stil
+// som rolle-splashen for genkendelighed. Afslører ALDRIG hvem MrBrok er
+// her — kun at DEN stemte-ud person ikke var det (sikkert at vise, fordi
+// vi kun når hertil når cur.type stadig er 'clue', dvs. spillet fortsætter
+// — var det MrBrok, ville cur.type være 'steal' i stedet, se resolveVote).
+function maybeShowMrbrokEliminationReveal(m){
+  if(!m || !m.active || !m.current || m.current.type !== 'clue') return;
+  const key = m.startedAt;
+  if(mrbrokEliminationShownFor !== key) mrbrokEliminationShownCount = 0;
+  mrbrokEliminationShownFor = key;
+  const eliminated = m.eliminatedIds || [];
+  if(eliminated.length <= mrbrokEliminationShownCount) return;
+  const entry = eliminated[eliminated.length - 1];
+  mrbrokEliminationShownCount = eliminated.length;
+  if(!entry) return;
+  const person = state.members.find(mm=>mm.id===entry.id);
+  const backdropHtml = `<div class="mrbrok-splash-backdrop" id="mrbrokEliminationBackdrop"><div class="mrbrok-splash" id="mrbrokEliminationInner"></div></div>`;
+  document.body.insertAdjacentHTML('beforeend', backdropHtml);
+  const backdrop = document.getElementById('mrbrokEliminationBackdrop');
+  const inner = document.getElementById('mrbrokEliminationInner');
+  requestAnimationFrame(()=>backdrop.classList.add('show'));
+  const close = ()=>{ backdrop.classList.remove('show'); setTimeout(()=>backdrop.remove(), 250); };
+  backdrop.addEventListener('click', e=>{ if(e.target === backdrop) close(); });
+  inner.innerHTML = `
+    <div style="font-size:52px;">🗳️</div>
+    <h3 style="margin-bottom:10px;">Stemmerne er talt op...</h3>
+    <div id="mrbrokElimCountdown" style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:64px; color:var(--coin); margin-top:14px;">3</div>
+  `;
+  let n = 3;
+  const tick = setInterval(()=>{
+    n--;
+    const el = document.getElementById('mrbrokElimCountdown');
+    if(!el){ clearInterval(tick); return; }
+    if(n > 0){ el.textContent = String(n); }
+    else{
+      clearInterval(tick);
+      inner.innerHTML = `
+        <div style="font-size:44px;">😅</div>
+        <h3>${escapeHtml(person?person.name:'?')} blev stemt ud</h3>
+        <p style="font-size:17px; color:rgba(255,247,232,0.8); margin:-14px 0 24px; font-weight:600;">...men det var ikke MrBrok. Spillet fortsætter.</p>
+        <button class="game-btn" id="mrbrokElimCloseBtn" style="margin-top:6px;">Videre</button>
+      `;
+      if(typeof gsap !== 'undefined') gsap.fromTo(inner, {opacity:0, scale:.95}, {opacity:1, scale:1, duration:.35, ease:'back.out(1.6)'});
+      document.getElementById('mrbrokElimCloseBtn').onclick = close;
+    }
+  }, 850);
 }
 
 function mrbrokTopicBanner(m){
@@ -3274,10 +3328,10 @@ function mrbrokClueHtml(m, cur){
       <div class="game-card" id="mrbrokCard" style="text-align:center; border-color:rgba(255,201,60,0.5); background:rgba(255,201,60,0.08);">
         <div style="font-size:26px;">🎯</div>
         <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:4px 0 6px;">Din tur!</p>
-        <p class="hint" style="color:rgba(255,247,232,0.75); margin:0 0 14px;">Lad de andre stille dig ET spørgsmål om rollen — svar HØJT, vagt nok til ikke at hjælpe MrBrok, men klart nok til at de andre tror på dig. Intet skrives ned.</p>
-        <button class="game-btn ghost" id="mrbrokTipBtn" style="margin-top:0;">💡 Brug for et hint til et svar?</button>
+        <p class="hint" style="color:rgba(255,247,232,0.75); margin:0 0 16px;">Lad de andre stille dig ET spørgsmål om rollen — svar HØJT, vagt nok til ikke at hjælpe MrBrok, men klart nok til at de andre tror på dig. Intet skrives ned.</p>
+        <button class="game-btn" id="mrbrokDoneBtn">✅ Færdig, min tur er ovre</button>
+        <button class="game-btn ghost" id="mrbrokTipBtn" style="margin-top:10px;">💡 Brug for et hint til et svar?</button>
         ${mrbrokTipText ? `<p class="hint" style="margin:10px 0 0; color:rgba(255,201,60,0.9); font-weight:600;">${escapeHtml(mrbrokTipText)}</p>` : ''}
-        <button class="game-btn" id="mrbrokDoneBtn" style="margin-top:14px;">✅ Færdig, min tur er ovre</button>
       </div>
     `;
   }
