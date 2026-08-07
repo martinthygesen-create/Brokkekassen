@@ -1317,7 +1317,7 @@ function openGameAdminMenuSheet(){
     <button class="sheet-btn test" id="gameAdminTestWheelBtn">🎡 Test hjulet</button>
     <button class="sheet-btn test" id="gameAdminTestSlotBtn">🎰 Test spillemaskinen</button>
     ${active ? '' : `<button class="sheet-btn test" id="gameAdminBotTestBtn">🤖 Test-spil med 3 bots</button>`}
-    ${active ? `<button class="sheet-btn danger" id="gameAdminRestartBtn">🔄 Genstart Brokspillet</button>` : ''}
+    ${active ? `<button class="sheet-btn danger" id="gameAdminRestartBtn">🛑 Afslut Brokspillet</button>` : ''}
     ${hasHighscore ? `<button class="sheet-btn danger" id="gameAdminResetStatsBtn">🏆 Nulstil highscore</button>` : ''}
     <button class="sheet-btn ghost" id="gameAdminCloseBtn">Luk menu</button>
     <p class="hint" style="text-align:center; font-size:10.5px; opacity:.5; margin-top:6px;">${BUILD_TAG}</p>
@@ -1331,7 +1331,7 @@ function openGameAdminMenuSheet(){
     if(restartBtn) restartBtn.onclick = async ()=>{
       closeSheet();
       await gameApi('end', {});
-      toast('🔄 Brokspillet er nulstillet — klar til en ny omgang');
+      toast('🛑 Brokspillet er afsluttet — klar til en ny omgang');
     };
     const resetStatsBtn = document.getElementById('gameAdminResetStatsBtn');
     if(resetStatsBtn) resetStatsBtn.onclick = async ()=>{
@@ -2060,7 +2060,7 @@ function gameLobbyHtml(){
   if(gameInstructionsOpen === null) gameInstructionsOpen = !localStorage.getItem('bk_game_seen_instructions');
   localStorage.setItem('bk_game_seen_instructions', '1');
   return `
-    <div class="empty-state" style="padding-top:18px;">
+    <div class="empty-state" style="padding-top:18px; padding-bottom:10px;">
       <span class="emoji">👉</span>
       <b>Brokspillet</b>
       Skriv, gæt og stem jer igennem jeres egen brok-historie.
@@ -2780,7 +2780,7 @@ function openMrbrokAdminMenuSheet(){
     <h2>MrBrok-admin ⚙️</h2>
     <p class="hint">${active ? 'Der er et spil i gang lige nu.' : 'Der er ikke noget spil i gang lige nu.'}</p>
     ${active ? '' : `<button class="sheet-btn test" id="mrbrokAdminBotTestBtn">🤖 Test-spil med 3 bots</button>`}
-    ${active ? `<button class="sheet-btn danger" id="mrbrokAdminRestartBtn">🔄 Genstart MrBrok</button>` : ''}
+    ${active ? `<button class="sheet-btn danger" id="mrbrokAdminRestartBtn">🛑 Afslut MrBrok</button>` : ''}
     <button class="sheet-btn ghost" id="mrbrokAdminCloseBtn">Luk menu</button>
     <p class="hint" style="text-align:center; font-size:10.5px; opacity:.5; margin-top:6px;">${BUILD_TAG}</p>
   `, ()=>{
@@ -2790,7 +2790,7 @@ function openMrbrokAdminMenuSheet(){
     if(restartBtn) restartBtn.onclick = async ()=>{
       closeSheet();
       await mrbrokApi('end', {});
-      toast('🔄 MrBrok er nulstillet — klar til en ny omgang');
+      toast('🛑 MrBrok er afsluttet — klar til en ny omgang');
     };
     document.getElementById('mrbrokAdminCloseBtn').onclick = closeSheet;
   });
@@ -2953,7 +2953,7 @@ function mrbrokLobbyHtml(){
   if(mrbrokInstructionsOpen === null) mrbrokInstructionsOpen = !localStorage.getItem('bk_mrbrok_seen_instructions');
   localStorage.setItem('bk_mrbrok_seen_instructions', '1');
   return `
-    <div class="empty-state" style="padding-top:18px;">
+    <div class="empty-state" style="padding-top:18px; padding-bottom:10px;">
       <span class="emoji">🕵️</span>
       <b>MrBrok</b>
       Find ud af hvem der bluffer — inden de gennemskuer jer.
