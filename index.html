@@ -309,14 +309,17 @@
   .mole.mole-down{ filter:grayscale(1) brightness(.5); }
   @keyframes moleWinPop{ 0%{ transform:translate(-50%,-18px) scale(1); } 35%{ transform:translate(-50%,-24px) scale(1.15) rotate(-4deg); } 65%{ transform:translate(-50%,-18px) scale(1.05) rotate(4deg); } 100%{ transform:translate(-50%,-18px) scale(1) rotate(0deg); } }
   .mole.mole-win{ animation:moleWinPop .5s ease-out; }
-  .mole-quote{ margin:12px 4px 0; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:16px; line-height:1.35; color:var(--cream); padding:12px 16px; background:rgba(255,201,60,0.14); border:1px solid rgba(255,201,60,0.35); border-radius:16px; opacity:0; transform:translateX(70px); }
-  @keyframes moleQuoteSlide{ from{ opacity:0; transform:translateX(70px); } to{ opacity:1; transform:translateX(0); } }
-  .mole-quote.show{ animation:moleQuoteSlide .65s cubic-bezier(.34,1.56,.64,1) forwards; }
-  /* Et par ekstra pulser EFTER selve ind-glidningen — det er den vindende
-     kommentar, hele pointen med at skrive noget sjovt, den skal ikke bare
-     glide forbi og blive overset midt i konfetti-regnen. */
-  @keyframes moleQuotePulse{ 0%,100%{ box-shadow:0 0 0 rgba(255,201,60,0); } 50%{ box-shadow:0 0 18px rgba(255,201,60,.6); } }
-  .mole-quote.mole-quote-pulse{ animation:moleQuotePulse 1s ease-in-out 3; }
+  /* Fuldskærms fejrings-banner (se showMoleWinBanner) — Brokspillets eget
+     teal/guld-tema, lever UDEN FOR det almindelige render()-kredsløb (append
+     til body, ikke en del af app.innerHTML), så den ikke kan blive visket
+     væk af et helt almindeligt gen-render fra en ANDEN spillers "klar"-tryk. */
+  .mole-win-banner-backdrop{ position:fixed; inset:0; background:linear-gradient(160deg, var(--sea-deep), var(--ink)); z-index:93; display:flex; align-items:center; justify-content:center; padding:28px; opacity:0; pointer-events:none; transition:opacity .25s ease; }
+  .mole-win-banner-backdrop.show{ opacity:1; pointer-events:auto; }
+  .mole-win-banner{ text-align:center; max-width:420px; }
+  .mole-win-banner-emoji{ font-size:56px; }
+  .mole-win-banner-name{ font-family:'Baloo 2',sans-serif; font-weight:700; font-size:18px; color:rgba(255,247,232,0.75); margin-top:6px; }
+  .mole-win-banner-quote{ font-family:'Baloo 2',sans-serif; font-weight:800; font-size:32px; line-height:1.3; color:var(--coin); margin-top:14px; text-shadow:0 4px 18px rgba(255,201,60,.35); }
+  .mole-win-banner-hint{ margin-top:28px; font-size:13px; color:rgba(255,247,232,0.5); }
 
   /* Rose-bonusrunden — bevidst et andet visuelt tema (lyserød, ikke guld/mønt)
      end resten af Brokspillet, så det tydeligt føles som noget andet end brok. */
@@ -508,7 +511,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-60';
+const BUILD_TAG = 'build-2026-08-07-61';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -2085,14 +2088,20 @@ function buildMoleChanceHtml(prefix, candidates, winner, bannerText, winnerQuote
         </div>
       </div>`;
   }).join('');
+  // Vinderens citat (den frækkeste kommentar — hele pointen med runden) vises
+  // nu som en fuldskærms-banner EFTER selve muldvarpe-afsløringen (se
+  // showMoleWinBanner), ikke som en lille boks inde i kabinettet — den var
+  // for let at overse, OG forsvandt hvis en anden spiller nåede at trykke
+  // "klar" og udløse et gen-render før man selv nåede at læse den. Navn +
+  // citat gemmes som data-attributter her, så JS kan bygge banneret uden at
+  // være afhængig af DOM-elementer der kan blive bygget om undervejs.
   return `
     <div style="text-align:center;">
       <div class="slot-banner">${bannerText}</div>
-      <div class="mole-cabinet win" id="${prefix}Cabinet">
+      <div class="mole-cabinet win" id="${prefix}Cabinet" data-winner-name="${escapeHtml(winner.name)}" data-winner-quote="${escapeHtml(winnerQuote||'')}">
         <div class="mole-grid" id="${prefix}MoleGrid">${holes}</div>
         <div class="mole-countdown" id="${prefix}MoleCountdown"></div>
         <div class="slot-winner-name" id="${prefix}WinnerName" style="opacity:1;">${escapeHtml(winner.name)} vandt! 🍀</div>
-        ${winnerQuote ? `<div class="mole-quote" id="${prefix}Quote">"${escapeHtml(winnerQuote)}"</div>` : ''}
       </div>
     </div>
   `;
@@ -2145,6 +2154,13 @@ function playMoleChanceReveal(prefix){
   playMoleCountdown(prefix, MOLE_PREROLL_MS);
   const order = losers.slice().sort(() => Math.random() - 0.5);
   const perKnockDelay = order.length ? Math.max(450, MOLE_KNOCK_BUDGET_MS / order.length) : 0;
+  // Et par "falske" sving på VINDERENS egen hammer, lige inden de rigtige
+  // bank falder — hammeren svinger, men molen bliver oppe (rammer ikke).
+  // Ren tekstur/spænding ("nåh, den overlevede alligevel") og en nem måde
+  // at strække selve afviklingen ud på ved få kandidater, uden at det bare
+  // føles som en tilfældig ekstra ventetid.
+  const winnerHammer = winnerMole ? cabinet.querySelector('[data-hammer-id="'+winnerMole.dataset.moleId+'"]') : null;
+  const fakeSwingCount = winnerHammer ? (order.length <= 1 ? 2 : 1) : 0;
   let i = 0;
   const finish = () => {
     cabinet.classList.add('win');
@@ -2153,24 +2169,22 @@ function playMoleChanceReveal(prefix){
       if(typeof gsap !== 'undefined') gsap.fromTo(nameEl, {opacity:0, y:6}, {opacity:1, y:0, duration:.4, ease:'power2.out'});
       else nameEl.style.opacity = '1';
     }
-    // Kommentaren ER hele pointen med at have skrevet noget — den skal have
-    // sin egen tydelige, lidt forsinkede optræden EFTER navnet er landet
-    // (ikke samtidig, så øjet ved hvor det skal kigge hen), og et par ekstra
-    // pulser bagefter så den ikke bare glider forbi og bliver overset.
-    // OBS: at tilføje "mole-quote-pulse" oveni "show" ERSTATTER hele
-    // animation-shorthanden fra .show (CSS'ens animation-egenskab er ikke
-    // additiv på tværs af flere matchende regler) — uden det eksplicitte
-    // opacity/transform herunder ville "show"s forwards-holdte opacity:1
-    // simpelthen forsvinde igen i det øjeblik puls-klassen tilføjes.
-    const quoteEl = document.getElementById(prefix+'Quote');
-    if(quoteEl) setTimeout(()=>{
-      quoteEl.classList.add('show');
-      quoteEl.style.opacity = '1';
-      quoteEl.style.transform = 'translateX(0)';
-      setTimeout(()=>quoteEl.classList.add('mole-quote-pulse'), 600);
-    }, 500);
     fireConfetti(cabinet);
     revealAnimationLock = false; // gen-render må nu godt køre igen
+    // Vinderens citat — hele pointen med at have skrevet noget sjovt — vises
+    // nu som sin egen fuldskærms-banner (se showMoleWinBanner), IKKE som en
+    // lille boks i kabinettet: den forsvandt for let, og forsvandt HELT hvis
+    // en anden spillers "klar"-tryk nåede at udløse et gen-render før man
+    // selv fik læst den (banneret lever uden for det almindelige render()-
+    // kredsløb, så det overlever den slags).
+    setTimeout(()=>{
+      showMoleWinBanner(cabinet.dataset.winnerName, cabinet.dataset.winnerQuote);
+    }, 500);
+  };
+  const doFakeSwing = (cb) => {
+    if(!winnerHammer){ cb(); return; }
+    winnerHammer.classList.add('whacking');
+    setTimeout(()=>{ winnerHammer.classList.remove('whacking'); setTimeout(cb, 250); }, 500);
   };
   const whackNext = () => {
     if(i < order.length){
@@ -2189,7 +2203,30 @@ function playMoleChanceReveal(prefix){
       setTimeout(finish, MOLE_POST_PAUSE_MS);
     }
   };
-  setTimeout(whackNext, MOLE_PREROLL_MS);
+  const startRealKnocks = () => whackNext();
+  const runFakeSwings = (n) => {
+    if(n <= 0){ startRealKnocks(); return; }
+    doFakeSwing(()=>runFakeSwings(n-1));
+  };
+  setTimeout(()=>runFakeSwings(fakeSwingCount), MOLE_PREROLL_MS);
+}
+
+// Fuldskærms fejrings-banner for Chancens vinder — lille "X vandt!" foroven,
+// den faktiske vindende kommentar/ord STORT og centreret (det ER pointen med
+// runden), tryk hvor som helst for at lukke og komme tilbage til resultat-
+// skærmen. Bevidst Brokspillets eget teal/guld-tema, IKKE MrBroks mørke
+// stil — de to spil skal ikke ligne hinanden et kort øjeblik.
+function showMoleWinBanner(name, quote){
+  const backdropHtml = `<div class="mole-win-banner-backdrop" id="moleWinBannerBackdrop"><div class="mole-win-banner"><div class="mole-win-banner-emoji">🏆</div><div class="mole-win-banner-name">${escapeHtml(name||'?')} vandt!</div>${quote ? `<div class="mole-win-banner-quote">"${escapeHtml(quote)}"</div>` : ''}<p class="mole-win-banner-hint">Tryk for at fortsætte</p></div></div>`;
+  document.body.insertAdjacentHTML('beforeend', backdropHtml);
+  const backdrop = document.getElementById('moleWinBannerBackdrop');
+  requestAnimationFrame(()=>backdrop.classList.add('show'));
+  const close = ()=>{ backdrop.classList.remove('show'); setTimeout(()=>backdrop.remove(), 250); };
+  backdrop.addEventListener('click', close);
+  if(typeof gsap !== 'undefined'){
+    const inner = backdrop.querySelector('.mole-win-banner');
+    gsap.fromTo(inner, {opacity:0, scale:.9}, {opacity:1, scale:1, duration:.4, ease:'back.out(1.6)', delay:.15});
+  }
 }
 
 function gameBodyHtml(g){
