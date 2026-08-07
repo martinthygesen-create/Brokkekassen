@@ -119,7 +119,11 @@
   /* Rolle-splash ved spilstart — egen mørk/guld visning (ligesom MrBroks
      "efterforskningslokale"), IKKE Brokspillets lyse sheet-stil, så den ikke
      et kort øjeblik ligner det forkerte spil. Vises kun ÉN gang pr. nyt spil. */
-  .mrbrok-splash-backdrop{ position:fixed; inset:0; background:rgba(3,10,10,0.82); z-index:92; display:flex; align-items:stretch; justify-content:center; opacity:0; pointer-events:none; transition:opacity .25s ease; }
+  /* Baggrunden er bevidst HELT uigennemsigtig (ikke rgba med alpha som
+     resten af appens overlays) — splashen skal dække 100% af skærmen uden
+     at headeren bag ved kan skinne let igennem foroven, uanset hvordan
+     safe-area/100%-højde regner sig ud på den enkelte telefon. */
+  .mrbrok-splash-backdrop{ position:fixed; inset:0; background:var(--noir-deep); z-index:92; display:flex; align-items:stretch; justify-content:center; opacity:0; pointer-events:none; transition:opacity .25s ease; }
   .mrbrok-splash-backdrop.show{ opacity:1; pointer-events:auto; }
   /* Fylder hele skærmen i stedet for at være endnu et lille kort — det er
      spillets vigtigste instruktion, den skal ikke konkurrere om pladsen med
@@ -128,10 +132,14 @@
   .mrbrok-splash{ background:linear-gradient(160deg, #17110a, var(--noir-deep)); width:100%; max-width:520px; height:100%; overflow-y:auto; padding:calc(32px + env(safe-area-inset-top)) 26px calc(28px + env(safe-area-inset-bottom)); box-shadow:0 0 60px rgba(255,201,60,.1) inset; text-align:center; display:flex; flex-direction:column; justify-content:center; transform:translateY(10px) scale(.98); transition:transform .25s cubic-bezier(.2,.9,.3,1.2); }
   .mrbrok-splash-backdrop.show .mrbrok-splash{ transform:translateY(0) scale(1); }
   .mrbrok-splash h3{ font-family:'Baloo 2',sans-serif; font-weight:800; font-size:30px; line-height:1.25; color:var(--coin); margin:8px 0 28px; }
-  .mrbrok-splash ul{ text-align:left; margin:0 0 28px; padding:0; list-style:none; }
-  .mrbrok-splash li{ display:flex; gap:16px; align-items:flex-start; margin-bottom:24px; font-size:19px; line-height:1.45; font-weight:600; color:rgba(255,247,232,0.65); }
+  .mrbrok-splash ul{ text-align:left; margin:0 0 22px; padding:0; list-style:none; }
+  /* Kun instruktions-listen er skaleret ned (ikke overskriften/hvem-du-er,
+     se h3 ovenfor) — mindre scroll for at nå "Forstået"-knappen, uden at
+     gå på kompromis med selve rolle-afsløringen som stadig skal kunne
+     læses fra den anden ende af sofabordet. */
+  .mrbrok-splash li{ display:flex; gap:14px; align-items:flex-start; margin-bottom:16px; font-size:14.5px; line-height:1.4; font-weight:600; color:rgba(255,247,232,0.65); }
   .mrbrok-splash li b{ color:rgba(255,247,232,0.98); font-weight:800; }
-  .mrbrok-splash li span:first-child{ flex:0 0 auto; font-size:30px; line-height:1.2; }
+  .mrbrok-splash li span:first-child{ flex:0 0 auto; font-size:22px; line-height:1.2; }
   .mrbrok-splash li span:last-child{ flex:1 1 auto; min-width:0; }
   /* Skal kunne skimmes — den vigtigste handling pr. linje er fremhævet med
      <b>, resten er kun understøttende kontekst. Rammer kun ren-tekst <b>
@@ -500,7 +508,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-58';
+const BUILD_TAG = 'build-2026-08-07-59';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -2976,9 +2984,9 @@ const MRBROK_CLUE_TIPS = [
   'Er du MrBrok: lyt til hvad de andre lige har sagt, og genbrug deres ord',
   'Er du MrBrok: svar selvsikkert og vagt i stedet for at prøve at være præcis',
 ];
-// Runde 1 er en imitations-runde — modsat de senere Q&A-runder er
-// PERFORMANCE selve pointen her, ikke forsigtighed. Se maybeShowMrbrokRoleSplash
-// og mrbrokClueHtml, som begge grener på m.round === 1.
+// Bruges på imitations-runder (se mrbrokImitationRounds — runde 2, og evt.
+// finale-runden ved længere spil) — modsat Q&A-runderne er PERFORMANCE
+// selve pointen her, ikke forsigtighed.
 const MRBROK_IMITATION_TIPS = [
   'Overdriv attituden — det er en imitation, ikke et referat',
   'Suk, ryst på hovedet eller lav en pause, før du siger noget',
@@ -3221,12 +3229,12 @@ function maybeShowMrbrokRoleSplash(m){
 
 function showMrbrokRoleReveal(m, inner, close){
   const items = m.youAreMrBrok ? [
-    ['🎭', 'Runde 1: <b>vælg en attitude og performer den</b> — ingen kan tjekke dig endnu.'],
-    ['🎯', 'Fra runde 2: <b>hold dig skjult</b> — eller gæt rollen rigtigt hvis du bliver afsløret.'],
+    ['🎯', '<b>Hold dig skjult</b> — eller gæt rollen rigtigt hvis du bliver afsløret.'],
+    ['🎭', 'Runde 2 bliver en imitations-runde: <b>vælg en attitude og performer den</b> — ingen kan tjekke dig endnu.'],
     ['🎪', '<b>Læg dig op ad det de andre siger</b> — brug deres tone og detaljer som dine egne.'],
   ] : [
-    ['🎭', 'Runde 1: <b>brok dig som din karakter</b> — performance er pointen her.'],
-    ['🎯', 'Fra runde 2: <b>afslør MrBrok</b> — uden selv at afsløre rollen så tydeligt at MrBrok kan snige sig med.'],
+    ['🎯', '<b>Afslør MrBrok</b> — uden selv at afsløre rollen så tydeligt at MrBrok kan snige sig med.'],
+    ['🎭', 'Runde 2 bliver en imitations-runde: <b>brok dig som din karakter</b> — performance er pointen der.'],
     ['🤏', '<b>Svar vagt nok</b> til ikke at hjælpe MrBrok, men <b>klart nok</b> til at de andre tror på dig.'],
   ];
   const reveal = m.youAreMrBrok
@@ -3371,7 +3379,7 @@ function mrbrokLobbyHtml(){
   const steps = [
     ['🎯', '<b>Målet:</b> afslør MrBrok — uden selv at afsløre rollen så tydeligt at MrBrok kan snige sig med'],
     ['🎭', 'Alle undtagen én får <b>den samme rolle</b> med et bredt brok-domæne — fx "sur stewardesse, besværlige passagerer"'],
-    ['🎉', 'Runde 1 er en <b>imitations-runde</b> — brok dig som karakteren ville, ingen kan blive fanget i noget endnu'],
+    ['🎉', 'Runde 2 er en <b>imitations-runde</b> — brok dig som karakteren ville, ingen kan blive fanget i noget endnu'],
     ['🗣️', 'Fra runde 2: de andre spørger dig om rollen — <b>svar vagt nok til ikke at hjælpe MrBrok, men klart nok til at de andre tror på dig</b>'],
     ['🕵️', 'MrBrok kender ikke rollen — skal <b>lægge sig op ad de andres tone og svar</b> for ikke at blive afsløret'],
     ['🤔', 'Efter et par nysgerrige runder begynder I at <b>stemme hemmeligt</b> — den mest mistænkelige ryger ud'],
@@ -3449,16 +3457,27 @@ function mrbrokTurnOrderHtml(m, cur){
   return `<div class="mrbrok-turn-grid" style="margin-bottom:14px;">${chips}</div>`;
 }
 
+// Hvilke runder (blandt de "rolige" runder før afstemning) er
+// imitations-runder? Runde 1 holdes bevidst som en RIGTIG Q&A-runde nu
+// (folk har intet at gå ud fra endnu ved runde 2, så en imitation her
+// fungerer bedre efter man allerede har hørt et par svar/detaljer). Runde
+// 2 er altid imitation. Ved længere spil (4+ rolige runder i alt) får man
+// OGSÅ en imitations-runde som en finale-runde lige inden alvoren for
+// afstemningen begynder — fx 5 rolige runder ud af giver imitation ved 2
+// og 5, matcher samme "kan ikke blive fanget i noget endnu" logik begge
+// steder siden afstemning stadig ikke er startet.
+function mrbrokImitationRounds(totalPreVoteRounds){
+  const set = new Set();
+  set.add(totalPreVoteRounds >= 2 ? 2 : 1);
+  if(totalPreVoteRounds >= 4) set.add(totalPreVoteRounds);
+  return set;
+}
+
 function mrbrokClueHtml(m, cur){
   const speaker = state.members.find(mm=>mm.id===cur.speakerId);
   const isSpeaker = profile && profile.memberId === cur.speakerId;
   const turnNo = cur.turnIndex + 1, totalTurns = cur.order.length;
-  // Runde 1 er bevidst en imitations-runde, IKKE Q&A — det er den sjove
-  // opvarmning hvor performance er pointen, ingen kan endnu blive fanget i
-  // noget (ingen afstemning er startet), så der er intet at tabe ved at gå
-  // all-in på karakteren. Fra runde 2 skifter det til den forsigtige
-  // vagt-men-troværdig Q&A-stil (se mrbrokTopicBanner/showMrbrokRoleReveal).
-  const isImitationRound = cur.round === 1;
+  const isImitationRound = mrbrokImitationRounds(m.warmupRounds + 1).has(cur.round);
   const roundLabel = isImitationRound ? ' · 🎭 imitations-runde' : (cur.round <= m.warmupRounds + 1 ? ' · nysgerrig runde' : '');
   const badge = `<div class="game-badge">Runde ${m.round} · Tur ${turnNo}/${totalTurns}${roundLabel}</div>`;
 
@@ -3676,7 +3695,7 @@ function bindMrbrokHandlers(m){
     if(tipBtn) tipBtn.onclick = ()=>{
       // Rent client-side — trænger aldrig i nærheden af serveren, det er
       // bare et tilfældigt forslag til en VINKEL, aldrig et svar/ord.
-      const pool = cur.round === 1 ? MRBROK_IMITATION_TIPS : MRBROK_CLUE_TIPS;
+      const pool = mrbrokImitationRounds(m.warmupRounds + 1).has(cur.round) ? MRBROK_IMITATION_TIPS : MRBROK_CLUE_TIPS;
       let pick = pool[Math.floor(Math.random()*pool.length)];
       if(pool.length > 1) while(pick === mrbrokTipText) pick = pool[Math.floor(Math.random()*pool.length)];
       mrbrokTipText = pick;
@@ -3807,12 +3826,20 @@ function bindPendingCardHandlers(){
 function feedItemHtml(e, old){
   const m = state.members.find(x=>x.id===e.memberId);
   const name = m ? m.name : '?';
+  // e.memberId er den ANKLAGEDE (synderen der brokkede sig højt i det
+  // virkelige liv), IKKE nødvendigvis den der sad med telefonen og
+  // oprettede opslaget — se openBrokSheet ("Hvem brokker sig? Peg på
+  // synderen") og api/brok.js's 'accuse'-handling. Uden et eksplicit
+  // "brokkede sig over" foran citatet læste det let som et citat SKREVET
+  // AF personen, ikke en beskrivelse af hvad de blev overhørt sige — reelt
+  // stor forskel på hvem der "skrev" vs. hvem der blev anklaget.
+  const complaintPrefix = !e.gameLoss ? 'brokkede sig over ' : '';
   if(e.acquitted){
     return `<div class="feed-item" style="opacity:${old ? .6 : .78};">
       <div class="avatar">${initials(name)}</div>
       <div class="feed-body">
       <div class="feed-name">${escapeHtml(name)} <span class="amt" style="color:rgba(255,201,60,0.9);">⚖️ frikendt</span></div>
-      ${e.message ? `<div class="feed-msg">"${escapeHtml(e.message)}"</div>` : ''}
+      ${e.message ? `<div class="feed-msg">${complaintPrefix}"${escapeHtml(e.message)}"</div>` : ''}
       <div class="feed-msg" style="color:rgba(255,201,60,0.85); font-weight:600;">Ikke nok stemmer nåede rettidigt</div>
       <div class="feed-time">${fmtTime(e.ts)}</div></div></div>`;
   }
@@ -3821,7 +3848,7 @@ function feedItemHtml(e, old){
     <div class="avatar" style="${e.voided?'filter:grayscale(1);':''}">${initials(name)}</div>
     <div class="feed-body">
     <div class="feed-name">${escapeHtml(name)} <span class="amt">${e.voided ? '🫤 talt fra' : (e.gameLoss ? '👉 +1€' : (e.free ? '🎫 gratis' : '+1€'))}</span></div>
-    ${e.message ? `<div class="feed-msg" style="${e.voided?'text-decoration:line-through;':''}">"${escapeHtml(e.message)}"</div>` : ''}
+    ${e.message ? `<div class="feed-msg" style="${e.voided?'text-decoration:line-through;':''}">${complaintPrefix}"${escapeHtml(e.message)}"</div>` : ''}
     ${e.voided ? `<div class="feed-msg" style="color:rgba(255,201,60,0.85); font-weight:600;">🫤 Mistanke om snyd — tæller ikke med</div>` : ''}
     <div class="feed-time">${fmtTime(e.ts)}</div></div></div>`;
 }
