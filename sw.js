@@ -1,4 +1,4 @@
-const CACHE = 'brokkekassen-v43';
+const CACHE = 'brokkekassen-v44';
 const FILES = ['./', './index.html', './manifest.json', './icon.svg', './gsap.min.js'];
 
 self.addEventListener('install', e => {

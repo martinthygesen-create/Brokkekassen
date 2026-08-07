@@ -13,7 +13,19 @@ const { pushToMembers } = require('./_lib/push');
 
 const MIN_PLAYERS = 3;
 const DEFAULT_WARMUP = 2;
-const ALLOWED_WARMUP = [1, 2, 3];
+const ALLOWED_WARMUP = [1, 2, 3, 4, 5, 6];
+
+// Worst case (MrBrok never fanget ved et forkert gæt) tager
+// (players.length - 2) afstemningsrunder før spillet tvinges til en
+// afgørelse (se resolveVote's activeIds<=2-check). Rolige runder (1
+// imitations-runde + warmupRounds) skal udgøre MINDST halvdelen af det
+// samlede antal runder, ellers bruger man mere tid på at se folk blive
+// stemt ud end på rent faktisk at lære rollen at kende — især mærkbart
+// i store grupper. +1 for imitations-runden, som ikke er en af de
+// konfigurerede warmupRounds (se mrbrokFlow.js's advanceClue).
+function minWarmupForPlayers(n) {
+  return Math.max(1, n - 3);
+}
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' });
@@ -37,7 +49,8 @@ module.exports = async (req, res) => {
         const playerObjs = state.members.filter(mm => requested.includes(mm.id));
         if (playerObjs.length < MIN_PLAYERS) throw new ApiError(400, `vælg mindst ${MIN_PLAYERS} spillere`);
         const wager = req.body.wager === 'euro' ? 'euro' : 'fun';
-        const warmupRounds = ALLOWED_WARMUP.includes(req.body.warmupRounds) ? req.body.warmupRounds : DEFAULT_WARMUP;
+        const requestedWarmup = ALLOWED_WARMUP.includes(req.body.warmupRounds) ? req.body.warmupRounds : DEFAULT_WARMUP;
+        const warmupRounds = Math.max(requestedWarmup, minWarmupForPlayers(playerObjs.length));
         const players = playerObjs.map(mm => mm.id);
         const mrBrokId = pickMrBrok(state, playerObjs).id;
         const scores = {};
