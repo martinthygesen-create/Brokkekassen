@@ -21,31 +21,37 @@ function pickMrBrok(state, players) {
   return chosen;
 }
 
-// Brede brok-scenarier — bevidst ikke for specifikke, så både MrBrok kan
-// bluffe plausibelt OG de der reelt kender emnet skal svare vagt for ikke
-// at afsløre for meget. Genbruger samme shuffle-bag-rotation som resten af
-// indholdet, så de ikke gentages før hele puljen er brugt.
+// Rolle + bredt domæne, ikke bare et neutralt faktum — giver spillerne en
+// KARAKTER at spille (stemme, attitude) og et bredt nok "brok-domæne" at
+// improvisere indenfor, så: (a) MrBrok kan bluffe plausibelt selv uden at
+// kende domænet, ved bare at forpligte sig til en rolle og lytte efter de
+// andres tone, og (b) de der reelt kender domænet aldrig løber tør efter
+// første tur, fordi der altid er en ny vinkel at brokke sig over. Et enkelt
+// smalt faktum (fx "du er sur over mågerne") er bevidst UNDGÅET — det giver
+// kun ÉT gyldigt svar, hvilket afslører MrBrok med det samme og gør runden
+// kedelig efter første tur. Genbruger samme shuffle-bag-rotation som
+// resten af indholdet, så de ikke gentages før hele puljen er brugt.
 const MRBROK_TOPICS = [
-  'En nabo der altid larmer for meget',
-  'En kollega der aldrig tager sin del af opvasken på arbejdet',
-  'Et familiemedlem der altid kommer for sent',
-  'En håndværker der aldrig dukker op til tiden',
-  'En restaurant med alt for langsom betjening',
-  'En ven der aldrig betaler sin del tilbage',
-  'Et flyselskab der mistede bagagen',
-  'En teenager der aldrig rydder op efter sig selv',
-  'En chef der altid tager æren for andres arbejde',
-  'Et supermarked der hele tiden er løbet tør for det du skal bruge',
-  'En taxachauffør der kører den lange vej',
-  'En eksmakker der stadig ringer alt for tit',
-  'Et hotelværelse med udsigt til en mur',
-  'En sælger der ikke vil tage nej for et svar',
-  'Naboens hund der gør hele natten',
-  'En fest hvor musikken aldrig stopper',
-  'En internetudbyder der ikke kan finde ud af at reparere fejl',
-  'En bilmekaniker der opfinder problemer der ikke findes',
-  'Et fly der er forsinket i timevis uden forklaring',
-  'En kollega der altid tager æren i møder',
+  'Sur stewardesse — brokker dig over besværlige passagerer',
+  'Vred mekaniker — brokker dig over kunder der ikke lytter til dine råd',
+  'Træt tjener — brokker dig over gæster der aldrig er tilfredse',
+  'Stresset håndværker — brokker dig over kunder der ændrer planen hele tiden',
+  'Irriteret nabo — brokker dig over støj og rod fra dem ved siden af',
+  'Utålmodig taxachauffør — brokker dig over passagerer der ikke kan finde adressen',
+  'Skuffet chef — brokker dig over medarbejdere der ikke tager ansvar',
+  'Træt forælder — brokker dig over børn der aldrig rydder op',
+  'Frustreret sælger — brokker dig over kunder der aldrig ender med at købe noget',
+  'Ærgerlig hotelreceptionist — brokker dig over gæster der klager over alt',
+  'Vred kok — brokker dig over gæster der sender maden tilbage',
+  'Utilfreds kunde — brokker dig over elendig service',
+  'Sur pilot — brokker dig over forsinkelser der slet ikke er din skyld',
+  'Træt lærer — brokker dig over elever der aldrig laver lektier',
+  'Irriteret cyklist — brokker dig over bilister der ikke viser hensyn',
+  'Skeptisk håndværker — brokker dig over kunder der vil have alt for billigt',
+  'Vred fitnessinstruktør — brokker dig over medlemmer der aldrig møder op',
+  'Utålmodig buschauffør — brokker dig over passagerer uden byttepenge',
+  'Sur postbud — brokker dig over løse hunde og glatte fortove',
+  'Frustreret it-supporter — brokker dig over brugere der aldrig har prøvet at genstarte',
 ];
 
 function pickTopic(state) {

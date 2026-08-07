@@ -116,6 +116,18 @@
   header.theme-spil #btnAppMenu, header.theme-spil #btnGameAdminMenu{ border-color:rgba(255,201,60,0.4); }
   header.theme-rose #btnAppMenu, header.theme-rose #btnGameAdminMenu{ border-color:rgba(255,143,179,0.5); }
   header.theme-mrbrok #btnAppMenu, header.theme-mrbrok #btnGameAdminMenu, header.theme-mrbrok #btnMrbrokAdminMenu{ border-color:rgba(255,201,60,0.3); }
+  /* Rolle-splash ved spilstart — egen mørk/guld visning (ligesom MrBroks
+     "efterforskningslokale"), IKKE Brokspillets lyse sheet-stil, så den ikke
+     et kort øjeblik ligner det forkerte spil. Vises kun ÉN gang pr. nyt spil. */
+  .mrbrok-splash-backdrop{ position:fixed; inset:0; background:rgba(3,10,10,0.82); z-index:92; display:flex; align-items:center; justify-content:center; padding:22px; opacity:0; pointer-events:none; transition:opacity .25s ease; }
+  .mrbrok-splash-backdrop.show{ opacity:1; pointer-events:auto; }
+  .mrbrok-splash{ background:linear-gradient(160deg, #17110a, var(--noir-deep)); border:1px solid rgba(255,201,60,0.35); border-radius:24px; padding:26px 22px calc(22px + env(safe-area-inset-bottom)); max-width:400px; width:100%; max-height:82dvh; overflow-y:auto; box-shadow:0 20px 50px rgba(0,0,0,.5), 0 0 30px rgba(255,201,60,.12); text-align:center; transform:translateY(10px) scale(.97); transition:transform .25s cubic-bezier(.2,.9,.3,1.2); }
+  .mrbrok-splash-backdrop.show .mrbrok-splash{ transform:translateY(0) scale(1); }
+  .mrbrok-splash h3{ font-family:'Baloo 2',sans-serif; font-weight:800; font-size:20px; color:var(--coin); margin:8px 0 4px; }
+  .mrbrok-splash ul{ text-align:left; margin:14px 0; padding:0; list-style:none; }
+  .mrbrok-splash li{ display:flex; gap:10px; align-items:flex-start; margin-bottom:10px; font-size:14px; line-height:1.4; color:rgba(255,247,232,0.85); }
+  .mrbrok-splash li span:first-child{ flex:0 0 auto; }
+  .mrbrok-splash li span:last-child{ flex:1 1 auto; min-width:0; }
   .day-chip{ display:inline-block; font-size:12px; font-weight:600; background:rgba(255,247,232,0.1); border:1px solid rgba(255,247,232,0.18); padding:5px 10px; border-radius:100px; white-space:nowrap; vertical-align:middle; }
 
   .jar-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; padding:6px 20px 4px; }
@@ -456,7 +468,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-44';
+const BUILD_TAG = 'build-2026-08-07-45';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -486,6 +498,7 @@ let mrbrokWarmup = 2; // 1 | 2 | 3 — antal rene clue-runder før den første a
 let mrbrokSelectedPlayers = null;
 let mrbrokInstructionsOpen = null; // null = ikke afgjort endnu denne session — "sådan foregår det" foldes automatisk ud første gang, sammen efterfølgende
 let mrbrokRecapOpenRounds = new Set(); // hvilke runder i "Sådan gik det" der har fået vist deres stemme-detaljer
+let mrbrokRoleSplashShownFor = null; // m.startedAt for det spil rolle-splashen sidst blev vist til — ét skærmbillede pr. NYT spil, ikke pr. runde
 let gameInstructionsOpen = null; // samme mønster for Brokspillets egen lobby
 let mrbrokKnownMemberIds = null;
 let mrbrokTipText = null; // client-only "hint til vinkel"-forslag — nulstilles ved ny tur, se mrbrokClueHtml/bindMrbrokHandlers
@@ -3017,6 +3030,7 @@ function renderMrbrokScreen(){
     lastComplaintKeyMrbrok = complaintKey;
     startComplaintCountdown(cur, true);
   }
+  maybeShowMrbrokRoleSplash(m);
 }
 
 function mrbrokBodyHtml(m){
@@ -3057,17 +3071,56 @@ function mrbrokHighscoreHtml(){
   return `<div class="section-label">🏆 Highscore</div>${rows}`;
 }
 
+// Ét skærmbillede pr. NYT MrBrok-spil (ikke pr. runde — det ville blive
+// trættende hurtigt) med konkrete strategi-tips, forskellige for MrBrok
+// selv vs. de rigtige rollehavere. Kører kun ved allerførste tur af det
+// første rigtige (ikke-opvarmnings-uafhængige) clue, styret af
+// mrbrokRoleSplashShownFor holdt op mod m.startedAt.
+function maybeShowMrbrokRoleSplash(m){
+  if(!m || !m.active || !m.current) return;
+  if(m.current.type !== 'clue' || m.round !== 1 || m.current.turnIndex !== 0) return;
+  if(mrbrokRoleSplashShownFor === m.startedAt) return;
+  mrbrokRoleSplashShownFor = m.startedAt;
+  const items = m.youAreMrBrok ? [
+    ['🎭', 'Du kender ikke rollen de andre har — vælg selv en karakter og bliv i den hele spillet.'],
+    ['👂', 'Lyt grundigt efter deres tone og detaljer, og genbrug dem i dine egne svar.'],
+    ['😎', 'Bedre at lyde selvsikker og vag end tydeligt forvirret.'],
+  ] : [
+    ['🎭', 'Bliv i karakter — brug stemmen, ikke bare ordene.'],
+    ['🤏', 'Giv ikke det hele væk på én gang — gem noget til næste tur.'],
+    ['🕵️', 'MrBrok lytter og prøver at kopiere dig — pas på med at være for konkret.'],
+  ];
+  const title = m.youAreMrBrok ? '🕵️ Du er MrBrok — sådan snyder du bedst' : '🎭 Sådan spiller du bedst';
+  const html = `
+    <div class="mrbrok-splash-backdrop" id="mrbrokSplashBackdrop">
+      <div class="mrbrok-splash">
+        <h3>${title}</h3>
+        <ul>${items.map(([icon,text])=>`<li><span>${icon}</span><span>${text}</span></li>`).join('')}</ul>
+        <button class="game-btn" id="mrbrokSplashCloseBtn" style="margin-top:6px;">Forstået, lad os spille</button>
+      </div>
+    </div>
+  `;
+  document.body.insertAdjacentHTML('beforeend', html);
+  const backdrop = document.getElementById('mrbrokSplashBackdrop');
+  requestAnimationFrame(()=>backdrop.classList.add('show'));
+  const close = ()=>{ backdrop.classList.remove('show'); setTimeout(()=>backdrop.remove(), 250); };
+  document.getElementById('mrbrokSplashCloseBtn').onclick = close;
+  backdrop.addEventListener('click', e=>{ if(e.target === backdrop) close(); });
+}
+
 function mrbrokTopicBanner(m){
   if(m.youAreMrBrok){
     return `<div class="game-card" style="text-align:center; border-color:rgba(255,201,60,0.5); background:rgba(255,201,60,0.08);">
       <div style="font-size:26px;">🕵️</div>
       <p style="font-family:'Baloo 2',sans-serif; font-weight:800; margin:4px 0 0;">Du er MrBrok!</p>
-      <p class="hint" style="color:rgba(255,247,232,0.7);">Du kender IKKE emnet — bluff dig igennem ud fra det de andre siger.</p>
+      <p class="hint" style="color:rgba(255,247,232,0.7);">Du kender IKKE rollen de andre har — vælg selv en karakter, og lyt godt efter deres tone for at kopiere den.</p>
     </div>`;
   }
+  const [role, domain] = (m.topic || '?').split(' — ');
   return `<div class="game-card" style="text-align:center;">
-    <p class="hint" style="margin:0 0 4px; color:rgba(255,247,232,0.6);">Emnet er:</p>
-    <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:18px; margin:0;">${escapeHtml(m.topic || '?')}</p>
+    <p class="hint" style="margin:0 0 4px; color:rgba(255,247,232,0.6);">Du er:</p>
+    <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:0;">${escapeHtml(role || m.topic || '?')}</p>
+    ${domain ? `<p class="hint" style="margin:6px 0 0; color:rgba(255,247,232,0.75);">${escapeHtml(domain)}</p>` : ''}
   </div>`;
 }
 
@@ -3174,10 +3227,10 @@ function mrbrokClueHtml(m, cur){
       ${mrbrokTopicBanner(m)}
       ${mrbrokTurnOrderHtml(m, cur)}
       <div class="game-card" id="mrbrokCard" style="text-align:center; border-color:rgba(255,201,60,0.5); background:rgba(255,201,60,0.08);">
-        <div style="font-size:26px;">🗣️</div>
-        <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:4px 0 6px;">Din tur!</p>
-        <p class="hint" style="color:rgba(255,247,232,0.75); margin:0 0 14px;">Sig din clue om emnet HØJT for de andre — intet skrives ned, husk det selv.</p>
-        <button class="game-btn ghost" id="mrbrokTipBtn" style="margin-top:0;">💡 Brug for et hint til en vinkel?</button>
+        <div style="font-size:26px;">🎭</div>
+        <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:4px 0 6px;">Du bliver grillet!</p>
+        <p class="hint" style="color:rgba(255,247,232,0.75); margin:0 0 14px;">Lad de andre stille dig ET spørgsmål i karakter — svar HØJT, brug stemmen, uden at bekræfte eller lyve for tydeligt. Intet skrives ned.</p>
+        <button class="game-btn ghost" id="mrbrokTipBtn" style="margin-top:0;">💡 Brug for et hint til et svar?</button>
         ${mrbrokTipText ? `<p class="hint" style="margin:10px 0 0; color:rgba(255,201,60,0.9); font-weight:600;">${escapeHtml(mrbrokTipText)}</p>` : ''}
         <button class="game-btn" id="mrbrokDoneBtn" style="margin-top:14px;">✅ Færdig, min tur er ovre</button>
       </div>
@@ -3193,7 +3246,7 @@ function mrbrokClueHtml(m, cur){
       <div class="empty-state" style="padding:30px 20px;">
         <span class="emoji">👂</span>
         <b style="font-size:26px;">${escapeHtml(speaker?speaker.name:'?')}</b>
-        har ordet
+        bliver grillet — stil dem et spørgsmål i karakter
       </div>
     </div>
     ${mrbrokComplaintBlockHtml(m, cur)}
