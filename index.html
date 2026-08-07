@@ -478,7 +478,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-54';
+const BUILD_TAG = 'build-2026-08-07-55';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -519,7 +519,7 @@ let mrbrokRecapOpenRounds = new Set(); // hvilke runder i "Sådan gik det" der h
 let mrbrokRoleSplashShownFor = null; // m.startedAt for det spil rolle-splashen sidst blev vist til — ét skærmbillede pr. NYT spil, ikke pr. runde
 let mrbrokEliminationShownFor = null; // m.startedAt — nulstiller mrbrokEliminationShownCount ved et nyt spil
 let mrbrokEliminationShownCount = 0; // hvor mange eliminationer vi allerede har vist en afsløring for
-let mrbrokVoteStartSplashShownFor = null; // m.startedAt — vises kun ved den ALLERFØRSTE afstemning, ikke hver eneste
+let mrbrokVoteStartSplashShownFor = null; // "m.startedAt:round" — vises ved HVER afstemningsrunde, men kun én gang pr. runde
 let gameInstructionsOpen = null; // samme mønster for Brokspillets egen lobby
 let mrbrokKnownMemberIds = null;
 let mrbrokTipText = null; // client-only "hint til vinkel"-forslag — nulstilles ved ny tur, se mrbrokClueHtml/bindMrbrokHandlers
@@ -3249,15 +3249,16 @@ function maybeShowMrbrokEliminationReveal(m){
   }, 850);
 }
 
-// Overgangen fra "alle er trygge" til "nogen kan blive stemt ud lige om
-// lidt" er en vigtig ting for spillerne at VIDE, ikke bare noget de
-// opdager stille ved at se stemme-knapperne dukke op — samme dramatiske
-// bygge-op-stil som rolle-splashen, men kun ÉN gang pr. spil, ved den
-// allerførste afstemning (ikke ved hver efterfølgende).
+// Hver ENKELT afstemning (ikke kun den første) er et suspense-øjeblik —
+// en 3-2-1 optakt før stemme-knapperne overhovedet vises, samme
+// dramatiske mønster som rolle-afsløringen. Nøglen er m.startedAt+round,
+// så samme runde ikke viser den to gange ved almindelige polls.
 function maybeShowMrbrokVoteStartSplash(m){
   if(!m || !m.active || !m.current || m.current.type !== 'vote') return;
-  if(mrbrokVoteStartSplashShownFor === m.startedAt) return;
-  mrbrokVoteStartSplashShownFor = m.startedAt;
+  const key = m.startedAt + ':' + m.current.round;
+  if(mrbrokVoteStartSplashShownFor === key) return;
+  mrbrokVoteStartSplashShownFor = key;
+  const isFirst = m.current.round <= m.warmupRounds + 1;
   const backdropHtml = `<div class="mrbrok-splash-backdrop" id="mrbrokVoteStartBackdrop"><div class="mrbrok-splash" id="mrbrokVoteStartInner"></div></div>`;
   document.body.insertAdjacentHTML('beforeend', backdropHtml);
   const backdrop = document.getElementById('mrbrokVoteStartBackdrop');
@@ -3267,12 +3268,22 @@ function maybeShowMrbrokVoteStartSplash(m){
   backdrop.addEventListener('click', e=>{ if(e.target === backdrop) close(); });
   inner.innerHTML = `
     <div style="font-size:52px;">🚨</div>
-    <h3>Nu bliver det alvor!</h3>
-    <p style="font-size:17px; color:rgba(255,247,232,0.85); margin:-14px 0 24px; font-weight:600;">Første rigtige afstemning. Hvem tror I er MrBrok — og hvem ryger ud?</p>
-    <button class="game-btn" id="mrbrokVoteStartCloseBtn" style="margin-top:6px;">Klar!</button>
+    <h3>${isFirst ? 'Nu bliver det alvor!' : 'Afstemning igen!'}</h3>
+    <p style="font-size:17px; color:rgba(255,247,232,0.85); margin:-14px 0 22px; font-weight:600;">Hvem tror I er MrBrok?</p>
+    <div id="mrbrokVoteStartCountdown" style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:64px; color:var(--coin);">3</div>
   `;
   if(typeof gsap !== 'undefined') gsap.fromTo(inner, {opacity:0, scale:.95}, {opacity:1, scale:1, duration:.35, ease:'back.out(1.6)'});
-  document.getElementById('mrbrokVoteStartCloseBtn').onclick = close;
+  let n = 3;
+  const tick = setInterval(()=>{
+    n--;
+    const el = document.getElementById('mrbrokVoteStartCountdown');
+    if(!el){ clearInterval(tick); return; }
+    if(n > 0){ el.textContent = String(n); }
+    else{
+      clearInterval(tick);
+      close();
+    }
+  }, 850);
 }
 
 function mrbrokTopicBanner(m){
