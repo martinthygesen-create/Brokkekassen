@@ -393,7 +393,13 @@
   .sheet .divider{ color:rgba(5,32,36,0.4); }
   .sheet .divider::before, .sheet .divider::after{ background:rgba(5,32,36,0.14); }
 
-  .toast{ position:fixed; top:16px; left:50%; transform:translateX(-50%) translateY(-6px); background:linear-gradient(160deg, #0d4b52, var(--ink)); color:var(--cream); padding:13px 20px; border-radius:18px; font-size:14px; font-weight:600; z-index:80; box-shadow:0 10px 28px rgba(0,0,0,.35), 0 0 0 1px rgba(255,247,232,0.08) inset; opacity:0; transition:opacity .3s ease, transform .3s cubic-bezier(.2,.9,.3,1.2); pointer-events:none; max-width:88vw; text-align:center; line-height:1.4; }
+  /* top var tidligere en fast 16px — for tæt på toppen, så en toast (som
+     fyres HVER runde ved en sejr, se celebrateGameRound) konsekvent
+     overlappede header-titlen og runde-badgen i stedet for at stå fri af
+     dem. Respekterer nu samme safe-area-inset-mønster som .offline-banner,
+     plus nok klaring til at stå UNDER både titel og badge på alle tre
+     header-varianter (kasse/spil/mrbrok). */
+  .toast{ position:fixed; top:calc(env(safe-area-inset-top) + 96px); left:50%; transform:translateX(-50%) translateY(-6px); background:linear-gradient(160deg, #0d4b52, var(--ink)); color:var(--cream); padding:13px 20px; border-radius:18px; font-size:14px; font-weight:600; z-index:80; box-shadow:0 10px 28px rgba(0,0,0,.35), 0 0 0 1px rgba(255,247,232,0.08) inset; opacity:0; transition:opacity .3s ease, transform .3s cubic-bezier(.2,.9,.3,1.2); pointer-events:none; max-width:88vw; text-align:center; line-height:1.4; }
 
   /* Rolig, ikke-alarmerende banner når nettet mangler — understreger at
      data bare er "sidst kendte" og IKKE væk/nulstillet, i modsætning til
@@ -418,7 +424,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-06-36';
+const BUILD_TAG = 'build-2026-08-06-37';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
