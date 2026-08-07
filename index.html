@@ -511,7 +511,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-61';
+const BUILD_TAG = 'build-2026-08-07-62';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -3810,7 +3810,7 @@ function renderMain(){
 }
 function renderPendingCard(p){
   const complainer = state.members.find(m=>m.id===p.memberId);
-  const chips = state.members.map(m=>{
+  const chips = state.members.filter(m=>!m.isBot).map(m=>{
     const voted = p.votes.includes(m.id);
     const mine = profile && m.id === profile.memberId;
     return `<div class="name-pill ${voted?'voted':''}" data-pending="${p.id}" data-voter="${m.id}" style="${mine?'':'opacity:.45; pointer-events:none;'} padding:6px 12px; font-size:13px;">${escapeHtml(m.name)}${voted?' ✓':''}</div>`;
@@ -4103,7 +4103,7 @@ function openShareSheet(){
 
 let draftMessage = '';
 function openBrokSheet(){
-  const chips = state.members.map(m=>`<div class="name-pill" data-id="${m.id}">${escapeHtml(m.name)}</div>`).join('');
+  const chips = state.members.filter(m=>!m.isBot).map(m=>`<div class="name-pill" data-id="${m.id}">${escapeHtml(m.name)}</div>`).join('');
   let selectedId = null;
   openSheet(`
     <h2>Hvem brokker sig? 🙄</h2>
@@ -4516,7 +4516,7 @@ function openBroadcastSheet(){
 function openSettleSheet(){
   if(!state.events.length){ toast('Puljen er tom — intet at gøre op endnu 🙂'); return; }
   const bal = balances();
-  const rows = state.members.map(m=>`<div class="hr-line"><span>${escapeHtml(m.name)}</span><span>${bal[m.id]||0}€</span></div>`).join('');
+  const rows = state.members.filter(m=>!m.isBot).map(m=>`<div class="hr-line"><span>${escapeHtml(m.name)}</span><span>${bal[m.id]||0}€</span></div>`).join('');
   openSheet(`
     <h2>Gør op 💶</h2>
     <p class="hint">Total i puljen: <b>${totalPool()}€</b>. Dette arkiverer hele puljen i historikken og starter helt forfra. Streaks og gratis brok opdateres som normalt.</p>
