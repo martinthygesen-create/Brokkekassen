@@ -456,7 +456,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-43';
+const BUILD_TAG = 'build-2026-08-07-44';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -2946,17 +2946,30 @@ function getPendingMrbrokIdsClient(m, cur){
   return [];
 }
 
+// Under clue-fasen er det ALTID kun taleren selv der er "pending", så et
+// navngivet brok her ("X bruger sin tid") gør reelt tøven til et objektivt,
+// app-godkendt "denne person var målbart langsom" — som falder direkte
+// sammen med at være MrBrok (den eneste der reelt skal FINDE PÅ noget,
+// ikke bare huske det). Det giver et gratis, kvantificeret praj de andre
+// runde-typer ikke har (der er "langsom" ikke ensbetydende med at bluffe).
+// Holder derfor clue-fasens brok anonymt — hvem der har turen er allerede
+// synligt via turrækkefølgen, men selve "tempo er nu officielt mistænkeligt"
+// -stemplet skal IKKE komme fra appen.
 function mrbrokComplaintBlockHtml(m, cur){
   if(!cur || !profile) return '';
   const pending = getPendingMrbrokIdsClient(m, cur);
   if(!pending.length) return '';
   const myId = profile.memberId;
+  const anonymize = cur.type === 'clue';
   if(cur.complaint){
     const byName = cur.complaint.by === 'brokspillet' ? 'MrBrok' : ((state.members.find(mm=>mm.id===cur.complaint.by)||{}).name || 'Nogen');
     const targetName = (state.members.find(mm=>mm.id===cur.complaint.targetId)||{}).name || 'nogen';
+    const line = anonymize
+      ? `${cur.complaint.by === 'brokspillet' ? '🎙️' : '🐌'} Turen bruger lang tid`
+      : `${cur.complaint.by === 'brokspillet' ? '🎙️' : '🐌'} <b>${escapeHtml(byName)}</b> brokker sig over at <b>${escapeHtml(targetName)}</b> bruger sin tid`;
     return `
       <div class="complaint-banner">
-        <span>${cur.complaint.by === 'brokspillet' ? '🎙️' : '🐌'} <b>${escapeHtml(byName)}</b> brokker sig over at <b>${escapeHtml(targetName)}</b> bruger sin tid</span>
+        <span>${line}</span>
         <span id="complaintCountdown" class="complaint-countdown"></span>
       </div>
     `;
@@ -2965,8 +2978,8 @@ function mrbrokComplaintBlockHtml(m, cur){
   const age = cur.phaseStartedAt ? (Date.now() - cur.phaseStartedAt) : 0;
   if(age < MIN_COMPLAIN_AGE_MS) return '';
   const growth = Math.min(1, (age - MIN_COMPLAIN_AGE_MS) / 30000);
-  const targetName = pending.length === 1 ? (state.members.find(mm=>mm.id===pending[0])||{}).name : null;
-  const label = targetName ? `🐌 Brok over ${escapeHtml(targetName)}s tempo` : `🐌 Brok over de langsomme`;
+  const targetName = !anonymize && pending.length === 1 ? (state.members.find(mm=>mm.id===pending[0])||{}).name : null;
+  const label = targetName ? `🐌 Brok over ${escapeHtml(targetName)}s tempo` : `🐌 Brok over ventetiden`;
   return `<button class="complain-btn" id="complainBtn" data-target="${pending[0]}" style="transform:scale(${(1+growth*0.16).toFixed(2)}); opacity:${(0.6+growth*0.4).toFixed(2)};">${label}</button>`;
 }
 
