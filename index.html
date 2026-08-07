@@ -218,32 +218,38 @@
      Chancen faktisk ER lige nu (se buildMoleChanceHtml/playMoleChanceReveal).
      Hjulet (ovenfor) er i stedet reserveret til en fremtidig funktion hvor
      spillere selv VÆLGER et brok-ord, og der trækkes lod blandt de valg. */
-  .mole-cabinet{ background:linear-gradient(160deg,#3d2b1f,#1a120b); border-radius:24px; padding:20px 14px 16px; box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #8a6b1f; position:relative; }
-  .mole-cabinet.win{ box-shadow:0 12px 26px rgba(0,0,0,.4), inset 0 0 0 3px #FFC93C, 0 0 24px rgba(255,201,60,.5); }
+  /* Lysere, varmere træ-gradient end den gamle næsten-sorte version — det
+     er muldvarpene og hullerne der skal fange øjet, ikke en mørk kasse
+     omkring dem. Mindre padding så hullerne fylder kabinettet ud, samme
+     "fyld pladsen" -tankegang som hjulet fik i wheel-wrap-fixet. */
+  .mole-cabinet{ background:linear-gradient(160deg,#8a6238,#5c4128); border-radius:24px; padding:14px 10px 12px; box-shadow:0 12px 26px rgba(0,0,0,.35), inset 0 0 0 3px #d9a84a; position:relative; }
+  .mole-cabinet.win{ box-shadow:0 12px 26px rgba(0,0,0,.35), inset 0 0 0 3px #FFC93C, 0 0 24px rgba(255,201,60,.5); }
   /* Fast 2 pr. række (ikke "så mange der er plads til") — ellers skifter
      antallet af pr.-række afhængig af skærmbredde og kandidatantal, hvilket
      så uforudsigeligt ud. En ulige sidste kandidat spænder over begge
      kolonner på sin egen række, så den lander centreret i stedet for skævt
      ude i venstre side. */
-  .mole-grid{ display:grid; grid-template-columns: repeat(2, 1fr); justify-items:center; gap:14px; padding:8px 4px; }
+  .mole-grid{ display:grid; grid-template-columns: repeat(2, 1fr); justify-items:center; gap:10px; padding:8px 4px; }
   .mole-hole-wrap:last-child:nth-child(odd){ grid-column: 1 / -1; }
-  .mole-hole-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; gap:5px; width:84px; padding-top:38px; }
-  .mole-hole{ position:relative; width:68px; height:68px; border-radius:50%; background:radial-gradient(circle at 50% 30%, #4a3627, #1a120b); overflow:hidden; box-shadow:inset 0 4px 10px rgba(0,0,0,.6); }
+  .mole-hole-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; gap:5px; width:100px; padding-top:40px; }
+  .mole-hole{ position:relative; width:84px; height:84px; border-radius:50%; background:radial-gradient(circle at 50% 30%, #5c4128, #241a10); overflow:hidden; box-shadow:inset 0 4px 10px rgba(0,0,0,.6); }
+  .mole-countdown{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:10; pointer-events:none; }
+  .mole-countdown-num{ font-family:'Baloo 2',sans-serif; font-weight:800; font-size:64px; color:#FFC93C; text-shadow:0 4px 14px rgba(0,0,0,.55); }
   /* Håndbygget hammer (ikke emoji'en 🔨) — emoji-glyffer skalerer og
      proportionerer forskelligt på tværs af telefoner/skrifttyper, hvilket
      gjorde den svær at ramme rigtigt i størrelse. Hoved + skaft som to
      simple div'er der roterer samlet giver fuld kontrol over proportionerne
      og en tydeligere silhuet på en lille mobilskærm. */
-  .mole-hammer{ position:absolute; top:-14px; left:50%; width:52px; height:56px; margin-left:-26px; transform:rotate(-60deg); transform-origin:76% 86%; opacity:0; pointer-events:none; z-index:5; }
-  .mole-hammer-head{ position:absolute; top:0; left:6px; width:38px; height:22px; border-radius:6px; background:linear-gradient(160deg,#d99a5b,#8a5a28); box-shadow:0 2px 5px rgba(0,0,0,.45), inset 0 -3px 5px rgba(0,0,0,.3); }
-  .mole-hammer-handle{ position:absolute; top:16px; left:21px; width:9px; height:40px; border-radius:4px; background:linear-gradient(180deg,#8a5a30,#4a2c14); }
-  @keyframes hammerWhack{ 0%{ transform:rotate(-60deg); opacity:1; } 45%{ transform:rotate(24deg) translateY(24px); opacity:1; } 62%{ transform:rotate(16deg) translateY(19px); opacity:1; } 100%{ transform:rotate(-60deg); opacity:0; } }
+  .mole-hammer{ position:absolute; top:-16px; left:50%; width:60px; height:64px; margin-left:-30px; transform:rotate(-60deg); transform-origin:76% 86%; opacity:0; pointer-events:none; z-index:5; }
+  .mole-hammer-head{ position:absolute; top:0; left:8px; width:42px; height:24px; border-radius:6px; background:linear-gradient(160deg,#d99a5b,#8a5a28); box-shadow:0 2px 5px rgba(0,0,0,.45), inset 0 -3px 5px rgba(0,0,0,.3); }
+  .mole-hammer-handle{ position:absolute; top:18px; left:24px; width:10px; height:44px; border-radius:4px; background:linear-gradient(180deg,#8a5a30,#4a2c14); }
+  @keyframes hammerWhack{ 0%{ transform:rotate(-60deg); opacity:1; } 45%{ transform:rotate(24deg) translateY(28px); opacity:1; } 62%{ transform:rotate(16deg) translateY(22px); opacity:1; } 100%{ transform:rotate(-60deg); opacity:0; } }
   .mole-hammer.whacking{ animation:hammerWhack .5s cubic-bezier(.36,.07,.19,.97); }
-  .mole{ position:absolute; left:50%; bottom:-6px; width:48px; height:48px; transform:translate(-50%, 32px); transition:transform .28s cubic-bezier(.34,1.56,.64,1), filter .2s ease; }
-  .mole .avatar{ width:48px; height:48px; font-size:16px; }
-  .mole.mole-up{ transform:translate(-50%, -14px); }
+  .mole{ position:absolute; left:50%; bottom:-8px; width:60px; height:60px; transform:translate(-50%, 40px); transition:transform .28s cubic-bezier(.34,1.56,.64,1), filter .2s ease; }
+  .mole .avatar{ width:60px; height:60px; font-size:19px; }
+  .mole.mole-up{ transform:translate(-50%, -18px); }
   .mole.mole-down{ filter:grayscale(1) brightness(.5); }
-  @keyframes moleWinPop{ 0%{ transform:translate(-50%,-14px) scale(1); } 35%{ transform:translate(-50%,-20px) scale(1.15) rotate(-4deg); } 65%{ transform:translate(-50%,-14px) scale(1.05) rotate(4deg); } 100%{ transform:translate(-50%,-14px) scale(1) rotate(0deg); } }
+  @keyframes moleWinPop{ 0%{ transform:translate(-50%,-18px) scale(1); } 35%{ transform:translate(-50%,-24px) scale(1.15) rotate(-4deg); } 65%{ transform:translate(-50%,-18px) scale(1.05) rotate(4deg); } 100%{ transform:translate(-50%,-18px) scale(1) rotate(0deg); } }
   .mole.mole-win{ animation:moleWinPop .5s ease-out; }
   .mole-quote{ margin:12px 4px 0; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:16px; line-height:1.35; color:var(--cream); padding:12px 16px; background:rgba(255,201,60,0.14); border:1px solid rgba(255,201,60,0.35); border-radius:16px; opacity:0; transform:translateX(70px); }
   @keyframes moleQuoteSlide{ from{ opacity:0; transform:translateX(70px); } to{ opacity:1; transform:translateX(0); } }
@@ -433,7 +439,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-38';
+const BUILD_TAG = 'build-2026-08-07-39';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -594,7 +600,16 @@ function extractRoomId(input){
   }catch(e){}
   return input.toLowerCase();
 }
-function initials(name){ return (name||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
+// Bot-navne har et emoji-præfiks (fx "🤖 Bot Bo") — emoji uden for BMP er
+// et surrogatpar i JS-strenge, så et rå word[0] kun greb HALVDELEN af
+// emojiet (en løs surrogat), som browseren tegnede som et ugyldigt tegn
+// (så ud som "0B" i stedet for "BB"). Luger derfor ikke-bogstaver
+// (emoji/symboler/tal) væk FØR vi splitter i ord.
+function initials(name){
+  const lettersOnly = (name||'').replace(/[^\p{L}\s]/gu, '').trim();
+  const src = lettersOnly || (name||'?').trim();
+  return src.split(/\s+/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase() || '?';
+}
 function fmtTime(ts){
   const d = new Date(ts), now = new Date();
   const time = d.toLocaleTimeString('da-DK',{hour:'2-digit',minute:'2-digit'});
@@ -1151,7 +1166,34 @@ async function runMrbrokBotAction(m, cur, botId){
   if(cur.type === 'steal' && cur.guess) return botSubmit('mrbrok', botId, { closeEnough: Math.random() < 0.5 });
 }
 
+// Enhver af de MANGE ting der kalder render() (eget svar, en andens svar
+// via poll, en bot der handler, en klar-markering...) bygger HELE
+// app.innerHTML om fra bunden. Uden dette ville en igangværende skrive-fase
+// miste fokus (og tastaturet lukke) i det øjeblik NOGEN ANDEN gjorde noget —
+// selv når man endnu ikke var gået i gang med at skrive, bare stod og
+// læste/tænkte med feltet fokuseret. Endnu værre: da skrivefelter altid
+// starter tomme ved gen-render (de viser kun ens EGET indsendte svar, og man
+// har jo ikke indsendt endnu), forsvandt alt man havde nået at skrive også.
+// Redder derfor fokuseret felt + dets nuværende værdi/markør før hvert
+// gen-render, og lægger dem tilbage bagefter hvis samme felt (samme id)
+// stadig findes i den nye DOM.
 function render(){
+  const activeEl = document.activeElement;
+  let savedFocus = null;
+  if(activeEl && activeEl.id && (activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'INPUT') && app.contains(activeEl)){
+    savedFocus = { id: activeEl.id, value: activeEl.value, selStart: activeEl.selectionStart, selEnd: activeEl.selectionEnd };
+  }
+  renderInner();
+  if(savedFocus){
+    const el = document.getElementById(savedFocus.id);
+    if(el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') && !el.disabled){
+      if(!el.value) el.value = savedFocus.value;
+      el.focus();
+      try{ el.setSelectionRange(savedFocus.selStart, savedFocus.selEnd); }catch(e){}
+    }
+  }
+}
+function renderInner(){
   driveBotsIfNeeded();
   // Forsvar mod at stå i en visning der er slået fra i dette rum.
   if(activeApp === 'spil' && !state.gameEnabled) activeApp = 'kasse';
@@ -1309,15 +1351,23 @@ async function gameApi(action, extra){
 
 function openGameAdminMenuSheet(){
   const active = state.game && state.game.active;
+  // Serveren tillader kun ÉT spil ad gangen på tværs af Brokspillet og
+  // MrBrok — men denne menu tjekkede kun state.game, så den kunne sige
+  // "der er ikke noget spil i gang" og alligevel afvise "Start" bagefter,
+  // fordi MrBrok rent faktisk var det der blokerede. Meget forvirrende
+  // ("den siger intet er i gang, men nægter at starte"). Viser nu klart
+  // hvilket af de to spil der reelt er årsagen, med en direkte "afslut"-vej.
+  const blockedByOther = !active && state.mrbrok && state.mrbrok.active;
   const hasHighscore = state.gameStats && Object.keys(state.gameStats).length > 0;
   openSheet(`
     <h2>Brokspil-admin ⚙️</h2>
-    <p class="hint">${active ? 'Der er et spil i gang lige nu.' : 'Der er ikke noget spil i gang lige nu.'}</p>
+    <p class="hint">${active ? 'Der er et spil i gang lige nu.' : (blockedByOther ? 'MrBrok er i gang lige nu — afslut det for at kunne starte Brokspillet.' : 'Der er ikke noget spil i gang lige nu.')}</p>
     <button class="sheet-btn test" id="gameAdminTestChanceBtn">🎲 Test Chancen</button>
     <button class="sheet-btn test" id="gameAdminTestWheelBtn">🎡 Test hjulet</button>
     <button class="sheet-btn test" id="gameAdminTestSlotBtn">🎰 Test spillemaskinen</button>
-    ${active ? '' : `<button class="sheet-btn test" id="gameAdminBotTestBtn">🤖 Test-spil med 3 bots</button>`}
+    ${active || blockedByOther ? '' : `<button class="sheet-btn test" id="gameAdminBotTestBtn">🤖 Test-spil med 3 bots</button>`}
     ${active ? `<button class="sheet-btn danger" id="gameAdminRestartBtn">🛑 Afslut Brokspillet</button>` : ''}
+    ${blockedByOther ? `<button class="sheet-btn danger" id="gameAdminEndOtherBtn">🛑 Afslut MrBrok</button>` : ''}
     ${hasHighscore ? `<button class="sheet-btn danger" id="gameAdminResetStatsBtn">🏆 Nulstil highscore</button>` : ''}
     <button class="sheet-btn ghost" id="gameAdminCloseBtn">Luk menu</button>
     <p class="hint" style="text-align:center; font-size:10.5px; opacity:.5; margin-top:6px;">${BUILD_TAG}</p>
@@ -1332,6 +1382,12 @@ function openGameAdminMenuSheet(){
       closeSheet();
       await gameApi('end', {});
       toast('🛑 Brokspillet er afsluttet — klar til en ny omgang');
+    };
+    const endOtherBtn = document.getElementById('gameAdminEndOtherBtn');
+    if(endOtherBtn) endOtherBtn.onclick = async ()=>{
+      closeSheet();
+      await mrbrokApi('end', {});
+      toast('🛑 MrBrok er afsluttet — Brokspillet kan nu startes');
     };
     const resetStatsBtn = document.getElementById('gameAdminResetStatsBtn');
     if(resetStatsBtn) resetStatsBtn.onclick = async ()=>{
@@ -1909,6 +1965,7 @@ function buildMoleChanceHtml(prefix, candidates, winner, bannerText, winnerQuote
       <div class="slot-banner">${bannerText}</div>
       <div class="mole-cabinet win" id="${prefix}Cabinet">
         <div class="mole-grid" id="${prefix}MoleGrid">${holes}</div>
+        <div class="mole-countdown" id="${prefix}MoleCountdown"></div>
         <div class="slot-winner-name" id="${prefix}WinnerName" style="opacity:1;">${escapeHtml(winner.name)} vandt! 🍀</div>
         ${winnerQuote ? `<div class="mole-quote" id="${prefix}Quote">"${escapeHtml(winnerQuote)}"</div>` : ''}
       </div>
@@ -1925,9 +1982,29 @@ function buildMoleChanceHtml(prefix, candidates, winner, bannerText, winnerQuote
 // (én hurtig bank, ingen reel spænding). Nu er der altid en ordentlig
 // optakt før den første bankes ned, og en kort pause før vinderen fejrer,
 // så det føles som en rigtig afsløring uanset gruppestørrelse.
-const MOLE_PREROLL_MS = 2200;
+const MOLE_PREROLL_MS = 2400;
 const MOLE_KNOCK_BUDGET_MS = 2600;
 const MOLE_POST_PAUSE_MS = 1200;
+// Tæller synligt "3-2-1" ned inde i kabinettet mens muldvarpene popper op,
+// i stedet for en stille pause — så det er tydeligt at noget er ved at ske,
+// ikke bare en skærm der virker fastfrosset et par sekunder.
+function playMoleCountdown(prefix, totalMs){
+  const el = document.getElementById(prefix+'MoleCountdown');
+  if(!el) return;
+  el.innerHTML = '';
+  const steps = ['3','2','1'];
+  const perStep = Math.max(500, totalMs / steps.length);
+  let i = 0;
+  const tick = ()=>{
+    el.innerHTML = `<div class="mole-countdown-num">${steps[i]}</div>`;
+    const numEl = el.querySelector('.mole-countdown-num');
+    if(typeof gsap !== 'undefined' && numEl) gsap.fromTo(numEl, { scale:.5, opacity:0 }, { scale:1, opacity:1, duration:.25, ease:'back.out(2)' });
+    i++;
+    if(i < steps.length) setTimeout(tick, perStep);
+    else setTimeout(()=>{ el.innerHTML = ''; }, perStep * 0.5);
+  };
+  tick();
+}
 function playMoleChanceReveal(prefix){
   const cabinet = document.getElementById(prefix+'Cabinet');
   if(!cabinet) return;
@@ -1940,6 +2017,7 @@ function playMoleChanceReveal(prefix){
   const winnerMole = moles.find(m => m.dataset.winner === '1');
   const losers = moles.filter(m => m.dataset.winner !== '1');
   moles.forEach(m => { m.classList.remove('mole-down', 'mole-win'); m.classList.add('mole-up'); });
+  playMoleCountdown(prefix, MOLE_PREROLL_MS);
   const order = losers.slice().sort(() => Math.random() - 0.5);
   const perKnockDelay = order.length ? Math.max(450, MOLE_KNOCK_BUDGET_MS / order.length) : 0;
   let i = 0;
@@ -2031,7 +2109,12 @@ function gameReadyHtml(g, cur){
 }
 
 function gameLobbyHtml(){
-  const allIds = state.members.map(m=>m.id);
+  // Bot-testspillere (se BOT_NAMES/ensureTestBots) bliver permanente
+  // medlemmer af rummet efter første bot-testspil — de skal ALDRIG dukke
+  // op som en mulighed i den normale spillerliste for et rigtigt spil,
+  // kun i selve bot-testspillet (startBotTestGame vælger dem eksplicit).
+  const realMembers = state.members.filter(m=>!m.isBot);
+  const allIds = realMembers.map(m=>m.id);
   if(!gameSelectedPlayers || !gameKnownMemberIds){
     gameSelectedPlayers = allIds.slice();
   }else{
@@ -2043,7 +2126,7 @@ function gameLobbyHtml(){
     gameSelectedPlayers = [...gameSelectedPlayers.filter(id=>allIds.includes(id)), ...newcomers];
   }
   gameKnownMemberIds = allIds.slice();
-  const chips = state.members.map(m=>{
+  const chips = realMembers.map(m=>{
     const on = gameSelectedPlayers.includes(m.id);
     return `<div class="name-pill ${on?'selected':''}" data-player="${m.id}" style="${on?'':'opacity:.5;'}">${on?'✅':'➖'} ${escapeHtml(m.name)}</div>`;
   }).join('');
@@ -2776,11 +2859,17 @@ async function mrbrokApi(action, extra){
 
 function openMrbrokAdminMenuSheet(){
   const active = state.mrbrok && state.mrbrok.active;
+  // Se tilsvarende kommentar i openGameAdminMenuSheet — kun ét spil ad
+  // gangen på tværs af Brokspillet/MrBrok, så denne menu skal også vise
+  // det tydeligt hvis det er BROKSPILLET der blokerer, ikke bare sige
+  // "intet spil i gang" og lade "Start" fejle med en forvirrende besked.
+  const blockedByOther = !active && state.game && state.game.active;
   openSheet(`
     <h2>MrBrok-admin ⚙️</h2>
-    <p class="hint">${active ? 'Der er et spil i gang lige nu.' : 'Der er ikke noget spil i gang lige nu.'}</p>
-    ${active ? '' : `<button class="sheet-btn test" id="mrbrokAdminBotTestBtn">🤖 Test-spil med 3 bots</button>`}
+    <p class="hint">${active ? 'Der er et spil i gang lige nu.' : (blockedByOther ? 'Brokspillet er i gang lige nu — afslut det for at kunne starte MrBrok.' : 'Der er ikke noget spil i gang lige nu.')}</p>
+    ${active || blockedByOther ? '' : `<button class="sheet-btn test" id="mrbrokAdminBotTestBtn">🤖 Test-spil med 3 bots</button>`}
     ${active ? `<button class="sheet-btn danger" id="mrbrokAdminRestartBtn">🛑 Afslut MrBrok</button>` : ''}
+    ${blockedByOther ? `<button class="sheet-btn danger" id="mrbrokAdminEndOtherBtn">🛑 Afslut Brokspillet</button>` : ''}
     <button class="sheet-btn ghost" id="mrbrokAdminCloseBtn">Luk menu</button>
     <p class="hint" style="text-align:center; font-size:10.5px; opacity:.5; margin-top:6px;">${BUILD_TAG}</p>
   `, ()=>{
@@ -2791,6 +2880,12 @@ function openMrbrokAdminMenuSheet(){
       closeSheet();
       await mrbrokApi('end', {});
       toast('🛑 MrBrok er afsluttet — klar til en ny omgang');
+    };
+    const endOtherBtn = document.getElementById('mrbrokAdminEndOtherBtn');
+    if(endOtherBtn) endOtherBtn.onclick = async ()=>{
+      closeSheet();
+      await gameApi('end', {});
+      toast('🛑 Brokspillet er afsluttet — MrBrok kan nu startes');
     };
     document.getElementById('mrbrokAdminCloseBtn').onclick = closeSheet;
   });
@@ -2924,7 +3019,10 @@ function mrbrokTopicBanner(m){
 }
 
 function mrbrokLobbyHtml(){
-  const allIds = state.members.map(mm=>mm.id);
+  // Samme fix som Brokspillet: bot-testspillere skal aldrig være en
+  // mulighed i den normale spillerliste, kun i selve bot-testspillet.
+  const realMembers = state.members.filter(mm=>!mm.isBot);
+  const allIds = realMembers.map(mm=>mm.id);
   if(!mrbrokSelectedPlayers || !mrbrokKnownMemberIds){
     mrbrokSelectedPlayers = allIds.slice();
   }else{
@@ -2935,7 +3033,7 @@ function mrbrokLobbyHtml(){
     mrbrokSelectedPlayers = [...mrbrokSelectedPlayers.filter(id=>allIds.includes(id)), ...newcomers];
   }
   mrbrokKnownMemberIds = allIds.slice();
-  const chips = state.members.map(mm=>{
+  const chips = realMembers.map(mm=>{
     const on = mrbrokSelectedPlayers.includes(mm.id);
     return `<div class="name-pill ${on?'selected':''}" data-mrbrok-player="${mm.id}" style="${on?'':'opacity:.5;'}">${on?'✅':'➖'} ${escapeHtml(mm.name)}</div>`;
   }).join('');
