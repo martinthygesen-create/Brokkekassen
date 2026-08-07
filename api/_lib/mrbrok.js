@@ -59,27 +59,26 @@ function pickTopic(state) {
   return MRBROK_TOPICS[idx];
 }
 
-// Forslag til en VINKEL på ens clue (aldrig et svar/ord) — vises kun til
-// den der har turen lige nu, via "Brug for et hint?"-knappen, ren client-
-// side hjælp (se index.html). Holdes her sammen med resten af MrBroks
-// indhold, selvom de reelt kunne have ligget rent client-side — samlet ét
-// sted er lettere at redigere/udvide.
+// Forslag til HVORDAN man svarer i karakter når man bliver grillet (aldrig
+// et konkret svar/ord) — vises kun til den der har turen lige nu, via
+// "Brug for et hint?"-knappen, ren client-side hjælp (se index.html).
+// Skrevet til den NUVÆRENDE mekanik (rolle + i-karakter afhøring, se
+// MRBROK_TOPICS ovenfor) — IKKE til den gamle "beskriv en vinkel på et
+// abstrakt emne"-udgave, som disse tidligere var formuleret til. Holdes
+// her sammen med resten af MrBroks indhold, selvom de reelt kunne have
+// ligget rent client-side — samlet ét sted er lettere at redigere/udvide.
 const MRBROK_CLUE_TIPS = [
-  'Beskriv en følelse forbundet med det',
-  'Nævn et sted det typisk sker',
-  'Sammenlign det med noget helt andet',
-  'Beskriv en lyd eller lugt der hører til',
-  'Sig hvornår på dagen/ugen det sker',
-  'Nævn hvem der typisk er involveret',
-  'Beskriv hvordan det starter',
-  'Beskriv hvordan det plejer at ende',
-  'Brug et tal eller en mængde',
-  'Beskriv noget man IKKE bør gøre i den situation',
-  'Sammenlign størrelsen eller mængden af det',
-  'Beskriv hvordan man har det bagefter',
-  'Nævn noget det minder dig om fra din egen hverdag',
-  'Beskriv det med kun ét ord, meget vagt',
-  'Sig noget om hvor tit det sker',
+  'Svar med din rolles attitude — vis følelsen i stemmen, ikke kun i ordene',
+  'Overdriv en lille smule — det er trods alt et brok',
+  'Find på én konkret (opdigtet) detalje i stedet for at svare generelt',
+  'Hold svaret kort — giv ikke det hele væk på én gang',
+  'Klag over en PERSON i situationen, ikke bare selve tingen',
+  'Suk eller ryst på hovedet før du svarer — spil rollen, ikke kun teksten',
+  'Vend spørgsmålet en anelse — svar på det du helst vil brokke dig over',
+  'Nævn hvor tit "det her" sker for dig i rollen',
+  'Beskriv hvordan du plejer at reagere i situationen',
+  'Er du MrBrok: lyt til hvad de andre lige har sagt, og genbrug deres ord',
+  'Er du MrBrok: svar selvsikkert og vagt i stedet for at prøve at være præcis',
 ];
 
 module.exports = { MRBROK_TOPICS, MRBROK_CLUE_TIPS, pickTopic, pickMrBrok };

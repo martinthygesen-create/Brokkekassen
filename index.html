@@ -119,14 +119,18 @@
   /* Rolle-splash ved spilstart — egen mørk/guld visning (ligesom MrBroks
      "efterforskningslokale"), IKKE Brokspillets lyse sheet-stil, så den ikke
      et kort øjeblik ligner det forkerte spil. Vises kun ÉN gang pr. nyt spil. */
-  .mrbrok-splash-backdrop{ position:fixed; inset:0; background:rgba(3,10,10,0.82); z-index:92; display:flex; align-items:center; justify-content:center; padding:22px; opacity:0; pointer-events:none; transition:opacity .25s ease; }
+  .mrbrok-splash-backdrop{ position:fixed; inset:0; background:rgba(3,10,10,0.82); z-index:92; display:flex; align-items:stretch; justify-content:center; opacity:0; pointer-events:none; transition:opacity .25s ease; }
   .mrbrok-splash-backdrop.show{ opacity:1; pointer-events:auto; }
-  .mrbrok-splash{ background:linear-gradient(160deg, #17110a, var(--noir-deep)); border:1px solid rgba(255,201,60,0.35); border-radius:24px; padding:26px 22px calc(22px + env(safe-area-inset-bottom)); max-width:400px; width:100%; max-height:82dvh; overflow-y:auto; box-shadow:0 20px 50px rgba(0,0,0,.5), 0 0 30px rgba(255,201,60,.12); text-align:center; transform:translateY(10px) scale(.97); transition:transform .25s cubic-bezier(.2,.9,.3,1.2); }
+  /* Fylder hele skærmen i stedet for at være endnu et lille kort — det er
+     spillets vigtigste instruktion, den skal ikke konkurrere om pladsen med
+     resten af skærmen, og skriften skal kunne læses fra den anden ende af
+     sofabordet, ikke kun tæt på skærmen. */
+  .mrbrok-splash{ background:linear-gradient(160deg, #17110a, var(--noir-deep)); width:100%; max-width:520px; height:100%; overflow-y:auto; padding:calc(32px + env(safe-area-inset-top)) 26px calc(28px + env(safe-area-inset-bottom)); box-shadow:0 0 60px rgba(255,201,60,.1) inset; text-align:center; display:flex; flex-direction:column; justify-content:center; transform:translateY(10px) scale(.98); transition:transform .25s cubic-bezier(.2,.9,.3,1.2); }
   .mrbrok-splash-backdrop.show .mrbrok-splash{ transform:translateY(0) scale(1); }
-  .mrbrok-splash h3{ font-family:'Baloo 2',sans-serif; font-weight:800; font-size:20px; color:var(--coin); margin:8px 0 4px; }
-  .mrbrok-splash ul{ text-align:left; margin:14px 0; padding:0; list-style:none; }
-  .mrbrok-splash li{ display:flex; gap:10px; align-items:flex-start; margin-bottom:10px; font-size:14px; line-height:1.4; color:rgba(255,247,232,0.85); }
-  .mrbrok-splash li span:first-child{ flex:0 0 auto; }
+  .mrbrok-splash h3{ font-family:'Baloo 2',sans-serif; font-weight:800; font-size:30px; line-height:1.25; color:var(--coin); margin:8px 0 28px; }
+  .mrbrok-splash ul{ text-align:left; margin:0 0 28px; padding:0; list-style:none; }
+  .mrbrok-splash li{ display:flex; gap:16px; align-items:flex-start; margin-bottom:24px; font-size:19px; line-height:1.45; font-weight:600; color:rgba(255,247,232,0.92); }
+  .mrbrok-splash li span:first-child{ flex:0 0 auto; font-size:30px; line-height:1.2; }
   .mrbrok-splash li span:last-child{ flex:1 1 auto; min-width:0; }
   .day-chip{ display:inline-block; font-size:12px; font-weight:600; background:rgba(255,247,232,0.1); border:1px solid rgba(255,247,232,0.18); padding:5px 10px; border-radius:100px; white-space:nowrap; vertical-align:middle; }
 
@@ -468,7 +472,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-45';
+const BUILD_TAG = 'build-2026-08-07-46';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -510,6 +514,7 @@ let roseMatchSelectionsKey = null; // hvilken runde roseMatchSelections hører t
 // gider tjekke for bot-ture ved hvert render — ren performance-genvej, når
 // man ikke er i gang med at teste med bots.
 let botAutoplay = false;
+let botTestStartedAt = 0; // se botStartGraceRemaining — botter venter mindst 10s efter admin-knappen, uanset fase
 let botScheduledKeys = new Set(); // undgår at planlægge samme bot-handling flere gange mens den venter sin tilfældige forsinkelse ud
 let brokListSubTab = 'alltime'; // 'today' | 'alltime' — undersort inde i Broklisten-fanen; alltime er det vigtigste og vises først
 let polling = null;
@@ -1089,6 +1094,7 @@ async function startBotTestGame(kind){
   const botIds = state.members.filter(m=>m.isBot).map(m=>m.id);
   const playerIds = [profile.memberId, ...botIds];
   botAutoplay = true;
+  botTestStartedAt = Date.now();
   if(kind === 'game') await gameApi('start', { wager:'fun', playerIds, totalRounds:5 });
   else await mrbrokApi('start', { wager:'fun', playerIds, warmupRounds:1 });
   toast('🤖 Bots spiller automatisk — du styrer kun din egen tur');
@@ -1115,6 +1121,15 @@ function botActionDelay(indexInPhase){
 // Fem sekunders bund-forsinkelse for FØRSTE bot giver reel læsetid.
 function mrbrokBotActionDelay(indexInPhase){
   return 5000 + indexInPhase * 2200 + Math.random() * 1400;
+}
+
+// Botterne må aldrig løbe i gang mens man stadig sidder og læser
+// admin-menuen/rolle-splashen lige efter man har trykket "test-spil med
+// bots" — så uanset hvilken fase-forsinkelse der ellers ville gælde, er der
+// et fælles gulv på 10s fra selve admin-klikket, kun ved allerførste fase.
+function botStartGraceRemaining(){
+  if(!botTestStartedAt) return 0;
+  return Math.max(0, botTestStartedAt + 10000 - Date.now());
 }
 
 async function botSubmit(kind, actorId, payload){
@@ -1149,7 +1164,7 @@ function driveBotsForGame(g){
   const phaseKey = g.round + ':' + cur.type + ':' + (cur.phase||'');
   const pending = getPendingIdsClient(cur, g.players||[]);
   pending.filter(isBotMember).forEach((botId,i)=>{
-    scheduleBotOnce('game:'+phaseKey+':'+botId, ()=>runGameBotAction(cur, botId), botActionDelay(i));
+    scheduleBotOnce('game:'+phaseKey+':'+botId, ()=>runGameBotAction(cur, botId), Math.max(botActionDelay(i), botStartGraceRemaining()));
   });
 }
 
@@ -1190,7 +1205,7 @@ function driveBotsForMrbrok(m){
   const phaseKey = m.round + ':' + cur.type + ':' + (cur.turnIndex !== undefined ? cur.turnIndex : '');
   const pending = getPendingMrbrokIdsClient(m, cur);
   pending.filter(isBotMember).forEach((botId,i)=>{
-    scheduleBotOnce('mrbrok:'+phaseKey+':'+botId, ()=>runMrbrokBotAction(m, cur, botId), mrbrokBotActionDelay(i));
+    scheduleBotOnce('mrbrok:'+phaseKey+':'+botId, ()=>runMrbrokBotAction(m, cur, botId), Math.max(mrbrokBotActionDelay(i), botStartGraceRemaining()));
   });
 }
 
@@ -3072,15 +3087,46 @@ function mrbrokHighscoreHtml(){
 }
 
 // Ét skærmbillede pr. NYT MrBrok-spil (ikke pr. runde — det ville blive
-// trættende hurtigt) med konkrete strategi-tips, forskellige for MrBrok
-// selv vs. de rigtige rollehavere. Kører kun ved allerførste tur af det
-// første rigtige (ikke-opvarmnings-uafhængige) clue, styret af
-// mrbrokRoleSplashShownFor holdt op mod m.startedAt.
+// trættende hurtigt), i to trin: (1) en "skjul skærmen"-advarsel med en
+// 3-2-1 nedtælling, så man ikke bare glider forbi hinandens skærme og ser
+// rollen ved et uheld i det sekund den popper op, og (2) selve
+// afsløringen + konkrete strategi-tips, forskellige for MrBrok selv vs.
+// de rigtige rollehavere. Kører kun ved allerførste tur af spillet,
+// styret af mrbrokRoleSplashShownFor holdt op mod m.startedAt.
 function maybeShowMrbrokRoleSplash(m){
   if(!m || !m.active || !m.current) return;
   if(m.current.type !== 'clue' || m.round !== 1 || m.current.turnIndex !== 0) return;
   if(mrbrokRoleSplashShownFor === m.startedAt) return;
   mrbrokRoleSplashShownFor = m.startedAt;
+
+  const backdropHtml = `<div class="mrbrok-splash-backdrop" id="mrbrokSplashBackdrop"><div class="mrbrok-splash" id="mrbrokSplashInner"></div></div>`;
+  document.body.insertAdjacentHTML('beforeend', backdropHtml);
+  const backdrop = document.getElementById('mrbrokSplashBackdrop');
+  const inner = document.getElementById('mrbrokSplashInner');
+  requestAnimationFrame(()=>backdrop.classList.add('show'));
+  const close = ()=>{ backdrop.classList.remove('show'); setTimeout(()=>backdrop.remove(), 250); };
+  backdrop.addEventListener('click', e=>{ if(e.target === backdrop) close(); });
+
+  inner.innerHTML = `
+    <div style="font-size:52px;">🙈</div>
+    <h3 style="margin-bottom:10px;">Skjul skærmen for de andre!</h3>
+    <p style="font-size:17px; line-height:1.5; color:rgba(255,247,232,0.85); font-weight:600;">Om lidt afslører vi din rolle — kun dig.</p>
+    <div id="mrbrokSplashCountdown" style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:64px; color:var(--coin); margin-top:22px;">3</div>
+  `;
+  let n = 3;
+  const tick = setInterval(()=>{
+    n--;
+    const el = document.getElementById('mrbrokSplashCountdown');
+    if(!el){ clearInterval(tick); return; }
+    if(n > 0){ el.textContent = String(n); }
+    else{
+      clearInterval(tick);
+      showMrbrokRoleReveal(m, inner, close);
+    }
+  }, 850);
+}
+
+function showMrbrokRoleReveal(m, inner, close){
   const items = m.youAreMrBrok ? [
     ['🎭', 'Du kender ikke rollen de andre har — vælg selv en karakter og bliv i den hele spillet.'],
     ['👂', 'Lyt grundigt efter deres tone og detaljer, og genbrug dem i dine egne svar.'],
@@ -3090,22 +3136,19 @@ function maybeShowMrbrokRoleSplash(m){
     ['🤏', 'Giv ikke det hele væk på én gang — gem noget til næste tur.'],
     ['🕵️', 'MrBrok lytter og prøver at kopiere dig — pas på med at være for konkret.'],
   ];
-  const title = m.youAreMrBrok ? '🕵️ Du er MrBrok — sådan snyder du bedst' : '🎭 Sådan spiller du bedst';
-  const html = `
-    <div class="mrbrok-splash-backdrop" id="mrbrokSplashBackdrop">
-      <div class="mrbrok-splash">
-        <h3>${title}</h3>
-        <ul>${items.map(([icon,text])=>`<li><span>${icon}</span><span>${text}</span></li>`).join('')}</ul>
-        <button class="game-btn" id="mrbrokSplashCloseBtn" style="margin-top:6px;">Forstået, lad os spille</button>
-      </div>
-    </div>
+  const reveal = m.youAreMrBrok
+    ? `<div style="font-size:44px;">🕵️</div><h3>Du er MrBrok!</h3>`
+    : (()=>{
+        const [role, domain] = (m.topic || '?').split(' — ');
+        return `<div style="font-size:44px;">🎭</div><h3>${escapeHtml(role || m.topic || '?')}</h3>${domain ? `<p style="font-size:17px; color:rgba(255,247,232,0.8); margin:-14px 0 24px; font-weight:600;">${escapeHtml(domain)}</p>` : ''}`;
+      })();
+  inner.innerHTML = `
+    ${reveal}
+    <ul>${items.map(([icon,text])=>`<li><span>${icon}</span><span>${text}</span></li>`).join('')}</ul>
+    <button class="game-btn" id="mrbrokSplashCloseBtn" style="margin-top:6px;">Forstået, lad os spille</button>
   `;
-  document.body.insertAdjacentHTML('beforeend', html);
-  const backdrop = document.getElementById('mrbrokSplashBackdrop');
-  requestAnimationFrame(()=>backdrop.classList.add('show'));
-  const close = ()=>{ backdrop.classList.remove('show'); setTimeout(()=>backdrop.remove(), 250); };
+  if(typeof gsap !== 'undefined') gsap.fromTo(inner, {opacity:0, scale:.95}, {opacity:1, scale:1, duration:.35, ease:'back.out(1.6)'});
   document.getElementById('mrbrokSplashCloseBtn').onclick = close;
-  backdrop.addEventListener('click', e=>{ if(e.target === backdrop) close(); });
 }
 
 function mrbrokTopicBanner(m){
@@ -3145,11 +3188,12 @@ function mrbrokLobbyHtml(){
   }).join('');
   const enough = mrbrokSelectedPlayers.length >= 3;
   const steps = [
-    ['🤫', 'Alle undtagen én kender det samme brok-emne'],
-    ['🗣️', 'Gå på skift og sig HØJT en clue om emnet — ingen skriver noget ned'],
+    ['🎭', 'Alle undtagen én får en rolle med et bredt brok-domæne — fx "sur stewardesse, besværlige passagerer"'],
+    ['🗣️', 'Gå på skift og bliv grillet i karakter — de andre spørger, du svarer HØJT uden at bekræfte eller lyve. Intet skrives ned'],
+    ['🕵️', 'MrBrok kender ikke rollen — skal vælge sin egen karakter og lytte for at kopiere de andres tone'],
     ['🤔', 'Efter et par runder begynder I at stemme — den mest mistænkelige ryger ud'],
     ['🍿', 'Stemt ud? Så kigger du med resten af spillet'],
-    ['🎭', 'Fanges MrBrok, får de ét sidste gæt for at stjæle sejren alligevel'],
+    ['🎯', 'Fanges MrBrok, får de ét sidste gæt for at stjæle sejren alligevel'],
   ];
   // Foldes automatisk ud første gang nogen ser lobbyen på denne enhed, og
   // sammen alle gange efter — så det ikke bare bliver fyld man scroller
@@ -3218,7 +3262,7 @@ function mrbrokClueHtml(m, cur){
   const speaker = state.members.find(mm=>mm.id===cur.speakerId);
   const isSpeaker = profile && profile.memberId === cur.speakerId;
   const turnNo = cur.turnIndex + 1, totalTurns = cur.order.length;
-  const warmupLabel = cur.round <= m.warmupRounds ? ' · opvarmning' : '';
+  const warmupLabel = cur.round <= m.warmupRounds ? ' · nysgerrig runde' : '';
   const badge = `<div class="game-badge">Runde ${m.round} · Tur ${turnNo}/${totalTurns}${warmupLabel}</div>`;
 
   if(isSpeaker){
