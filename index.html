@@ -472,7 +472,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-52';
+const BUILD_TAG = 'build-2026-08-07-53';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -2934,6 +2934,22 @@ const MRBROK_IMITATION_TIPS = [
   'Klag over en PERSON, ikke bare selve situationen',
   'Er du MrBrok: bare vælg en attitude og kør på — ingen kan tjekke dig endnu',
 ];
+// Kun DEN der svarer har en hint-knap — men det er lige så ofte den der
+// skal SPØRGE der går i stå ("hvad spørger jeg om?"), og de har ingen
+// hjælp overhovedet. Et roligt eksempel-spørgsmål under ventebeskeden
+// (ingen skal trykke noget, det er bare inspiration for hvem som helst i
+// rummet) — udvalgt deterministisk pr. tur, så det ikke skifter ved hvert
+// poll mens man læser det.
+const MRBROK_QUESTION_EXAMPLES = [
+  'Hvor tit sker det for dig?',
+  'Hvem er typisk indblandet, når det sker?',
+  'Hvad plejer du at gøre bagefter?',
+  'Hvornår skete det sidst?',
+  'Hvad er det værste eksempel, du kan komme i tanke om?',
+  'Hvordan starter det normalt?',
+  'Hvad ville du ønske folk gjorde i stedet?',
+  'Er der nogen steder, det er værre end andre?',
+];
 
 async function mrbrokApi(action, extra){
   if(action === 'end') botAutoplay = false; // se samme kommentar i gameApi
@@ -3295,7 +3311,7 @@ function mrbrokLobbyHtml(){
     ['🎉', 'Runde 1 er en imitations-runde — brok dig som karakteren ville, ingen kan blive fanget i noget endnu'],
     ['🗣️', 'Fra runde 2: gå på skift og bliv spurgt om rollen HØJT — svar vagt nok til ikke at hjælpe MrBrok, men klart nok til at de andre tror på dig. Intet skrives ned'],
     ['🕵️', 'MrBrok kender ikke rollen — skal lægge sig op ad de andres tone og svar for ikke at blive afsløret'],
-    ['🤔', 'Efter et par nysgerrige runder begynder I at stemme — den mest mistænkelige ryger ud'],
+    ['🤔', 'Efter et par nysgerrige runder begynder I at stemme (hemmeligt, indtil alle har stemt) — den mest mistænkelige ryger ud'],
     ['🍿', 'Stemt ud? Så kigger du med resten af spillet'],
     ['🎯', 'Fanges MrBrok, får de ét sidste gæt på rollen for at stjæle sejren alligevel'],
   ];
@@ -3409,6 +3425,7 @@ function mrbrokClueHtml(m, cur){
         <b style="font-size:26px;">${escapeHtml(speaker?speaker.name:'?')}</b>
         ${isImitationRound ? 'performer deres rolle' : 'har turen — stil dem et spørgsmål om rollen'}
       </div>
+      ${!isImitationRound ? `<p class="hint" style="text-align:center; margin:-14px 0 0; color:rgba(255,247,232,0.5);">💬 Fx: "${escapeHtml(MRBROK_QUESTION_EXAMPLES[(cur.round + cur.turnIndex) % MRBROK_QUESTION_EXAMPLES.length])}"</p>` : ''}
     </div>
     ${mrbrokComplaintBlockHtml(m, cur)}
   `;
@@ -3426,7 +3443,7 @@ function mrbrokVoteHtml(m, cur){
   }
   return `
     ${badge}
-    <p class="hint" style="text-align:center; margin:0 0 8px; color:rgba(255,247,232,0.7);">Hvem tror du er MrBrok? Den med flest stemmer ryger ud.</p>
+    <p class="hint" style="text-align:center; margin:0 0 8px; color:rgba(255,247,232,0.7);">Hvem tror du er MrBrok? Den med flest stemmer ryger ud. Din stemme er hemmelig indtil alle har stemt — så ingen bliver påvirket af de andre.</p>
     ${mrbrokVoteOptionsHtml(m, cur)}
     ${gameProgressHtml(cur.voteCount||0, eligible, 'har stemt')}
     ${mrbrokComplaintBlockHtml(m, cur)}
