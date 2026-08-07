@@ -224,6 +224,10 @@
   .slot-lever:active{ transform:scale(.97); }
   .slot-lever:disabled{ opacity:.5; }
   .slot-winner-name{ text-align:center; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; color:var(--coral); margin-top:14px; opacity:0; }
+  /* Vinderens ord stod tidligere kun i kandidat-listen under hjulet — man
+     skulle scrolle for at se HVAD der rent faktisk vandt, ikke bare hvem.
+     Vises nu lige under navnet, samme sted øjet allerede kigger. */
+  .slot-winner-word{ text-align:center; font-family:'Baloo 2',sans-serif; font-weight:700; font-size:16px; font-style:italic; color:var(--cream); margin-top:4px; opacity:0; }
   /* Chancens nye standard-visning: et lykkehjul, i samme mørke/guld
      kabinet-stil som spillemaskinen ovenfor (som stadig ligger urørt som
      reserve — se buildSlotCabinetHtml/playSlotChanceReveal). */
@@ -260,17 +264,19 @@
      er muldvarpene og hullerne der skal fange øjet, ikke en mørk kasse
      omkring dem. Mindre padding så hullerne fylder kabinettet ud, samme
      "fyld pladsen" -tankegang som hjulet fik i wheel-wrap-fixet. */
-  .mole-cabinet{ background:linear-gradient(160deg,#8a6238,#5c4128); border-radius:24px; padding:14px 10px 12px; box-shadow:0 12px 26px rgba(0,0,0,.35), inset 0 0 0 3px #d9a84a; position:relative; }
+  .mole-cabinet{ background:linear-gradient(160deg,#8a6238,#5c4128); border-radius:24px; padding:14px 6px 12px; box-shadow:0 12px 26px rgba(0,0,0,.35), inset 0 0 0 3px #d9a84a; position:relative; }
   .mole-cabinet.win{ box-shadow:0 12px 26px rgba(0,0,0,.35), inset 0 0 0 3px #FFC93C, 0 0 24px rgba(255,201,60,.5); }
   /* Fast 2 pr. række (ikke "så mange der er plads til") — ellers skifter
      antallet af pr.-række afhængig af skærmbredde og kandidatantal, hvilket
      så uforudsigeligt ud. En ulige sidste kandidat spænder over begge
      kolonner på sin egen række, så den lander centreret i stedet for skævt
-     ude i venstre side. */
-  .mole-grid{ display:grid; grid-template-columns: repeat(2, 1fr); justify-items:center; gap:10px; padding:8px 4px; }
+     ude i venstre side. Hullerne var tidligere langt smallere end hjulets
+     bredde (210px total vs. wheel-wrap's 270px) — det er DET "går ikke til
+     kant"-indtrykket. Bredere huller/wrapper matcher nu samme totalbredde.*/
+  .mole-grid{ display:grid; grid-template-columns: repeat(2, 1fr); justify-items:center; gap:14px; padding:8px 2px; }
   .mole-hole-wrap:last-child:nth-child(odd){ grid-column: 1 / -1; }
-  .mole-hole-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; gap:5px; width:100px; padding-top:40px; }
-  .mole-hole{ position:relative; width:84px; height:84px; border-radius:50%; background:radial-gradient(circle at 50% 30%, #5c4128, #241a10); overflow:hidden; box-shadow:inset 0 4px 10px rgba(0,0,0,.6); }
+  .mole-hole-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; gap:5px; width:128px; padding-top:44px; }
+  .mole-hole{ position:relative; width:104px; height:104px; border-radius:50%; background:radial-gradient(circle at 50% 30%, #5c4128, #241a10); overflow:hidden; box-shadow:inset 0 4px 10px rgba(0,0,0,.6); }
   .mole-countdown{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:10; pointer-events:none; }
   .mole-countdown-num{ font-family:'Baloo 2',sans-serif; font-weight:800; font-size:64px; color:#FFC93C; text-shadow:0 4px 14px rgba(0,0,0,.55); }
   /* Håndbygget hammer (ikke emoji'en 🔨) — emoji-glyffer skalerer og
@@ -278,20 +284,25 @@
      gjorde den svær at ramme rigtigt i størrelse. Hoved + skaft som to
      simple div'er der roterer samlet giver fuld kontrol over proportionerne
      og en tydeligere silhuet på en lille mobilskærm. */
-  .mole-hammer{ position:absolute; top:-16px; left:50%; width:60px; height:64px; margin-left:-30px; transform:rotate(-60deg); transform-origin:76% 86%; opacity:0; pointer-events:none; z-index:5; }
-  .mole-hammer-head{ position:absolute; top:0; left:8px; width:42px; height:24px; border-radius:6px; background:linear-gradient(160deg,#d99a5b,#8a5a28); box-shadow:0 2px 5px rgba(0,0,0,.45), inset 0 -3px 5px rgba(0,0,0,.3); }
-  .mole-hammer-handle{ position:absolute; top:18px; left:24px; width:10px; height:44px; border-radius:4px; background:linear-gradient(180deg,#8a5a30,#4a2c14); }
+  .mole-hammer{ position:absolute; top:-20px; left:50%; width:74px; height:79px; margin-left:-37px; transform:rotate(-60deg); transform-origin:76% 86%; opacity:0; pointer-events:none; z-index:5; }
+  .mole-hammer-head{ position:absolute; top:0; left:10px; width:52px; height:30px; border-radius:6px; background:linear-gradient(160deg,#d99a5b,#8a5a28); box-shadow:0 2px 5px rgba(0,0,0,.45), inset 0 -3px 5px rgba(0,0,0,.3); }
+  .mole-hammer-handle{ position:absolute; top:22px; left:30px; width:12px; height:54px; border-radius:4px; background:linear-gradient(180deg,#8a5a30,#4a2c14); }
   @keyframes hammerWhack{ 0%{ transform:rotate(-60deg); opacity:1; } 45%{ transform:rotate(24deg) translateY(28px); opacity:1; } 62%{ transform:rotate(16deg) translateY(22px); opacity:1; } 100%{ transform:rotate(-60deg); opacity:0; } }
   .mole-hammer.whacking{ animation:hammerWhack .5s cubic-bezier(.36,.07,.19,.97); }
-  .mole{ position:absolute; left:50%; bottom:-8px; width:60px; height:60px; transform:translate(-50%, 40px); transition:transform .28s cubic-bezier(.34,1.56,.64,1), filter .2s ease; }
-  .mole .avatar{ width:60px; height:60px; font-size:19px; }
+  .mole{ position:absolute; left:50%; bottom:-8px; width:74px; height:74px; transform:translate(-50%, 48px); transition:transform .28s cubic-bezier(.34,1.56,.64,1), filter .2s ease; }
+  .mole .avatar{ width:74px; height:74px; font-size:23px; }
   .mole.mole-up{ transform:translate(-50%, -18px); }
   .mole.mole-down{ filter:grayscale(1) brightness(.5); }
   @keyframes moleWinPop{ 0%{ transform:translate(-50%,-18px) scale(1); } 35%{ transform:translate(-50%,-24px) scale(1.15) rotate(-4deg); } 65%{ transform:translate(-50%,-18px) scale(1.05) rotate(4deg); } 100%{ transform:translate(-50%,-18px) scale(1) rotate(0deg); } }
   .mole.mole-win{ animation:moleWinPop .5s ease-out; }
   .mole-quote{ margin:12px 4px 0; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:16px; line-height:1.35; color:var(--cream); padding:12px 16px; background:rgba(255,201,60,0.14); border:1px solid rgba(255,201,60,0.35); border-radius:16px; opacity:0; transform:translateX(70px); }
   @keyframes moleQuoteSlide{ from{ opacity:0; transform:translateX(70px); } to{ opacity:1; transform:translateX(0); } }
-  .mole-quote.show{ animation:moleQuoteSlide .45s cubic-bezier(.34,1.56,.64,1) forwards; }
+  .mole-quote.show{ animation:moleQuoteSlide .65s cubic-bezier(.34,1.56,.64,1) forwards; }
+  /* Et par ekstra pulser EFTER selve ind-glidningen — det er den vindende
+     kommentar, hele pointen med at skrive noget sjovt, den skal ikke bare
+     glide forbi og blive overset midt i konfetti-regnen. */
+  @keyframes moleQuotePulse{ 0%,100%{ box-shadow:0 0 0 rgba(255,201,60,0); } 50%{ box-shadow:0 0 18px rgba(255,201,60,.6); } }
+  .mole-quote.mole-quote-pulse{ animation:moleQuotePulse 1s ease-in-out 3; }
 
   /* Rose-bonusrunden — bevidst et andet visuelt tema (lyserød, ikke guld/mønt)
      end resten af Brokspillet, så det tydeligt føles som noget andet end brok. */
@@ -478,7 +489,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-55';
+const BUILD_TAG = 'build-2026-08-07-56';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1931,6 +1942,7 @@ function buildWheelChanceHtml(prefix, candidates, winner, bannerText, revealed){
           </svg>
         </div>
         <div class="slot-winner-name" id="${prefix}WinnerName" style="opacity:${revealed?1:0};">${escapeHtml(winner.name)} vandt! 🍀</div>
+        ${winner.label ? `<div class="slot-winner-word" id="${prefix}WinnerWord" style="opacity:${revealed?1:0};">med ordet "${escapeHtml(winner.label)}"</div>` : ''}
       </div>
     </div>
   `;
@@ -1987,17 +1999,26 @@ function playWheelChanceReveal(prefix){
   revealAnimationLock = true; // se renderGameScreen — intet gen-render må afbryde spinnet
   cabinet.classList.remove('win');
   const nameEl = document.getElementById(prefix+'WinnerName');
+  const wordEl = document.getElementById(prefix+'WinnerWord');
   if(nameEl) nameEl.style.opacity = '0';
+  if(wordEl) wordEl.style.opacity = '0';
   const svg = document.getElementById(prefix+'WheelSvg');
   if(!svg){ revealAnimationLock = false; return; }
   const restAngle = parseFloat(svg.dataset.restAngle || '0');
-  const spins = 8; // flere omgange for at fylde de fulde 6 sekunder ordentligt ud, ikke bare rotere hurtigt forbi
+  const spins = 9; // flere omgange for at fylde de længere sekunder ordentligt ud, ikke bare rotere hurtigt forbi
   const finalAngle = restAngle + 360*spins;
   const onDone = ()=>{
     cabinet.classList.add('win');
     if(nameEl){
       if(typeof gsap !== 'undefined') gsap.fromTo(nameEl, {opacity:0, y:6}, {opacity:1, y:0, duration:.4, ease:'power2.out'});
       else nameEl.style.opacity = '1';
+    }
+    // Ordet er selve pointen med at have skrevet noget — det skal have sin
+    // egen tydelige, lidt forsinkede indflyvning, ikke bare dukke op
+    // samtidig og drukne i navnet + konfetti.
+    if(wordEl){
+      if(typeof gsap !== 'undefined') gsap.fromTo(wordEl, {opacity:0, y:6}, {opacity:1, y:0, duration:.4, ease:'power2.out', delay:.3});
+      else wordEl.style.opacity = '1';
     }
     // Selve det vindende ord på hjulet stod bare der med et statisk glow
     // efter landing — nem at overse midt i konfetti-regnen. Lader det
@@ -2067,9 +2088,9 @@ function buildMoleChanceHtml(prefix, candidates, winner, bannerText, winnerQuote
 // (én hurtig bank, ingen reel spænding). Nu er der altid en ordentlig
 // optakt før den første bankes ned, og en kort pause før vinderen fejrer,
 // så det føles som en rigtig afsløring uanset gruppestørrelse.
-const MOLE_PREROLL_MS = 2400;
-const MOLE_KNOCK_BUDGET_MS = 2600;
-const MOLE_POST_PAUSE_MS = 1200;
+const MOLE_PREROLL_MS = 3200;
+const MOLE_KNOCK_BUDGET_MS = 3200;
+const MOLE_POST_PAUSE_MS = 1400;
 // Tæller synligt "3-2-1" ned inde i kabinettet mens muldvarpene popper op,
 // i stedet for en stille pause — så det er tydeligt at noget er ved at ske,
 // ikke bare en skærm der virker fastfrosset et par sekunder.
@@ -2113,8 +2134,22 @@ function playMoleChanceReveal(prefix){
       if(typeof gsap !== 'undefined') gsap.fromTo(nameEl, {opacity:0, y:6}, {opacity:1, y:0, duration:.4, ease:'power2.out'});
       else nameEl.style.opacity = '1';
     }
+    // Kommentaren ER hele pointen med at have skrevet noget — den skal have
+    // sin egen tydelige, lidt forsinkede optræden EFTER navnet er landet
+    // (ikke samtidig, så øjet ved hvor det skal kigge hen), og et par ekstra
+    // pulser bagefter så den ikke bare glider forbi og bliver overset.
+    // OBS: at tilføje "mole-quote-pulse" oveni "show" ERSTATTER hele
+    // animation-shorthanden fra .show (CSS'ens animation-egenskab er ikke
+    // additiv på tværs af flere matchende regler) — uden det eksplicitte
+    // opacity/transform herunder ville "show"s forwards-holdte opacity:1
+    // simpelthen forsvinde igen i det øjeblik puls-klassen tilføjes.
     const quoteEl = document.getElementById(prefix+'Quote');
-    if(quoteEl) setTimeout(()=>quoteEl.classList.add('show'), 250);
+    if(quoteEl) setTimeout(()=>{
+      quoteEl.classList.add('show');
+      quoteEl.style.opacity = '1';
+      quoteEl.style.transform = 'translateX(0)';
+      setTimeout(()=>quoteEl.classList.add('mole-quote-pulse'), 600);
+    }, 500);
     fireConfetti(cabinet);
     revealAnimationLock = false; // gen-render må nu godt køre igen
   };
