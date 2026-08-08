@@ -301,27 +301,35 @@
   .mole-hammer-handle{ position:absolute; top:22px; left:30px; width:12px; height:54px; border-radius:4px; background:linear-gradient(180deg,#8a5a30,#4a2c14); }
   @keyframes hammerWhack{ 0%{ transform:rotate(-60deg); opacity:1; } 45%{ transform:rotate(24deg) translateY(28px); opacity:1; } 62%{ transform:rotate(16deg) translateY(22px); opacity:1; } 100%{ transform:rotate(-60deg); opacity:0; } }
   .mole-hammer.whacking{ animation:hammerWhack .5s cubic-bezier(.36,.07,.19,.97); }
-  .mole{ position:absolute; left:50%; bottom:-8px; width:74px; height:74px; transform:translate(-50%, -18px); z-index:1; }
-  .mole .avatar{ position:relative; width:74px; height:74px; font-size:23px; }
+  .mole{ position:absolute; left:50%; bottom:-8px; width:74px; height:74px; transform:translate(-50%, -18px); z-index:1; transition:transform .3s ease; }
+  .mole .avatar{ position:relative; width:74px; height:74px; font-size:23px; transition:opacity .18s ease; }
   @keyframes moleWinPop{ 0%{ transform:translate(-50%,-18px) scale(1); } 35%{ transform:translate(-50%,-24px) scale(1.15) rotate(-4deg); } 65%{ transform:translate(-50%,-18px) scale(1.05) rotate(4deg); } 100%{ transform:translate(-50%,-18px) scale(1) rotate(0deg); } }
   .mole.mole-win{ animation:moleWinPop .5s ease-out; }
-  /* Ægte arkade-whack-a-mole ramler molen ned I HULLET når den bliver ramt —
-     den flader ikke ud, den forsvinder nedad, hurtigt, med et lille genstød
-     bagefter. Det EFTERLIGNES her (inden for hvad CSS kan): et hårdt, hurtigt
-     ryk nedad forbi hullets synlige kant (rigtig ramme-energi, ikke en blød
-     glide-transition), et par graders vip fra selve slaget, og et kort
-     genstuds-stop i bunden — så det læses som noget der FAKTISK blev ramt
-     hårdt, ikke bare gled ned. Navnet under hullet (se buildMoleChanceHtml)
-     holder identiteten synlig, selvom molen selv nu er skjult under kanten —
-     det var pointen med spillet der gik tabt i den rene arkade-version. */
-  @keyframes moleKnockDown{
-    0%{ transform:translate(-50%,-18px) rotate(0deg); }
-    18%{ transform:translate(-50%,-22px) rotate(-9deg); }
-    55%{ transform:translate(-50%,56px) rotate(10deg); }
-    75%{ transform:translate(-50%,44px) rotate(6deg); }
-    100%{ transform:translate(-50%,52px) rotate(8deg); }
-  }
-  .mole.mole-hit{ animation:moleKnockDown .42s cubic-bezier(.55,0,.85,.4) forwards; filter:grayscale(1) brightness(.6); }
+  /* En hammer der bare "svinger og rammer ikke" gav ingen synlig reaktion
+     fra molen selv — så et hit virkede som det kom ud af det blå. Nu dukker
+     molen sig kort ved et forbigående sving (se .mole-dodge i
+     playMoleChanceReveal), ligesom den rigtige maskine, så der ER en
+     synlig "den slap væk"-fornemmelse før det afgørende ramte slag. */
+  @keyframes moleDodge{ 0%{ transform:translate(-50%,-18px); } 40%{ transform:translate(-50%,26px); } 70%{ transform:translate(-50%,16px); } 100%{ transform:translate(-50%,-18px); } }
+  .mole.mole-dodge{ animation:moleDodge .5s ease-in-out; }
+  /* Et rent squash så ud som en fejl, ikke et hit. I stedet splintres
+     avataren i stumper der spreder sig og falder ned i hullet, og bliver
+     mørkere undervejs — "det gik i stykker dernede", ikke "det blev
+     fladtrykt". Molen selv synker en anelse (se .mole.mole-hit ovenfor via
+     transition på .mole), mens avataren blegner og stumperne (se
+     .mole-shard) flyver fra hinanden og lander som mørkt vraggods. */
+  .mole.mole-hit{ transform:translate(-50%, 6px); }
+  .mole.mole-hit .avatar{ opacity:0; }
+  .mole-shard{ position:absolute; top:0; left:0; width:74px; height:74px; border-radius:50%; background:linear-gradient(160deg, var(--coral), #e14d2e); opacity:0; }
+  .mole-shard.s1{ clip-path:polygon(50% 50%, 48% 0%, 100% 0%, 100% 62%); }
+  .mole-shard.s2{ clip-path:polygon(50% 50%, 100% 62%, 52% 100%, 0% 100%); }
+  .mole-shard.s3{ clip-path:polygon(50% 50%, 0% 100%, 0% 0%, 48% 0%); }
+  @keyframes shardFall1{ 0%{ opacity:0; transform:translate(0,0) rotate(0deg) scale(1); filter:brightness(1) saturate(1); } 14%{ opacity:1; transform:translate(-8px,-8px) rotate(-12deg) scale(1.04); filter:brightness(1) saturate(1); } 100%{ opacity:.9; transform:translate(-18px,10px) rotate(-58deg) scale(.55); filter:brightness(.62) saturate(1.3); } }
+  @keyframes shardFall2{ 0%{ opacity:0; transform:translate(0,0) rotate(0deg) scale(1); filter:brightness(1) saturate(1); } 14%{ opacity:1; transform:translate(2px,-10px) rotate(6deg) scale(1.04); filter:brightness(1) saturate(1); } 100%{ opacity:.85; transform:translate(4px,16px) rotate(30deg) scale(.5); filter:brightness(.58) saturate(1.3); } }
+  @keyframes shardFall3{ 0%{ opacity:0; transform:translate(0,0) rotate(0deg) scale(1); filter:brightness(1) saturate(1); } 14%{ opacity:1; transform:translate(9px,-7px) rotate(14deg) scale(1.04); filter:brightness(1) saturate(1); } 100%{ opacity:.9; transform:translate(17px,9px) rotate(52deg) scale(.55); filter:brightness(.62) saturate(1.3); } }
+  .mole.mole-hit .mole-shard.s1{ animation:shardFall1 .5s ease-in forwards; }
+  .mole.mole-hit .mole-shard.s2{ animation:shardFall2 .5s ease-in forwards .04s; }
+  .mole.mole-hit .mole-shard.s3{ animation:shardFall3 .5s ease-in forwards .08s; }
   @keyframes moleImpactFlash{ 0%{ opacity:.95; transform:translate(-50%,-50%) scale(.15); } 55%{ opacity:.55; transform:translate(-50%,-50%) scale(1.35); } 100%{ opacity:0; transform:translate(-50%,-50%) scale(1.7); } }
   /* Egen, STILLESTÅENDE flash-boks i selve hullet (ikke på molen, som nu
      bevæger sig væk) — nedslags-glimtet skal sidde fast ét sted, ikke rejse
@@ -532,7 +540,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-66';
+const BUILD_TAG = 'build-2026-08-07-67';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -2098,18 +2106,22 @@ function buildMoleChanceHtml(prefix, candidates, winner, bannerText, winnerQuote
   if(!winner || !candidates.length) return '';
   // Ren tilfældighed, ingen tekst — kun avatar-bogstavet. Hammeren er
   // tilbage, men pointen er nu IKKE at ramme præcist (umuligt at sælge
-  // troværdigt på en lille skærm) — det ER molens overdrevne, ægte-
-  // arkade-agtige nedslags-reaktion (se .mole-hit + playMoleChanceReveal)
-  // der bærer sjovet, uanset hvor "præcist" hammeren rammer visuelt. Da
-  // molen nu (ligesom i den rigtige maskine) forsvinder ned i hullet ved
-  // ramt, holder navnet UNDER hullet identiteten synlig for taberne.
+  // troværdigt på en lille skærm) — det ER molens overdrevne "splintret"-
+  // reaktion (se .mole-hit/.mole-shard + playMoleChanceReveal) der bærer
+  // sjovet, uanset hvor "præcist" hammeren rammer visuelt. Navnet under
+  // hullet holder identiteten synlig, selvom avataren selv splintres væk.
   const holes = candidates.map(c=>{
     const isWin = c.id === winner.id;
     return `
       <div class="mole-hole-wrap">
         <div class="mole-hammer" data-hammer-id="${c.id}"><div class="mole-hammer-head"></div><div class="mole-hammer-handle"></div></div>
         <div class="mole-hole">
-          <div class="mole ${isWin?'mole-win':'mole-hit'}" data-mole-id="${c.id}" ${isWin?'data-winner="1"':''}><div class="avatar">${initials(c.name)}</div></div>
+          <div class="mole ${isWin?'mole-win':'mole-hit'}" data-mole-id="${c.id}" ${isWin?'data-winner="1"':''}>
+            <div class="avatar">${initials(c.name)}</div>
+            <div class="mole-shard s1"></div>
+            <div class="mole-shard s2"></div>
+            <div class="mole-shard s3"></div>
+          </div>
           <div class="mole-impact" data-impact-id="${c.id}"></div>
         </div>
         <div class="mole-name-tag ${isWin?'win':''}">${escapeHtml(c.name)}</div>
@@ -2156,7 +2168,7 @@ function playMoleChanceReveal(prefix){
   if(!moles.length){ revealAnimationLock = false; return; }
   const winnerMole = moles.find(m => m.dataset.winner === '1');
   const losers = moles.filter(m => m.dataset.winner !== '1');
-  moles.forEach(m => m.classList.remove('mole-win', 'mole-hit'));
+  moles.forEach(m => m.classList.remove('mole-win', 'mole-hit', 'mole-dodge'));
   cabinet.querySelectorAll('.mole-impact').forEach(el => el.classList.remove('hit'));
   const hammerFor = (mole) => cabinet.querySelector('[data-hammer-id="'+mole.dataset.moleId+'"]');
   const impactFor = (mole) => cabinet.querySelector('[data-impact-id="'+mole.dataset.moleId+'"]');
@@ -2184,19 +2196,22 @@ function playMoleChanceReveal(prefix){
   };
 
   // Pointen er ikke længere at hammeren rammer PRÆCIST — det er umuligt at
-  // sælge troværdigt på en lille skærm. I stedet svinger tilfældige hamre
-  // løs på må og få i optakten (ren kaotisk tekstur/"mange sving", ingen af
-  // dem rammer noget endnu), mens den AFGØRENDE eliminering sker ét hul ad
-  // gangen bagefter — det svingende hammerslag udløser molens overdrevne,
-  // permanente "smadret"-reaktion (se .mole-hit), som bærer hele sjovet
-  // uanset hvor "rigtigt" selve hammerslaget ser ud til at ramme.
+  // sælge troværdigt på en lille skærm. Men et sving der rammer ved siden
+  // af skal stadig have en synlig KONSEKVENS, ellers virker det afgørende
+  // slag som det kommer ud af det blå — så molen dukker sig selv (se
+  // .mole-dodge) i takt med et forbigående sving, "den slap væk", før det
+  // rigtige, afgørende slag til sidst rammer og splintrer den (se .mole-hit).
   let ambientTimer = null;
   const ambientSwing = () => {
     const mole = moles[Math.floor(Math.random() * moles.length)];
     const hammer = hammerFor(mole);
     if(hammer && !mole.classList.contains('mole-hit')){
       hammer.classList.add('whacking');
+      mole.classList.remove('mole-dodge');
+      void mole.offsetWidth; // genstart CSS-animationen selvom klassen allerede var der for nyligt
+      mole.classList.add('mole-dodge');
       setTimeout(()=>hammer.classList.remove('whacking'), 420);
+      setTimeout(()=>mole.classList.remove('mole-dodge'), 500);
     }
     ambientTimer = setTimeout(ambientSwing, 240 + Math.random() * 260);
   };
@@ -2209,6 +2224,7 @@ function playMoleChanceReveal(prefix){
       const hammer = hammerFor(mole);
       if(hammer) hammer.classList.add('whacking');
       setTimeout(()=>{
+        mole.classList.remove('mole-dodge');
         mole.classList.add('mole-hit');
         const impact = impactFor(mole);
         if(impact) impact.classList.add('hit');
