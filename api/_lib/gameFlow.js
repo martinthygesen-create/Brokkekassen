@@ -1,5 +1,5 @@
 const { uid } = require('./store');
-const { beginRound } = require('./game');
+const { beginRound, pickChanceVisual } = require('./game');
 
 const ROUND_POINTS = 2;
 
@@ -94,6 +94,7 @@ function resolveQuiplashVote(state, cur) {
     cur.winnerIds = [winnerId];
     cur.randomPick = true;
     cur.chanceCandidates = tiedIds;
+    cur.chanceVisual = pickChanceVisual(state);
   } else {
     tiedIds.forEach(id => { if (!isDecoyId(id)) state.game.scores[id] = (state.game.scores[id] || 0) + ROUND_POINTS; });
     cur.winnerIds = tiedIds;
@@ -118,6 +119,7 @@ function resolveQuiplashRandom(state, cur) {
   cur.votes = {};
   cur.randomPick = true;
   cur.chanceCandidates = ids;
+  cur.chanceVisual = pickChanceVisual(state);
 }
 
 // Point-fordeling: gæt rigtigt = 1 point. Narrer forfatteren FLERTALLET af

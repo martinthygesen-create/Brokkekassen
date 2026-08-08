@@ -63,6 +63,24 @@ function pickWinnerTauntPrompt(state) {
   return WINNER_TAUNT_PROMPTS[idx];
 }
 
+// "Chancen" kan vises på 3 måder (muldvarp/whack, hjul, spillemaskine) —
+// bruges BÅDE af casinobrok (altid) og quiplash (uafgjort/2-spillere, se
+// resolveQuiplashVote/resolveQuiplashRandom i gameFlow.js). Hver visning
+// begrænses til HØJST ÉN gang pr. HELE spillet (gemt på state.game, ikke
+// rummet) — ellers kunne fx whack sagtens optræde flere gange i et langt
+// 8/12-rundes spil, hvis quiplash endte uafgjort mere end én gang. Når
+// alle 3 er brugt, genbruges de bare tilfældigt igen — der findes ikke
+// flere visninger at vælge imellem, men det sker sjældent i praksis.
+function pickChanceVisual(state) {
+  if (!state.game.usedChanceVisuals) state.game.usedChanceVisuals = [];
+  const ALL_VISUALS = ['mole', 'wheel', 'slot'];
+  const unused = ALL_VISUALS.filter(v => !state.game.usedChanceVisuals.includes(v));
+  const pool = unused.length ? unused : ALL_VISUALS;
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  if (!state.game.usedChanceVisuals.includes(pick)) state.game.usedChanceVisuals.push(pick);
+  return pick;
+}
+
 // Opdigtede "vrangforestillinger" der blandes ind blandt de ægte svar i
 // afstemnings-fasen — generiske nok til at kunne passe som svar på næsten
 // alle QUIPLASH_PROMPTS ovenfor, uden at være skrevet til noget bestemt
@@ -535,9 +553,11 @@ function beginRound(state, players) {
     // camoufleret som et ord-lod i stedet for en direkte navnetrækning.
     // chanceVisual afgøres HER (server-side, én gang), ikke klient-side —
     // ellers ville forskellige spilleres skærme kunne vise FORSKELLIGE
-    // visninger (hjul vs. spillemaskine) af samme runde. Ren kosmetisk
-    // variation, ikke en del af selve tilfældighedsmekanikken.
-    state.game.current = { type, phase: 'write', words: {}, chanceVisual: Math.random() < 0.5 ? 'wheel' : 'slot' };
+    // visninger af samme runde. Delt pulje/begrænsning med quiplashs egen
+    // Chancen-brug (se pickChanceVisual + resolveQuiplashVote/Random i
+    // gameFlow.js) — hver visning (muldvarp/hjul/spillemaskine) højst én
+    // gang pr. spil, uanset hvilken rundetype der udløser den.
+    state.game.current = { type, phase: 'write', words: {}, chanceVisual: pickChanceVisual(state) };
   } else {
     // "Rose" — ikke alt skal handle om brok. Hver spiller skriver en ægte,
     // kort ros til én tilfældigt tildelt medspiller (aldrig sig selv), og
@@ -548,4 +568,4 @@ function beginRound(state, players) {
   }
 }
 
-module.exports = { pickRandom, shuffle, pickWeighted, buildOptions, pickFromBag, pickQuiplashPrompt, pickWinnerTauntPrompt, pickWorldTrivia, pickWorldTrueFalse, pickDecoyBroks, pickQuiplashDecoys, generateTriviaQuestion, buildRoseDerangement, beginRound };
+module.exports = { pickRandom, shuffle, pickWeighted, buildOptions, pickFromBag, pickQuiplashPrompt, pickWinnerTauntPrompt, pickChanceVisual, pickWorldTrivia, pickWorldTrueFalse, pickDecoyBroks, pickQuiplashDecoys, generateTriviaQuestion, buildRoseDerangement, beginRound };

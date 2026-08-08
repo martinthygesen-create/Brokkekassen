@@ -550,7 +550,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-70';
+const BUILD_TAG = 'build-2026-08-07-71';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1816,7 +1816,13 @@ function renderGameScreen(){
   }
   celebrateGameRound(g);
   if(isNewGamePhase && g.current && g.current.type === 'quiplash' && g.current.phase === 'results' && g.current.randomPick){
-    playMoleChanceReveal('chance');
+    if(g.current.chanceVisual === 'wheel'){
+      scheduleChanceReveal(playWheelChanceReveal, 'chance', g.current.phaseStartedAt);
+    }else if(g.current.chanceVisual === 'slot'){
+      scheduleChanceReveal(playSlotChanceReveal, 'chance', g.current.phaseStartedAt);
+    }else{
+      playMoleChanceReveal('chance');
+    }
   }
   if(isNewGamePhase && g.current && g.current.type === 'casinobrok' && g.current.phase === 'results'){
     if(g.current.chanceVisual === 'slot'){
@@ -2515,15 +2521,22 @@ function quiplashHtml(g, cur){
     <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
     <div class="game-card" id="gameCard" style="text-align:center;">
       <p style="margin:0 0 10px;">${escapeHtml(quiplashPromptText(g, cur))}</p>
-      ${cur.randomPick ? buildMoleChanceHtml('chance',
-          (cur.chanceCandidates || Object.keys(cur.answers||{})).map(id=>{
+      ${cur.randomPick ? (()=>{
+          const chanceCandidates = (cur.chanceCandidates || Object.keys(cur.answers||{})).map(id=>{
             const mm = state.members.find(x=>x.id===id);
-            return mm ? { id: mm.id, name: mm.name } : null;
-          }).filter(Boolean),
-          state.members.find(m=>m.id===winnerId),
-          '🎲 CHANCEN AFGØR DET',
-          !decoyWon ? (cur.answers||{})[winnerId] : ''
-        ) : allEntries.map(({id,text,name})=>{
+            return mm ? { id: mm.id, name: mm.name, label: (cur.answers||{})[id] } : null;
+          }).filter(Boolean);
+          const chanceWinner = chanceCandidates.find(c=>c.id===winnerId) || state.members.find(m=>m.id===winnerId);
+          const chanceQuote = !decoyWon ? (cur.answers||{})[winnerId] : '';
+          // Samme "vist for tidligt/nulstillet"-fælde som casinobrok — se
+          // chanceRevealedPhaseKey. Kun relevant for hjul/spillemaskine
+          // (mole viser altid sin egen "landede" tilstand med det samme og
+          // afsløres udelukkende via JS-animationen, ingen ventetid).
+          const chanceRevealed = !cur.phaseStartedAt || chanceRevealedPhaseKey === cur.phaseStartedAt;
+          if(cur.chanceVisual === 'wheel') return buildWheelChanceHtml('chance', chanceCandidates, chanceWinner, '🎲 CHANCEN AFGØR DET', chanceRevealed, cur.phaseStartedAt);
+          if(cur.chanceVisual === 'slot') return buildSlotCabinetHtml('chance', chanceCandidates, chanceWinner, '🎲 CHANCEN AFGØR DET', chanceRevealed, cur.phaseStartedAt);
+          return buildMoleChanceHtml('chance', chanceCandidates, chanceWinner, '🎲 CHANCEN AFGØR DET', chanceQuote);
+        })() : allEntries.map(({id,text,name})=>{
         const won = (cur.winnerIds||[]).includes(id);
         const isDecoy = !name;
         return `<div class="feed-item" style="${won?'border-color:var(--coin); background:rgba(255,201,60,0.16);':''}">
