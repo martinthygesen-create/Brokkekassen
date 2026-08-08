@@ -305,15 +305,31 @@
   .mole .avatar{ position:relative; width:74px; height:74px; font-size:23px; }
   @keyframes moleWinPop{ 0%{ transform:translate(-50%,-18px) scale(1); } 35%{ transform:translate(-50%,-24px) scale(1.15) rotate(-4deg); } 65%{ transform:translate(-50%,-18px) scale(1.05) rotate(4deg); } 100%{ transform:translate(-50%,-18px) scale(1) rotate(0deg); } }
   .mole.mole-win{ animation:moleWinPop .5s ease-out; }
-  /* Pointen er IKKE at hammeren rammer præcist (umuligt at sælge troværdigt
-     i den størrelse) — det er molens overdrevne, permanente "smadret"-
-     reaktion der bærer sjovet, uanset hvornår/hvor godt hammeren rammer
-     visuelt. Fladtrykt + gråtone + en kort "stjerner"-pop for at sælge
-     svimmelheden. */
-  @keyframes moleSquash{ 0%{ transform:translate(-50%,-18px) scaleY(1) scaleX(1); } 45%{ transform:translate(-50%,10px) scaleY(.32) scaleX(1.4); } 100%{ transform:translate(-50%,7px) scaleY(.4) scaleX(1.3); } }
-  .mole.mole-hit{ animation:moleSquash .32s cubic-bezier(.4,0,.6,1) forwards; filter:grayscale(1) brightness(.55); }
-  @keyframes moleHitStars{ 0%{ opacity:0; transform:translate(-50%,4px) scale(.6); } 35%{ opacity:1; transform:translate(-50%,-8px) scale(1.15); } 100%{ opacity:0; transform:translate(-50%,-14px) scale(1); } }
-  .mole.mole-hit .avatar::after{ content:'💫'; position:absolute; top:-16px; left:50%; font-size:20px; opacity:0; animation:moleHitStars .55s ease-out .1s; }
+  /* Ægte arkade-whack-a-mole ramler molen ned I HULLET når den bliver ramt —
+     den flader ikke ud, den forsvinder nedad, hurtigt, med et lille genstød
+     bagefter. Det EFTERLIGNES her (inden for hvad CSS kan): et hårdt, hurtigt
+     ryk nedad forbi hullets synlige kant (rigtig ramme-energi, ikke en blød
+     glide-transition), et par graders vip fra selve slaget, og et kort
+     genstuds-stop i bunden — så det læses som noget der FAKTISK blev ramt
+     hårdt, ikke bare gled ned. Navnet under hullet (se buildMoleChanceHtml)
+     holder identiteten synlig, selvom molen selv nu er skjult under kanten —
+     det var pointen med spillet der gik tabt i den rene arkade-version. */
+  @keyframes moleKnockDown{
+    0%{ transform:translate(-50%,-18px) rotate(0deg); }
+    18%{ transform:translate(-50%,-22px) rotate(-9deg); }
+    55%{ transform:translate(-50%,56px) rotate(10deg); }
+    75%{ transform:translate(-50%,44px) rotate(6deg); }
+    100%{ transform:translate(-50%,52px) rotate(8deg); }
+  }
+  .mole.mole-hit{ animation:moleKnockDown .42s cubic-bezier(.55,0,.85,.4) forwards; filter:grayscale(1) brightness(.6); }
+  @keyframes moleImpactFlash{ 0%{ opacity:.95; transform:translate(-50%,-50%) scale(.15); } 55%{ opacity:.55; transform:translate(-50%,-50%) scale(1.35); } 100%{ opacity:0; transform:translate(-50%,-50%) scale(1.7); } }
+  /* Egen, STILLESTÅENDE flash-boks i selve hullet (ikke på molen, som nu
+     bevæger sig væk) — nedslags-glimtet skal sidde fast ét sted, ikke rejse
+     med molen ned i hullet. */
+  .mole-impact{ position:absolute; inset:0; border-radius:50%; pointer-events:none; z-index:4; }
+  .mole-impact.hit::before{ content:''; position:absolute; top:50%; left:50%; width:96px; height:96px; border-radius:50%; background:radial-gradient(circle, rgba(255,255,255,.95), rgba(255,255,255,0) 68%); transform:translate(-50%,-50%); opacity:0; animation:moleImpactFlash .4s ease-out; }
+  .mole-name-tag{ font-size:11.5px; font-weight:700; color:rgba(255,247,232,0.55); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mole-name-tag.win{ color:var(--coin); font-weight:800; }
   /* Fuldskærms fejrings-banner (se showMoleWinBanner) — Brokspillets eget
      teal/guld-tema, lever UDEN FOR det almindelige render()-kredsløb (append
      til body, ikke en del af app.innerHTML), så den ikke kan blive visket
@@ -516,7 +532,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-65';
+const BUILD_TAG = 'build-2026-08-07-66';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -2082,9 +2098,11 @@ function buildMoleChanceHtml(prefix, candidates, winner, bannerText, winnerQuote
   if(!winner || !candidates.length) return '';
   // Ren tilfældighed, ingen tekst — kun avatar-bogstavet. Hammeren er
   // tilbage, men pointen er nu IKKE at ramme præcist (umuligt at sælge
-  // troværdigt på en lille skærm) — det ER molens overdrevne "smadret"-
-  // reaktion (se .mole-hit + playMoleChanceReveal) der bærer sjovet, uanset
-  // hvor "præcist" hammeren rammer visuelt.
+  // troværdigt på en lille skærm) — det ER molens overdrevne, ægte-
+  // arkade-agtige nedslags-reaktion (se .mole-hit + playMoleChanceReveal)
+  // der bærer sjovet, uanset hvor "præcist" hammeren rammer visuelt. Da
+  // molen nu (ligesom i den rigtige maskine) forsvinder ned i hullet ved
+  // ramt, holder navnet UNDER hullet identiteten synlig for taberne.
   const holes = candidates.map(c=>{
     const isWin = c.id === winner.id;
     return `
@@ -2092,7 +2110,9 @@ function buildMoleChanceHtml(prefix, candidates, winner, bannerText, winnerQuote
         <div class="mole-hammer" data-hammer-id="${c.id}"><div class="mole-hammer-head"></div><div class="mole-hammer-handle"></div></div>
         <div class="mole-hole">
           <div class="mole ${isWin?'mole-win':'mole-hit'}" data-mole-id="${c.id}" ${isWin?'data-winner="1"':''}><div class="avatar">${initials(c.name)}</div></div>
+          <div class="mole-impact" data-impact-id="${c.id}"></div>
         </div>
+        <div class="mole-name-tag ${isWin?'win':''}">${escapeHtml(c.name)}</div>
       </div>`;
   }).join('');
   // Vinderens citat (den frækkeste kommentar — hele pointen med runden) vises
@@ -2137,7 +2157,9 @@ function playMoleChanceReveal(prefix){
   const winnerMole = moles.find(m => m.dataset.winner === '1');
   const losers = moles.filter(m => m.dataset.winner !== '1');
   moles.forEach(m => m.classList.remove('mole-win', 'mole-hit'));
+  cabinet.querySelectorAll('.mole-impact').forEach(el => el.classList.remove('hit'));
   const hammerFor = (mole) => cabinet.querySelector('[data-hammer-id="'+mole.dataset.moleId+'"]');
+  const impactFor = (mole) => cabinet.querySelector('[data-impact-id="'+mole.dataset.moleId+'"]');
   const order = losers.slice().sort(() => Math.random() - 0.5);
   const perHitDelay = order.length ? Math.max(500, MOLE_KNOCK_BUDGET_MS / order.length) : 0;
 
@@ -2186,7 +2208,11 @@ function playMoleChanceReveal(prefix){
       const mole = order[i];
       const hammer = hammerFor(mole);
       if(hammer) hammer.classList.add('whacking');
-      setTimeout(()=>mole.classList.add('mole-hit'), 220);
+      setTimeout(()=>{
+        mole.classList.add('mole-hit');
+        const impact = impactFor(mole);
+        if(impact) impact.classList.add('hit');
+      }, 220);
       i++;
       setTimeout(hitNext, perHitDelay);
     }else{
