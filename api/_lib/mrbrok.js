@@ -4,7 +4,7 @@
 // _lib/game.js og _lib/gameFlow.js. Ligger under _lib/ så den IKKE tæller
 // med i Vercels 12-serverless-function-loft.
 
-const { pickFromBag, pickWeighted } = require('./game');
+const { pickRandom, pickWeighted } = require('./game');
 
 // Vælger hvem der bliver MrBrok: vægtet tilfældigt efter hvor mange gange
 // man har haft rollen før — færre gange giver højere chance, men man kan
@@ -54,8 +54,26 @@ const MRBROK_TOPICS = [
   'Frustreret it-supporter — brokker dig over brugere der aldrig har prøvet at genstarte',
 ];
 
+// Emnet skal have "hvile" i mindst 60% af puljen (afrundet op) før det kan
+// gå igen — dvs. mindst 12 ud af 20 ANDRE emner skal være brugt først, ikke
+// bare "ikke det allersidste". Bevidst valgt fremfor en klassisk pop-bag
+// (se pickFromBag i game.js): en pop-bag er skrøbelig over for en tabt
+// samtidig skrivning (to hurtige "start"-kald der begge læser samme
+// state-version, se mutateState's CAS) — mister man ét pop fra posen,
+// smitter det usynligt af på ALLE fremtidige træk. En rullende historik
+// derimod hviler kun på selve historikken, så et enkelt tabt træk højst
+// koster én "hvileperiode" for det ene emne, ikke hele rotationen.
+const MIN_TOPIC_GAP = Math.ceil(MRBROK_TOPICS.length * 0.6);
+
 function pickTopic(state) {
-  const idx = pickFromBag(state, 'mrbrokTopic', MRBROK_TOPICS.length);
+  if (!state.gameContentBank) state.gameContentBank = {};
+  if (!state.gameContentBank.mrbrokTopicHistory) state.gameContentBank.mrbrokTopicHistory = [];
+  const history = state.gameContentBank.mrbrokTopicHistory;
+  const recentlyUsed = new Set(history.slice(-MIN_TOPIC_GAP));
+  const candidates = MRBROK_TOPICS.map((_, i) => i).filter(i => !recentlyUsed.has(i));
+  const idx = pickRandom(candidates);
+  history.push(idx);
+  if (history.length > MIN_TOPIC_GAP) history.splice(0, history.length - MIN_TOPIC_GAP);
   return MRBROK_TOPICS[idx];
 }
 
