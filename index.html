@@ -282,7 +282,7 @@
      er muldvarpene og hullerne der skal fange øjet, ikke en mørk kasse
      omkring dem. Mindre padding så hullerne fylder kabinettet ud, samme
      "fyld pladsen" -tankegang som hjulet fik i wheel-wrap-fixet. */
-  .mole-cabinet{ background:linear-gradient(160deg,#8a6238,#5c4128); border-radius:24px; padding:14px 6px 12px; box-shadow:0 12px 26px rgba(0,0,0,.35), inset 0 0 0 3px #d9a84a; position:relative; width:100%; box-sizing:border-box; overflow-x:hidden; }
+  .mole-cabinet{ background:linear-gradient(160deg,#8a6238,#5c4128); border-radius:24px; padding:8px 6px 8px; box-shadow:0 12px 26px rgba(0,0,0,.35), inset 0 0 0 3px #d9a84a; position:relative; width:100%; box-sizing:border-box; overflow-x:hidden; }
   .mole-cabinet.win{ box-shadow:0 12px 26px rgba(0,0,0,.35), inset 0 0 0 3px #FFC93C, 0 0 24px rgba(255,201,60,.5); }
   /* Fast 2 pr. række (ikke "så mange der er plads til") — ellers skifter
      antallet af pr.-række afhængig af skærmbredde og kandidatantal, hvilket
@@ -291,7 +291,7 @@
      ude i venstre side. Hullerne var tidligere langt smallere end hjulets
      bredde (210px total vs. wheel-wrap's 270px) — det er DET "går ikke til
      kant"-indtrykket. Bredere huller/wrapper matcher nu samme totalbredde.*/
-  .mole-grid{ display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); justify-items:center; gap:10px; padding:8px 2px; }
+  .mole-grid{ display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); justify-items:center; gap:8px; padding:2px; }
   .mole-hole-wrap:last-child:nth-child(odd){ grid-column: 1 / -1; }
   /* Fast px-bredde overflowede skærmen på smallere telefoner (128px×2 +
      mellemrum + kabinet-padding kunne blive bredere end selve viewportet,
@@ -299,7 +299,7 @@
      bredde her betyder hullerne altid retter sig efter den PLADS der
      faktisk er, med en øvre grænse så de heller ikke bliver kæmpestore på
      brede skærme. */
-  .mole-hole-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; gap:5px; width:100%; max-width:132px; padding-top:44px; }
+  .mole-hole-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; gap:5px; width:100%; max-width:132px; padding-top:22px; }
   .mole-hole{ position:relative; width:100%; max-width:104px; aspect-ratio:1/1; border-radius:50%; background:radial-gradient(circle at 50% 30%, #5c4128, #241a10); overflow:hidden; box-shadow:inset 0 4px 10px rgba(0,0,0,.6); }
   /* Håndbygget hammer (ikke emoji'en 🔨) — emoji-glyffer skalerer og
      proportionerer forskelligt på tværs af telefoner/skrifttyper, hvilket
@@ -318,7 +318,19 @@
      som per-hul-hammerne, bare placeret centralt i stedet for over et
      specifikt hul. */
   .mole-intro-hammer{ position:absolute; top:6px; left:50%; width:74px; height:79px; margin-left:-37px; transform:rotate(-60deg); transform-origin:76% 86%; opacity:0; pointer-events:none; z-index:6; }
+  /* "Præsentationen" — hammeren letter ind KÆMPESTOR (så man ikke er i tvivl
+     om at det er DEN der er hovedpersonen lige nu), krymper ned til sin
+     rigtige størrelse med et lille bounce, og BLIVER SÅ SYNLIG (i stedet for
+     usynlig som base-tilstanden) mens 3-2-1-nedtællingen løber. Bagefter
+     toner den ud igen og overlader selve banket til de rigtige per-hul-
+     hamre (se .fading + playMoleChanceReveal) — al "vil den ramme/ramte
+     den ikke"-tvivl er væk, det her er ren optakt/præsentation. */
+  @keyframes introHammerEnter{ 0%{ opacity:0; transform:rotate(-60deg) scale(2.6); } 55%{ opacity:1; transform:rotate(-60deg) scale(.82); } 100%{ opacity:1; transform:rotate(-60deg) scale(1); } }
+  .mole-intro-hammer.entering{ animation:introHammerEnter .6s cubic-bezier(.25,.85,.3,1.2) forwards; }
+  .mole-intro-hammer.fading{ transition:opacity .35s ease; opacity:0; }
   .mole-intro-hammer.whacking{ animation:hammerWhack .5s cubic-bezier(.36,.07,.19,.97); }
+  .mole-countdown{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:10; pointer-events:none; }
+  .mole-countdown-num{ font-family:'Baloo 2',sans-serif; font-weight:800; font-size:64px; color:#FFC93C; text-shadow:0 4px 14px rgba(0,0,0,.55); }
   .mole{ position:absolute; left:50%; bottom:-8px; width:74px; height:74px; transform:translate(-50%, -18px); z-index:1; transition:transform .3s ease; }
   .mole .avatar{ position:relative; width:74px; height:74px; font-size:23px; transition:opacity .18s ease; }
   @keyframes moleWinPop{ 0%{ transform:translate(-50%,-18px) scale(1); } 35%{ transform:translate(-50%,-24px) scale(1.15) rotate(-4deg); } 65%{ transform:translate(-50%,-18px) scale(1.05) rotate(4deg); } 100%{ transform:translate(-50%,-18px) scale(1) rotate(0deg); } }
@@ -551,7 +563,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-72';
+const BUILD_TAG = 'build-2026-08-07-73';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -2202,6 +2214,7 @@ function buildMoleChanceHtml(prefix, candidates, winner, bannerText, winnerQuote
       <div class="mole-cabinet win" id="${prefix}Cabinet" data-winner-name="${escapeHtml(winner.name)}" data-winner-quote="${escapeHtml(winnerQuote||'')}">
         <div class="mole-intro-hammer" id="${prefix}IntroHammer"><div class="mole-hammer-head"></div><div class="mole-hammer-handle"></div></div>
         <div class="mole-grid" id="${prefix}MoleGrid">${holes}</div>
+        <div class="mole-countdown" id="${prefix}MoleCountdown"></div>
         <div class="slot-winner-name" id="${prefix}WinnerName" style="opacity:1;">${escapeHtml(winner.name)} vandt! 🍀</div>
       </div>
     </div>
@@ -2233,6 +2246,8 @@ function playMoleChanceReveal(prefix){
   const losers = moles.filter(m => m.dataset.winner !== '1');
   moles.forEach(m => m.classList.remove('mole-win', 'mole-hit'));
   cabinet.querySelectorAll('.mole-impact').forEach(el => el.classList.remove('hit'));
+  const introHammerReset = cabinet.querySelector('.mole-intro-hammer');
+  if(introHammerReset) introHammerReset.classList.remove('entering', 'fading', 'whacking');
   const hammerFor = (mole) => cabinet.querySelector('[data-hammer-id="'+mole.dataset.moleId+'"]');
   const impactFor = (mole) => cabinet.querySelector('[data-impact-id="'+mole.dataset.moleId+'"]');
   const order = losers.slice().sort(() => Math.random() - 0.5);
@@ -2258,26 +2273,35 @@ function playMoleChanceReveal(prefix){
     }, 500);
   };
 
-  // Introduktion: en hammer svinger i midten af kabinettet, IKKE over noget
-  // hul — ren "her er hammeren, spillet er i gang"-optakt, ingen mole bliver
-  // ramt eller skal reagere på noget. Adskiller tydeligt "her er intro" fra
-  // "nu begynder det rigtige" i stedet for at lade tilfældige sving hen over
-  // et hul se ud som forsøgte, mislykkede slag (det gav indtryk af en fejl,
-  // ikke af spænding). Kun DEREFTER begynder de rigtige, afgørende slag
-  // (hitNext), som hver især rammer og splintrer for godt — ingen "misser"
-  // på selve hullerne længere.
+  // Introduktion/præsentation: hammeren letter ind KÆMPESTOR midt i
+  // kabinettet og krymper ned til sin rigtige størrelse — ingen "prøve-
+  // sving" hen over hullerne længere (det så ud som mislykkede slag/en
+  // fejl, ikke som spænding). Herefter tæller en klassisk 3-2-1 ned mens
+  // hammeren står synlig og klar, og til sidst toner den ud igen og
+  // overlader selve banket til de rigtige per-hul-hamre (se hitNext).
   const introHammer = document.getElementById(prefix+'IntroHammer');
-  let introSwingsLeft = 2;
-  const introSwing = () => {
-    if(introSwingsLeft <= 0) return;
-    introSwingsLeft--;
-    if(introHammer){
-      introHammer.classList.add('whacking');
-      setTimeout(()=>introHammer.classList.remove('whacking'), 420);
-    }
-    if(introSwingsLeft > 0) setTimeout(introSwing, 550 + Math.random() * 350);
-  };
-  setTimeout(introSwing, 250);
+  if(introHammer) introHammer.classList.add('entering');
+  const countdownEl = document.getElementById(prefix+'MoleCountdown');
+  if(countdownEl){
+    const steps = ['3','2','1'];
+    const countdownBudget = Math.max(900, MOLE_PREROLL_MS - 700);
+    const perStep = countdownBudget / steps.length;
+    let ci = 0;
+    const tick = () => {
+      countdownEl.innerHTML = `<div class="mole-countdown-num">${steps[ci]}</div>`;
+      const numEl = countdownEl.querySelector('.mole-countdown-num');
+      if(typeof gsap !== 'undefined' && numEl) gsap.fromTo(numEl, { scale:.5, opacity:0 }, { scale:1, opacity:1, duration:.25, ease:'back.out(2)' });
+      ci++;
+      if(ci < steps.length) setTimeout(tick, perStep);
+      else setTimeout(()=>{ countdownEl.innerHTML = ''; }, perStep * 0.5);
+    };
+    setTimeout(tick, 650);
+  }
+  setTimeout(()=>{
+    if(!introHammer) return;
+    introHammer.classList.remove('entering'); // stopper "forwards"-holdt opacity:1 fra selve entré-animationen, ellers slår transition'en herunder aldrig igennem
+    introHammer.classList.add('fading');
+  }, MOLE_PREROLL_MS - 150);
 
   let i = 0;
   const hitNext = () => {
