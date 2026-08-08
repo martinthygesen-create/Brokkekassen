@@ -207,6 +207,10 @@
      stedet for sin egen chip-reel — samme genkendelige "🎰 3 hjul lander på
      samme vinder"-følelse, bare med Brokspillets egne kandidater som symboler. */
   .game-card{ background:linear-gradient(160deg, rgba(255,201,60,0.18), rgba(255,107,74,0.10)); border:1px solid rgba(255,201,60,0.35); border-radius:22px; padding:20px; box-shadow:0 10px 24px rgba(0,0,0,.18); }
+  /* Skjult rolle/emne-felt — bevidst mere "tomt"/dæmpet end de normale
+     game-card'er, så det tydeligt læses som "der er noget skjult her at
+     trykke på", ikke bare endnu et almindeligt indholds-kort. */
+  .mrbrok-role-hidden{ background:rgba(255,247,232,0.04); border:1px dashed rgba(255,247,232,0.25); }
   .game-card p{ color:var(--cream); }
   .game-btn{ display:block; width:100%; background:linear-gradient(160deg, var(--coral), #e14d2e); color:#fff; border:none; border-radius:100px; padding:15px; font-family:'Baloo 2',sans-serif; font-weight:700; font-size:16px; box-shadow:0 8px 18px rgba(255,107,74,0.35); cursor:pointer; margin-top:14px; }
   .game-btn:active{ transform:scale(.98); }
@@ -563,7 +567,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-73';
+const BUILD_TAG = 'build-2026-08-08-74';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -600,7 +604,7 @@ let lastAnimatedMrbrokKey = null;
 let lastComplaintKeyMrbrok = null; // samme flimmer-fix som lastComplaintKey, men for MrBrok's egen brok-nedtælling
 
 let mrbrokWager = 'fun';
-let mrbrokWarmup = 2; // antal rene clue-runder før den første afstemning — se mrbrokMinWarmup for gulvet pr. spillerantal
+let mrbrokWarmup = 3; // antal rene clue-runder før den første afstemning — se mrbrokMinWarmup for gulvet pr. spillerantal
 // Samme formel som api/mrbrok.js's minWarmupForPlayers — server-siden
 // håndhæver den uanset hvad klienten sender, men UI'et skal vise det
 // rigtige gulv OGSÅ, ellers ser lave taster ud til at virke selvom de i
@@ -619,6 +623,14 @@ let mrbrokVoteStartSplashShownFor = null; // "m.startedAt:round" — vises ved H
 let gameInstructionsOpen = null; // samme mønster for Brokspillets egen lobby
 let mrbrokKnownMemberIds = null;
 let mrbrokTipText = null; // client-only "hint til vinkel"-forslag — nulstilles ved ny tur, se mrbrokClueHtml/bindMrbrokHandlers
+// Rolle/emne-feltet er SKJULT som standard (kræver et tryk for at se) —
+// telefoner ligger tit fremme på bordet under spillet, og et permanent
+// synligt "du er X"-felt kunne afsløre rollen/hvem der er MrBrok for en
+// forbipasserende, uden at ejeren selv gjorde noget forkert. Nulstilles til
+// skjult ved hver ny runde (se mrbrokTopicBanner), så det aldrig "glemmes"
+// synligt fra en tidligere tur.
+let mrbrokRoleRevealed = false;
+let mrbrokRoleRevealedRound = null;
 let roseMatchSelections = {}; // GLOBAL (ikke lokal i bindGameHandlers) så et almindeligt poll-gen-render ikke visker synlige gæt ud, se roseHtml
 let roseMatchSelectionsKey = null; // hvilken runde roseMatchSelections hører til — nulstilles kun ved en ny runde
 
@@ -3316,7 +3328,13 @@ function mrbrokBodyHtml(m){
   // afsløret (for at forlade activeIds/tur-rækkefølgen) — men de har stadig
   // en aktiv rolle i selve tyveri-fasen (deres sidste gæt på emnet), så de
   // skal IKKE regnes som "kigger med" mens den fase står på.
-  const isCaughtMrBrokInSteal = cur.type === 'steal' && profile && profile.memberId === m.mrBrokId;
+  // m.mrBrokId er redigeret væk af redactStateFor (kun m.youAreMrBrok findes
+  // client-side, se _lib/store.js) — profile.memberId === m.mrBrokId var
+  // derfor ALTID falsk her, hvilket fik den fangede MrBrok til fejlagtigt at
+  // blive vist tilskuer-skærmen ("Du blev stemt ud") i stedet for selve
+  // tyveri-gættet i steal-fasen. Den reelle, alvorlige konsekvens af buggen:
+  // MrBrok fik aldrig chancen til at gætte emnet og stjæle sejren.
+  const isCaughtMrBrokInSteal = cur.type === 'steal' && m.youAreMrBrok;
   const isEliminated = profile && !isCaughtMrBrokInSteal && (m.eliminatedIds||[]).some(e=>e.id===profile.memberId);
   if(cur.type !== 'gameover' && profile && m.players && (!m.players.includes(profile.memberId) || isEliminated)){
     return `
@@ -3501,18 +3519,33 @@ function maybeShowMrbrokVoteStartSplash(m){
 }
 
 function mrbrokTopicBanner(m){
+  // Skjult som standard, og nulstilles til skjult igen ved hver ny runde
+  // (ikke kun ved spilstart) — se mrbrokRoleRevealed-kommentaren.
+  if(mrbrokRoleRevealedRound !== m.round){
+    mrbrokRoleRevealedRound = m.round;
+    mrbrokRoleRevealed = false;
+  }
+  if(!mrbrokRoleRevealed){
+    return `<div class="game-card mrbrok-role-hidden" id="mrbrokRoleToggle" style="text-align:center; cursor:pointer;">
+      <div style="font-size:26px;">🔒</div>
+      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; margin:4px 0 0;">Tryk for at se din rolle</p>
+      <p class="hint" style="color:rgba(255,247,232,0.55);">Skjult som standard — nogen kunne jo kigge med på telefonen</p>
+    </div>`;
+  }
   if(m.youAreMrBrok){
-    return `<div class="game-card" style="text-align:center; border-color:rgba(255,201,60,0.5); background:rgba(255,201,60,0.08);">
+    return `<div class="game-card" id="mrbrokRoleToggle" style="text-align:center; border-color:rgba(255,201,60,0.5); background:rgba(255,201,60,0.08); cursor:pointer;">
       <div style="font-size:26px;">🕵️</div>
       <p style="font-family:'Baloo 2',sans-serif; font-weight:800; margin:4px 0 0;">Du er MrBrok!</p>
       <p class="hint" style="color:rgba(255,247,232,0.7);">Du kender IKKE rollen de andre har — <b style="color:rgba(255,247,232,0.92);">læg dig op ad deres tone og svar</b> for ikke at blive afsløret.</p>
+      <p class="hint" style="margin-top:10px; color:rgba(255,247,232,0.4); font-size:11.5px;">Tryk for at skjule igen</p>
     </div>`;
   }
   const [role, domain] = (m.topic || '?').split(' — ');
-  return `<div class="game-card" style="text-align:center;">
+  return `<div class="game-card" id="mrbrokRoleToggle" style="text-align:center; cursor:pointer;">
     <p class="hint" style="margin:0 0 4px; color:rgba(255,247,232,0.6);">Du er:</p>
     <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:0;">${escapeHtml(role || m.topic || '?')}</p>
     ${domain ? `<p class="hint" style="margin:6px 0 0; color:rgba(255,247,232,0.75);">${escapeHtml(domain)}</p>` : ''}
+    <p class="hint" style="margin-top:10px; color:rgba(255,247,232,0.4); font-size:11.5px;">Tryk for at skjule igen</p>
   </div>`;
 }
 
@@ -3581,11 +3614,14 @@ function mrbrokLobbyHtml(){
       ${(()=>{
         const minWarmup = mrbrokMinWarmup(mrbrokSelectedPlayers.length);
         if(mrbrokWarmup < minWarmup) mrbrokWarmup = minWarmup;
-        const options = [2,3,4,5,6].filter(n => n >= minWarmup);
+        // Gulvet (minWarmup) kan i store grupper overstige det normale 2-3
+        // udvalg — vis da bare gulvet som eneste (låste) valg i stedet for
+        // at filtrere alt væk til en tom liste.
+        const options = minWarmup > 3 ? [minWarmup] : [2,3].filter(n => n >= minWarmup);
         return `<div class="segmented" style="margin-bottom:0;">
           ${options.map(n=>`<div class="seg ${mrbrokWarmup===n?'active':''}" data-mrbrok-warmup="${n}">${n}</div>`).join('')}
         </div>
-        <p class="hint" style="margin:6px 0 0; color:rgba(255,247,232,0.55);">2 giver et spil på ca. 10-14 minutter for en typisk gruppe.${minWarmup > 2 ? ` Løftet op til mindst ${minWarmup} pga. antal spillere — ellers fylder udstemning mere end selve spillet.` : ''}</p>`;
+        <p class="hint" style="margin:6px 0 0; color:rgba(255,247,232,0.55);">3 giver et spil på ca. 12-16 minutter for en typisk gruppe.${minWarmup > 2 ? ` Løftet op til mindst ${minWarmup} pga. antal spillere — ellers fylder udstemning mere end selve spillet.` : ''}</p>`;
       })()}
     </div>
     <button class="game-btn" id="startMrbrokBtn" ${enough?'':'disabled'}>🕵️ Start MrBrok (${mrbrokSelectedPlayers.length} spillere)</button>
@@ -3810,6 +3846,8 @@ function mrbrokOverHtml(m, cur){
 
 function bindMrbrokHandlers(m){
   const cur = m.current;
+  const roleToggle = document.getElementById('mrbrokRoleToggle');
+  if(roleToggle) roleToggle.onclick = ()=>{ mrbrokRoleRevealed = !mrbrokRoleRevealed; render(); };
   const instrToggle = document.getElementById('mrbrokInstructionsToggle');
   if(instrToggle) instrToggle.onclick = ()=>{ mrbrokInstructionsOpen = !mrbrokInstructionsOpen; render(); };
   document.querySelectorAll('[data-mrbrok-wager]').forEach(el=>{
