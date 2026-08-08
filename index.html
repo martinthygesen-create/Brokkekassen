@@ -567,7 +567,12 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-08-75';
+const BUILD_TAG = 'build-2026-08-08-76';
+// Skal matche api/_lib/gameFlow.js's CASINOBROK_BET_*-konstanter — kun brugt
+// til visning her (server afgør altid den reelle udbetaling).
+const CASINOBROK_BET_SAFE_POINTS = 1;
+const CASINOBROK_BET_WIN_POINTS = 2;
+const CASINOBROK_BET_LOSE_POINTS = 1;
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1317,6 +1322,7 @@ async function runGameBotAction(cur, botId){
     return botSubmit('game', botId, { choiceIndex: Math.floor(Math.random()*n) });
   }
   if(cur.type === 'casinobrok' && cur.phase === 'write') return botSubmit('game', botId, { word: pickBotFiller(BOT_FILLER_WORDS) });
+  if(cur.type === 'casinobrok' && cur.phase === 'bet') return botSubmit('game', botId, { choice: Math.random() < 0.5 ? 'gamble' : 'safe' });
   if(cur.type === 'rose' && cur.phase === 'write') return botSubmit('game', botId, { compliment: pickBotFiller(BOT_FILLER_COMPLIMENTS) });
   if(cur.type === 'rose' && cur.phase === 'match'){
     const targets = cur.targets || {};
@@ -1674,6 +1680,7 @@ function getPendingIdsClient(cur, players){
   if(cur.type === 'rose' && cur.phase === 'write') return players.filter(id=>cur.compliments && cur.compliments[id] === undefined);
   if(cur.type === 'rose' && cur.phase === 'match') return players.filter(id=>cur.guesses && cur.guesses[id] === undefined);
   if(cur.type === 'casinobrok' && cur.phase === 'write') return players.filter(id=>!(cur.words && cur.words[id] !== undefined));
+  if(cur.type === 'casinobrok' && cur.phase === 'bet') return players.filter(id=>!(cur.bets && cur.bets[id] !== undefined));
   return [];
 }
 
@@ -2780,10 +2787,60 @@ function casinobrokHtml(g, cur){
       ${complaintBlockHtml(g, cur)}
     `;
   }
+  if(cur.phase === 'bet'){
+    const myId = profile && profile.memberId;
+    const mine = myId && cur.bets && cur.bets[myId];
+    const decided = Object.keys(cur.bets||{}).length;
+    const myScore = myId ? (g.scores[myId]||0) : 0;
+    let mineHtml = '';
+    if(mine){
+      mineHtml = mine.choice === 'safe'
+        ? `<div class="empty-state" style="padding:18px;"><span class="emoji">🛡️</span><b>Sikker gevinst!</b>+${mine.delta} point i banken, ingen risiko.</div>`
+        : mine.won
+          ? `<div class="empty-state" style="padding:18px;"><span class="emoji">🎉</span><b>Du ramte gevinsten!</b>+${mine.delta} point!</div>`
+          : `<div class="empty-state" style="padding:18px;"><span class="emoji">💀</span><b>Aber! Ingen gevinst denne gang.</b>${mine.delta} point.</div>`;
+    }
+    return `
+      <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · 🎰 BONUSRUNDE</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
+      <div class="game-card" id="gameCard" style="text-align:center;">
+        <p style="font-family:'Baloo 2',sans-serif; font-weight:800; margin:0 0 6px; font-size:20px;">🎰 Tør du satse?</p>
+        <p class="hint" style="margin:0 0 4px; color:rgba(255,247,232,0.55);">Din score lige nu: <b style="color:var(--coin);">${myScore} point</b></p>
+        ${mine ? mineHtml : `
+          <p class="hint" style="margin:0 0 14px; color:rgba(255,247,232,0.7);">Vælg mellem en sikker gevinst eller en rigtig satsning — ingen kan bare springe over.</p>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <button class="game-btn" id="casinoBetGambleBtn" style="background:linear-gradient(160deg, rgba(255,201,60,0.9), rgba(255,107,74,0.9));">🎰 Satser — vind ${CASINOBROK_BET_WIN_POINTS} eller mist ${CASINOBROK_BET_LOSE_POINTS}</button>
+            <button class="game-btn ghost" id="casinoBetSafeBtn">🛡️ Sikker gevinst — +${CASINOBROK_BET_SAFE_POINTS} point, ingen risiko</button>
+          </div>
+        `}
+      </div>
+      ${gameProgressHtml(decided, g.players.length, 'har valgt')}
+      ${mine ? `<div class="waiting-pill"><span class="waiting-dot"></span> Venter på de andre...</div>` : ''}
+      ${complaintBlockHtml(g, cur)}
+    `;
+  }
   if(cur.phase === 'skipped'){
     return `
       <div class="game-badge">Runde ${g.round}/${g.totalRounds} · 🎰 Casinobrok</div>
       <div class="empty-state"><span class="emoji">😴</span><b>Ingen nåede at skrive et ord</b>Ingen sag denne gang — vi går videre til næste spørgsmål.</div>
+      ${gameReadyHtml(g, cur)}
+    `;
+  }
+  if(cur.bets){
+    const rows = state.members.filter(m=>g.players.includes(m.id)).map(m=>{
+      const b = cur.bets[m.id];
+      if(!b) return '';
+      const label = b.choice === 'safe' ? '🛡️ Sikker gevinst' : (b.won ? '🎉 Ramte gevinsten' : '💀 Aber');
+      const deltaText = b.delta > 0 ? `+${b.delta}` : `${b.delta}`;
+      return `<div class="feed-item${b.delta>0?' quip-slot-win':''}" style="${b.delta>0?'border-color:var(--coin); background:rgba(255,201,60,0.16);':''}">
+        <div class="avatar">${initials(m.name)}</div>
+        <div class="feed-body"><div class="feed-name">${escapeHtml(m.name)}</div><div class="feed-msg">${label} · ${deltaText} point</div></div>
+      </div>`;
+    }).join('');
+    return `
+      <div class="game-badge">Runde ${g.round}/${g.totalRounds} · 🎰 BONUSRUNDE — Resultat</div>
+      <div class="game-card" id="gameCard">
+        ${rows}
+      </div>
       ${gameReadyHtml(g, cur)}
     `;
   }
@@ -3096,6 +3153,20 @@ function bindGameHandlers(g){
       if(!word) return;
       lockSubmitBtn(btn, 'Sender...');
       gameApi('submit', { payload: { word } });
+    };
+  }
+  if(cur.type === 'casinobrok' && cur.phase === 'bet'){
+    const gambleBtn = document.getElementById('casinoBetGambleBtn');
+    const safeBtn = document.getElementById('casinoBetSafeBtn');
+    if(gambleBtn) gambleBtn.onclick = ()=>{
+      lockSubmitBtn(gambleBtn, 'Satser...');
+      if(safeBtn) safeBtn.disabled = true;
+      gameApi('submit', { payload: { choice: 'gamble' } });
+    };
+    if(safeBtn) safeBtn.onclick = ()=>{
+      lockSubmitBtn(safeBtn, 'Tager den sikre...');
+      if(gambleBtn) gambleBtn.disabled = true;
+      gameApi('submit', { payload: { choice: 'safe' } });
     };
   }
   if(cur.type === 'rose' && cur.phase === 'write'){

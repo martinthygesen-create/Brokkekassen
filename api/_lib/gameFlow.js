@@ -3,6 +3,18 @@ const { beginRound, pickChanceVisual } = require('./game');
 
 const ROUND_POINTS = 2;
 
+// Spillemaskine-bonusrunden (casinobrok+bet, se beginRound i game.js): ingen
+// kan bare springe over — man vælger mellem en sikker, lille gevinst uden
+// risiko, eller en rigtig satsning med højere gevinst men reel tabsrisiko.
+// Chancen for gevinst er bevidst under 50% (ægte spillemaskine-følelse: den
+// sikre vej er den "kloge", satsningen er for dem der jagter den store
+// gevinst) — forventet værdi af en satsning (0.4*2 - 0.6*1 = 0.2) er lavere
+// end den sikre gevinst på 1, men loftet er højere.
+const CASINOBROK_BET_SAFE_POINTS = 1;
+const CASINOBROK_BET_WIN_POINTS = 2;
+const CASINOBROK_BET_LOSE_POINTS = 1;
+const CASINOBROK_BET_WIN_CHANCE = 0.4;
+
 // Hvor lang tid en fase mindst skal have kørt før en spiller overhovedet kan
 // brokke sig over en langsom medspiller — man skal have lidt is i maven,
 // ikke bare kunne rushe folk med det samme.
@@ -57,6 +69,9 @@ function getPendingIds(cur, players) {
   }
   if (cur.type === 'casinobrok' && cur.phase === 'write') {
     return players.filter(id => !(cur.words && cur.words[id] !== undefined));
+  }
+  if (cur.type === 'casinobrok' && cur.phase === 'bet') {
+    return players.filter(id => !(cur.bets && cur.bets[id] !== undefined));
   }
   if (cur.type === 'rose' && cur.phase === 'write') {
     return players.filter(id => cur.compliments && cur.compliments[id] === undefined);
@@ -182,6 +197,23 @@ function resolveCasinobrok(state, cur) {
   cur.readyIds = [];
 }
 
+// Spillemaskine-bonusrunden — hver spillers valg afgøres og udbetales med
+// det samme (ikke ét fælles træk ligesom resolveCasinobrok ovenfor), fordi
+// det er en individuel satsning, ikke et fælles lod. Selve fase-skiftet til
+// 'results' sker i api/game.js, når ALLE har valgt — ligesom resten af
+// spillets "write"-runder.
+function resolveCasinobrokBet(state, cur, actorId, choice) {
+  if (choice === 'safe') {
+    state.game.scores[actorId] = (state.game.scores[actorId] || 0) + CASINOBROK_BET_SAFE_POINTS;
+    cur.bets[actorId] = { choice, won: true, delta: CASINOBROK_BET_SAFE_POINTS };
+    return;
+  }
+  const won = Math.random() < CASINOBROK_BET_WIN_CHANCE;
+  const delta = won ? CASINOBROK_BET_WIN_POINTS : -CASINOBROK_BET_LOSE_POINTS;
+  state.game.scores[actorId] = (state.game.scores[actorId] || 0) + delta;
+  cur.bets[actorId] = { choice: 'gamble', won, delta };
+}
+
 // Manglende ros'er (nogen nåede ikke at skrive) fyldes op med en fast
 // pladsholder-tekst i stedet for at fjerne spilleren fra opgøret — ellers
 // bliver invertering af tildelingerne (se resolveRoseMatch) mere kringlet,
@@ -295,6 +327,14 @@ function forceResolveCurrentPhase(state, cur, players) {
     } else {
       resolveCasinobrok(state, cur);
     }
+  } else if (cur.type === 'casinobrok' && cur.phase === 'bet') {
+    // Ingen kan bare "ikke vælge" — en langsom spiller der løber tør for tid
+    // får automatisk den sikre gevinst, aldrig en tvungen satsning de ikke
+    // selv valgte.
+    players.forEach(id => { if (!cur.bets[id]) resolveCasinobrokBet(state, cur, id, 'safe'); });
+    cur.phase = 'results';
+    cur.readyIds = [];
+    stampPhase(cur);
   } else if (cur.type === 'rose' && cur.phase === 'write') {
     // Uden mindst én indsendt ros er der intet at gætte på — spring runden
     // over. Ellers fyldes de manglende op og der gås videre til gætte-fasen
@@ -348,6 +388,7 @@ module.exports = {
   resolveGuessBrok,
   resolveTriviaAnswer,
   resolveCasinobrok,
+  resolveCasinobrokBet,
   transitionRoseToMatch,
   resolveRoseMatch,
   goToNextRoundOrEnd,

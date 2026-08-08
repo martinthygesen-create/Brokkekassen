@@ -11,6 +11,7 @@ const {
   resolveGuessBrok,
   resolveTriviaAnswer,
   resolveCasinobrok,
+  resolveCasinobrokBet,
   transitionRoseToMatch,
   resolveRoseMatch,
   goToNextRoundOrEnd,
@@ -143,6 +144,15 @@ module.exports = async (req, res) => {
           if (!word) throw new ApiError(400, 'skriv et brok-ord');
           cur.words[actorId] = word;
           if (Object.keys(cur.words).length >= players.length) resolveCasinobrok(state, cur);
+        } else if (cur.type === 'casinobrok' && cur.phase === 'bet') {
+          if (cur.bets[actorId] !== undefined) throw new ApiError(409, 'du har allerede valgt');
+          const choice = payload.choice === 'gamble' ? 'gamble' : 'safe';
+          resolveCasinobrokBet(state, cur, actorId, choice);
+          if (Object.keys(cur.bets).length >= players.length) {
+            cur.phase = 'results';
+            cur.readyIds = [];
+            stampPhase(cur);
+          }
         } else if (cur.type === 'rose' && cur.phase === 'write') {
           const compliment = (payload.compliment || '').toString().trim().slice(0, 140);
           if (!compliment) throw new ApiError(400, 'skriv en ros');

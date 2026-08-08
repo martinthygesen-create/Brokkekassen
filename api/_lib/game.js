@@ -545,19 +545,29 @@ function beginRound(state, players) {
     const author = pickAuthor(state, players, 'guessBrokAuthorPickCounts');
     state.game.current = { type, phase: 'write', authorId: author.id, statement: null, options: null, correctIndex: null, guesses: {} };
   } else if (type === 'casinobrok') {
-    // "Casinobrok" — ALLE spillere skriver hvert sit ene brok-ord (ikke en
-    // hel sætning), og der trækkes bagefter lod blandt de indsendte ord på
-    // hjulet. Vinderen er den der skrev det trukne ord — flere spillere kan
-    // sagtens skrive samme ord, hver indsendelse er sit eget lod uanset
-    // tekst, så det er reelt en tilfældig person der vindes over, bare
-    // camoufleret som et ord-lod i stedet for en direkte navnetrækning.
-    // chanceVisual afgøres HER (server-side, én gang), ikke klient-side —
-    // ellers ville forskellige spilleres skærme kunne vise FORSKELLIGE
-    // visninger af samme runde. Delt pulje/begrænsning med quiplashs egen
-    // Chancen-brug (se pickChanceVisual + resolveQuiplashVote/Random i
-    // gameFlow.js) — hver visning (muldvarp/hjul/spillemaskine) højst én
-    // gang pr. spil, uanset hvilken rundetype der udløser den.
-    state.game.current = { type, phase: 'write', words: {}, chanceVisual: pickChanceVisual(state) };
+    // "Casinobrok" — chanceVisual afgøres HER (server-side, én gang), ikke
+    // klient-side — ellers ville forskellige spilleres skærme kunne vise
+    // FORSKELLIGE visninger af samme runde. Delt pulje/begrænsning med
+    // quiplashs egen Chancen-brug (se pickChanceVisual +
+    // resolveQuiplashVote/Random i gameFlow.js) — hver visning (muldvarp/
+    // hjul/spillemaskine) højst én gang pr. spil, uanset hvilken rundetype
+    // der udløser den.
+    const chanceVisual = pickChanceVisual(state);
+    if (chanceVisual === 'slot') {
+      // Ren spillemaskine-bonusrunde: at skrive et ord først gav ingen
+      // mening til et rent chance-træk (se resolveCasinobrokBet i
+      // gameFlow.js) — hver spiller vælger i stedet direkte mellem en
+      // sikker, lille gevinst og en rigtig satsning med reel tabsrisiko.
+      state.game.current = { type, phase: 'bet', chanceVisual, bets: {} };
+    } else {
+      // Hjul/muldvarp — ALLE spillere skriver hvert sit ene brok-ord (ikke
+      // en hel sætning), og der trækkes bagefter lod blandt de indsendte
+      // ord. Vinderen er den der skrev det trukne ord — flere spillere kan
+      // sagtens skrive samme ord, hver indsendelse er sit eget lod uanset
+      // tekst, så det er reelt en tilfældig person der vindes over, bare
+      // camoufleret som et ord-lod i stedet for en direkte navnetrækning.
+      state.game.current = { type, phase: 'write', words: {}, chanceVisual };
+    }
   } else {
     // "Rose" — ikke alt skal handle om brok. Hver spiller skriver en ægte,
     // kort ros til én tilfældigt tildelt medspiller (aldrig sig selv), og
