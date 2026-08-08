@@ -50,7 +50,11 @@ module.exports = async (req, res) => {
         beginRound(state, state.members.filter(m => players.includes(m.id)));
         stampPhase(state.game.current);
         const starter = state.members.find(m => m.id === actorId);
-        pushInfo = { excludeIds: [actorId], title: '🎲 Brokspillet er i gang!', body: `${starter ? starter.name : 'Nogen'} startede et spil — kom med!`, url: '/?r=' + roomId };
+        // Kun de FAKTISK VALGTE spillere skal have en "kom med!"-push — ellers
+        // inviteres rummets øvrige medlemmer ind i en runde de slet ikke er
+        // en del af (de ville bare lande på "du kigger med"-skærmen).
+        const notInGame = state.members.map(m => m.id).filter(id => !players.includes(id));
+        pushInfo = { excludeIds: [actorId, ...notInGame], title: '🎲 Brokspillet er i gang!', body: `${starter ? starter.name : 'Nogen'} startede et spil — kom med!`, url: '/?r=' + roomId };
         return;
       }
 

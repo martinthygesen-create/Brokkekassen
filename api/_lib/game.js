@@ -419,10 +419,18 @@ const ROUND_TYPES = ['quiplash', 'truefalse', 'trivia', 'guessbrok', 'casinobrok
 function beginRound(state, players) {
   state.game.round += 1;
   const playerIds = players.map(m => m.id);
-  // Rundetypen trækkes fra samme slags "shuffle bag" som resten af indholdet
-  // — sikrer en jævn blanding uden mønstre (fx samme type 3 runder i træk),
-  // og rotationen holder også her på tværs af flere spil.
-  const type = ROUND_TYPES[pickFromBag(state, 'roundType', ROUND_TYPES.length)];
+  // Rundetypen trækkes fra en shuffle bag der nulstilles PR SPIL (gemt på
+  // state.game, ikke på rummet) — sikrer at alle 6 typer er set mindst én
+  // gang før nogen af dem gentages INDEN FOR samme spil. Den gamle
+  // rum-niveau-bag (pickFromBag) garanterede kun ingen gentagelse på tværs
+  // af ALLE spil samlet, hvilket sagtens kunne betyde 2x samme (fx
+  // casinobrok+rose, "hæld"-tunge runder) og 0x trivia inden for ét enkelt
+  // spil — mere end halvdelen af runderne blev ren tilfældighed uden nogen
+  // rigtig quiz-runde overhovedet.
+  if (!state.game.roundTypeBag || !state.game.roundTypeBag.length) {
+    state.game.roundTypeBag = shuffle(ROUND_TYPES.slice());
+  }
+  const type = state.game.roundTypeBag.pop();
   if (type === 'quiplash') {
     // Ved præcis 2 spillere er der ingen rigtig afstemning (se
     // resolveQuiplashRandom) — runden ender ALTID i Chancen, så prompten er

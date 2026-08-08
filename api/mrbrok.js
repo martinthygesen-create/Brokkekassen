@@ -69,7 +69,11 @@ module.exports = async (req, res) => {
         beginClueRound(state, 1);
 
         const starter = state.members.find(mm => mm.id === actorId);
-        pushInfo = { excludeIds: [actorId], title: '🕵️ MrBrok er i gang!', body: `${starter ? starter.name : 'Nogen'} startede et spil — kom med!`, url: '/?r=' + roomId };
+        // Kun de FAKTISK VALGTE spillere skal have en "kom med!"-push — ellers
+        // inviteres rummets øvrige medlemmer ind i en runde de slet ikke er
+        // en del af.
+        const notInGame = state.members.map(mm => mm.id).filter(id => !players.includes(id));
+        pushInfo = { excludeIds: [actorId, ...notInGame], title: '🕵️ MrBrok er i gang!', body: `${starter ? starter.name : 'Nogen'} startede et spil — kom med!`, url: '/?r=' + roomId };
         return;
       }
 

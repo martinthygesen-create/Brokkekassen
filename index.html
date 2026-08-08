@@ -289,21 +289,9 @@
      bredde her betyder hullerne altid retter sig efter den PLADS der
      faktisk er, med en øvre grænse så de heller ikke bliver kæmpestore på
      brede skærme. */
-  .mole-hole-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; gap:5px; width:100%; max-width:132px; padding-top:44px; }
+  .mole-hole-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; gap:5px; width:100%; max-width:132px; padding-top:8px; }
   .mole-hole{ position:relative; width:100%; max-width:104px; aspect-ratio:1/1; border-radius:50%; background:radial-gradient(circle at 50% 30%, #5c4128, #241a10); overflow:hidden; box-shadow:inset 0 4px 10px rgba(0,0,0,.6); }
-  .mole-countdown{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:10; pointer-events:none; }
-  .mole-countdown-num{ font-family:'Baloo 2',sans-serif; font-weight:800; font-size:64px; color:#FFC93C; text-shadow:0 4px 14px rgba(0,0,0,.55); }
-  /* Håndbygget hammer (ikke emoji'en 🔨) — emoji-glyffer skalerer og
-     proportionerer forskelligt på tværs af telefoner/skrifttyper, hvilket
-     gjorde den svær at ramme rigtigt i størrelse. Hoved + skaft som to
-     simple div'er der roterer samlet giver fuld kontrol over proportionerne
-     og en tydeligere silhuet på en lille mobilskærm. */
-  .mole-hammer{ position:absolute; top:-20px; left:50%; width:74px; height:79px; margin-left:-37px; transform:rotate(-60deg); transform-origin:76% 86%; opacity:0; pointer-events:none; z-index:5; }
-  .mole-hammer-head{ position:absolute; top:0; left:10px; width:52px; height:30px; border-radius:6px; background:linear-gradient(160deg,#d99a5b,#8a5a28); box-shadow:0 2px 5px rgba(0,0,0,.45), inset 0 -3px 5px rgba(0,0,0,.3); }
-  .mole-hammer-handle{ position:absolute; top:22px; left:30px; width:12px; height:54px; border-radius:4px; background:linear-gradient(180deg,#8a5a30,#4a2c14); }
-  @keyframes hammerWhack{ 0%{ transform:rotate(-60deg); opacity:1; } 45%{ transform:rotate(24deg) translateY(28px); opacity:1; } 62%{ transform:rotate(16deg) translateY(22px); opacity:1; } 100%{ transform:rotate(-60deg); opacity:0; } }
-  .mole-hammer.whacking{ animation:hammerWhack .5s cubic-bezier(.36,.07,.19,.97); }
-  .mole{ position:absolute; left:50%; bottom:-8px; width:74px; height:74px; transform:translate(-50%, 48px); transition:transform .28s cubic-bezier(.34,1.56,.64,1), filter .2s ease; }
+  .mole{ position:absolute; left:50%; bottom:-8px; width:74px; height:74px; transform:translate(-50%, 48px); transition:transform .18s cubic-bezier(.34,1.56,.64,1), filter .15s ease; }
   .mole .avatar{ width:74px; height:74px; font-size:23px; }
   .mole.mole-up{ transform:translate(-50%, -18px); }
   .mole.mole-down{ filter:grayscale(1) brightness(.5); }
@@ -511,7 +499,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-62';
+const BUILD_TAG = 'build-2026-08-07-63';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -1985,7 +1973,7 @@ function buildWheelChanceHtml(prefix, candidates, winner, bannerText, revealed){
 // telefoner regner sig frem til PRÆCIS samme starttidspunkt, uanset hvornår
 // deres eget poll opdagede fasen. Er man allerede for sent på den (fx en
 // telefon der lige er kommet tilbage), spilles det bare med det samme.
-const WHEEL_REVEAL_DELAY_MS = 8000;
+const WHEEL_REVEAL_DELAY_MS = 4000;
 const WHEEL_SPIN_DURATION_MS = 6000; // ægte 5-7 sekunders spin, ikke et hop
 function scheduleWheelChanceReveal(prefix, phaseStartedAt){
   clearTimeout(wheelRevealTimeout);
@@ -2075,14 +2063,14 @@ function playWheelChanceReveal(prefix){
 // oppe og fejrer), så et almindeligt gen-render ikke nulstiller visningen.
 function buildMoleChanceHtml(prefix, candidates, winner, bannerText, winnerQuote){
   if(!winner || !candidates.length) return '';
-  // Ren tilfældighed, ingen tekst — kun avatar-bogstavet. En hammer smadrer
-  // hver taber-mole ned (se .mole-hammer + playMoleChanceReveal) i stedet
-  // for at den bare synker af sig selv.
+  // Ren tilfældighed, ingen tekst — kun avatar-bogstavet. Hullerne flimrer
+  // op/i som slot-hjul der bremser (se playMoleChanceReveal), ingen hammer —
+  // en hammer der "svinger" er svær at få til at se ud som den rent faktisk
+  // rammer/misser præcist på en lille mobilskærm.
   const holes = candidates.map(c=>{
     const isWin = c.id === winner.id;
     return `
       <div class="mole-hole-wrap">
-        <div class="mole-hammer" data-hammer-id="${c.id}"><div class="mole-hammer-head"></div><div class="mole-hammer-handle"></div></div>
         <div class="mole-hole">
           <div class="mole ${isWin?'mole-up mole-win':'mole-down'}" data-mole-id="${c.id}" ${isWin?'data-winner="1"':''}><div class="avatar">${initials(c.name)}</div></div>
         </div>
@@ -2100,7 +2088,6 @@ function buildMoleChanceHtml(prefix, candidates, winner, bannerText, winnerQuote
       <div class="slot-banner">${bannerText}</div>
       <div class="mole-cabinet win" id="${prefix}Cabinet" data-winner-name="${escapeHtml(winner.name)}" data-winner-quote="${escapeHtml(winnerQuote||'')}">
         <div class="mole-grid" id="${prefix}MoleGrid">${holes}</div>
-        <div class="mole-countdown" id="${prefix}MoleCountdown"></div>
         <div class="slot-winner-name" id="${prefix}WinnerName" style="opacity:1;">${escapeHtml(winner.name)} vandt! 🍀</div>
       </div>
     </div>
@@ -2119,26 +2106,6 @@ function buildMoleChanceHtml(prefix, candidates, winner, bannerText, winnerQuote
 const MOLE_PREROLL_MS = 3200;
 const MOLE_KNOCK_BUDGET_MS = 3200;
 const MOLE_POST_PAUSE_MS = 1400;
-// Tæller synligt "3-2-1" ned inde i kabinettet mens muldvarpene popper op,
-// i stedet for en stille pause — så det er tydeligt at noget er ved at ske,
-// ikke bare en skærm der virker fastfrosset et par sekunder.
-function playMoleCountdown(prefix, totalMs){
-  const el = document.getElementById(prefix+'MoleCountdown');
-  if(!el) return;
-  el.innerHTML = '';
-  const steps = ['3','2','1'];
-  const perStep = Math.max(500, totalMs / steps.length);
-  let i = 0;
-  const tick = ()=>{
-    el.innerHTML = `<div class="mole-countdown-num">${steps[i]}</div>`;
-    const numEl = el.querySelector('.mole-countdown-num');
-    if(typeof gsap !== 'undefined' && numEl) gsap.fromTo(numEl, { scale:.5, opacity:0 }, { scale:1, opacity:1, duration:.25, ease:'back.out(2)' });
-    i++;
-    if(i < steps.length) setTimeout(tick, perStep);
-    else setTimeout(()=>{ el.innerHTML = ''; }, perStep * 0.5);
-  };
-  tick();
-}
 function playMoleChanceReveal(prefix){
   const cabinet = document.getElementById(prefix+'Cabinet');
   if(!cabinet) return;
@@ -2151,17 +2118,9 @@ function playMoleChanceReveal(prefix){
   const winnerMole = moles.find(m => m.dataset.winner === '1');
   const losers = moles.filter(m => m.dataset.winner !== '1');
   moles.forEach(m => { m.classList.remove('mole-down', 'mole-win'); m.classList.add('mole-up'); });
-  playMoleCountdown(prefix, MOLE_PREROLL_MS);
   const order = losers.slice().sort(() => Math.random() - 0.5);
-  const perKnockDelay = order.length ? Math.max(450, MOLE_KNOCK_BUDGET_MS / order.length) : 0;
-  // Et par "falske" sving på VINDERENS egen hammer, lige inden de rigtige
-  // bank falder — hammeren svinger, men molen bliver oppe (rammer ikke).
-  // Ren tekstur/spænding ("nåh, den overlevede alligevel") og en nem måde
-  // at strække selve afviklingen ud på ved få kandidater, uden at det bare
-  // føles som en tilfældig ekstra ventetid.
-  const winnerHammer = winnerMole ? cabinet.querySelector('[data-hammer-id="'+winnerMole.dataset.moleId+'"]') : null;
-  const fakeSwingCount = winnerHammer ? (order.length <= 1 ? 2 : 1) : 0;
-  let i = 0;
+  const perLockDelay = order.length ? Math.max(450, MOLE_KNOCK_BUDGET_MS / order.length) : 0;
+
   const finish = () => {
     cabinet.classList.add('win');
     if(winnerMole) winnerMole.classList.add('mole-win');
@@ -2181,34 +2140,47 @@ function playMoleChanceReveal(prefix){
       showMoleWinBanner(cabinet.dataset.winnerName, cabinet.dataset.winnerQuote);
     }, 500);
   };
-  const doFakeSwing = (cb) => {
-    if(!winnerHammer){ cb(); return; }
-    winnerHammer.classList.add('whacking');
-    setTimeout(()=>{ winnerHammer.classList.remove('whacking'); setTimeout(cb, 250); }, 500);
+
+  // Ingen hammer længere — den var upræcis at animere troværdigt på en lille
+  // skærm (svært at se om den rent faktisk "rammer"). I stedet flimrer ALLE
+  // huller op/i som slot-hjul der endnu ikke er begyndt at bremse — samme
+  // deceleration-følelse som wheel-runden. Frekvensen sænkes gradvist over
+  // hele forløbet (både optakt og elimineringsfasen), og et hul der bliver
+  // låst (elimineret) forsvinder ud af flimmer-puljen med det samme, så det
+  // hele visuelt "falder til ro" ét hul ad gangen, indtil kun vinderens hul
+  // stadig flimrer — og til sidst tvinges åbent for godt.
+  let flickerDelay = 90;
+  const MOLE_MAX_FLICKER_DELAY = 260;
+  let flickerTimer = null;
+  const flickerPool = new Set(moles);
+  const flickerTick = () => {
+    flickerPool.forEach(m => {
+      const up = Math.random() < 0.55;
+      m.classList.toggle('mole-up', up);
+      m.classList.toggle('mole-down', !up);
+    });
+    flickerDelay = Math.min(MOLE_MAX_FLICKER_DELAY, flickerDelay * 1.15);
+    flickerTimer = setTimeout(flickerTick, flickerDelay);
   };
-  const whackNext = () => {
+  flickerTick();
+
+  let i = 0;
+  const lockNext = () => {
     if(i < order.length){
       const mole = order[i];
-      const hammer = cabinet.querySelector('[data-hammer-id="'+mole.dataset.moleId+'"]');
-      if(hammer) hammer.classList.add('whacking');
-      // Molen dukker først ned i det øjeblik hammeren rammer (ikke i takt
-      // med at den starter sit sving), så det ser ud som et rigtigt slag.
-      setTimeout(()=>{
-        mole.classList.remove('mole-up');
-        mole.classList.add('mole-down');
-      }, 220);
+      flickerPool.delete(mole);
+      mole.classList.remove('mole-up');
+      mole.classList.add('mole-down');
       i++;
-      setTimeout(whackNext, perKnockDelay);
+      setTimeout(lockNext, perLockDelay);
     }else{
+      clearTimeout(flickerTimer);
+      flickerPool.clear();
+      if(winnerMole){ winnerMole.classList.remove('mole-down'); winnerMole.classList.add('mole-up'); }
       setTimeout(finish, MOLE_POST_PAUSE_MS);
     }
   };
-  const startRealKnocks = () => whackNext();
-  const runFakeSwings = (n) => {
-    if(n <= 0){ startRealKnocks(); return; }
-    doFakeSwing(()=>runFakeSwings(n-1));
-  };
-  setTimeout(()=>runFakeSwings(fakeSwingCount), MOLE_PREROLL_MS);
+  setTimeout(lockNext, MOLE_PREROLL_MS);
 }
 
 // Fuldskærms fejrings-banner for Chancens vinder — lille "X vandt!" foroven,
