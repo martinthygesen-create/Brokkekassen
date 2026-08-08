@@ -540,7 +540,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-67';
+const BUILD_TAG = 'build-2026-08-07-68';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -2196,13 +2196,17 @@ function playMoleChanceReveal(prefix){
   };
 
   // Pointen er ikke længere at hammeren rammer PRÆCIST — det er umuligt at
-  // sælge troværdigt på en lille skærm. Men et sving der rammer ved siden
-  // af skal stadig have en synlig KONSEKVENS, ellers virker det afgørende
-  // slag som det kommer ud af det blå — så molen dukker sig selv (se
-  // .mole-dodge) i takt med et forbigående sving, "den slap væk", før det
-  // rigtige, afgørende slag til sidst rammer og splintrer den (se .mole-hit).
+  // sælge troværdigt på en lille skærm. Et sving der rammer ved siden af
+  // skal have en synlig KONSEKVENS (molen dukker sig, se .mole-dodge), ELLERS
+  // virker det afgørende slag som det kommer ud af det blå — men for MANGE
+  // af dem i træk (tætte, tilfældige, konstante) ser bare useriøst/i utakt
+  // ud, ikke som spænding. Derfor kun et lille, FAST antal misser, tydeligt
+  // spredt ud, i stedet for kontinuerlig tilfældig flimren hele optakten.
   let ambientTimer = null;
+  let ambientSwingsLeft = moles.length <= 2 ? 2 : 3;
   const ambientSwing = () => {
+    if(ambientSwingsLeft <= 0) return;
+    ambientSwingsLeft--;
     const mole = moles[Math.floor(Math.random() * moles.length)];
     const hammer = hammerFor(mole);
     if(hammer && !mole.classList.contains('mole-hit')){
@@ -2213,9 +2217,9 @@ function playMoleChanceReveal(prefix){
       setTimeout(()=>hammer.classList.remove('whacking'), 420);
       setTimeout(()=>mole.classList.remove('mole-dodge'), 500);
     }
-    ambientTimer = setTimeout(ambientSwing, 240 + Math.random() * 260);
+    if(ambientSwingsLeft > 0) ambientTimer = setTimeout(ambientSwing, 550 + Math.random() * 350);
   };
-  ambientSwing();
+  setTimeout(ambientSwing, 250);
 
   let i = 0;
   const hitNext = () => {
