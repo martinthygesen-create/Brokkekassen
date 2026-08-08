@@ -291,12 +291,17 @@
      brede skærme. */
   .mole-hole-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; gap:5px; width:100%; max-width:132px; padding-top:8px; }
   .mole-hole{ position:relative; width:100%; max-width:104px; aspect-ratio:1/1; border-radius:50%; background:radial-gradient(circle at 50% 30%, #5c4128, #241a10); overflow:hidden; box-shadow:inset 0 4px 10px rgba(0,0,0,.6); }
-  .mole{ position:absolute; left:50%; bottom:-8px; width:74px; height:74px; transform:translate(-50%, 48px); transition:transform .18s cubic-bezier(.34,1.56,.64,1), filter .15s ease; }
+  .mole{ position:absolute; left:50%; bottom:-8px; width:74px; height:74px; transform:translate(-50%, -18px); z-index:1; }
   .mole .avatar{ width:74px; height:74px; font-size:23px; }
-  .mole.mole-up{ transform:translate(-50%, -18px); }
-  .mole.mole-down{ filter:grayscale(1) brightness(.5); }
   @keyframes moleWinPop{ 0%{ transform:translate(-50%,-18px) scale(1); } 35%{ transform:translate(-50%,-24px) scale(1.15) rotate(-4deg); } 65%{ transform:translate(-50%,-18px) scale(1.05) rotate(4deg); } 100%{ transform:translate(-50%,-18px) scale(1) rotate(0deg); } }
   .mole.mole-win{ animation:moleWinPop .5s ease-out; }
+  /* Låget ER hullet der åbner/lukker — molen selv står stille bagved, låget
+     glider ned foran den som en guillotine (matcher hullets egen radial
+     baggrund, så et lukket låg er visuelt umuligt at skelne fra selve
+     hullet). Læses langt tydeligere som "hullet lukker sig" end en karakter
+     der dykker ned og op — det var kritikken af den forrige version. */
+  .mole-lid{ position:absolute; inset:0; border-radius:50%; background:radial-gradient(circle at 50% 30%, #5c4128, #241a10); transform:translateY(-100%); transition:transform .14s ease-out; z-index:2; }
+  .mole-lid.closed{ transform:translateY(0); }
   /* Fuldskærms fejrings-banner (se showMoleWinBanner) — Brokspillets eget
      teal/guld-tema, lever UDEN FOR det almindelige render()-kredsløb (append
      til body, ikke en del af app.innerHTML), så den ikke kan blive visket
@@ -499,7 +504,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-63';
+const BUILD_TAG = 'build-2026-08-07-64';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -2063,16 +2068,18 @@ function playWheelChanceReveal(prefix){
 // oppe og fejrer), så et almindeligt gen-render ikke nulstiller visningen.
 function buildMoleChanceHtml(prefix, candidates, winner, bannerText, winnerQuote){
   if(!winner || !candidates.length) return '';
-  // Ren tilfældighed, ingen tekst — kun avatar-bogstavet. Hullerne flimrer
-  // op/i som slot-hjul der bremser (se playMoleChanceReveal), ingen hammer —
-  // en hammer der "svinger" er svær at få til at se ud som den rent faktisk
-  // rammer/misser præcist på en lille mobilskærm.
+  // Ren tilfældighed, ingen tekst — kun avatar-bogstavet. Det er LÅGET (se
+  // .mole-lid + playMoleChanceReveal), ikke navnet/molen selv, der flapper
+  // op og ned — molen står stille bag ved, låget glider ned og dækker den.
+  // Ingen hammer — en hammer der "svinger" er svær at få til at se ud som
+  // den rent faktisk rammer/misser præcist på en lille mobilskærm.
   const holes = candidates.map(c=>{
     const isWin = c.id === winner.id;
     return `
       <div class="mole-hole-wrap">
         <div class="mole-hole">
-          <div class="mole ${isWin?'mole-up mole-win':'mole-down'}" data-mole-id="${c.id}" ${isWin?'data-winner="1"':''}><div class="avatar">${initials(c.name)}</div></div>
+          <div class="mole ${isWin?'mole-win':''}" data-mole-id="${c.id}" ${isWin?'data-winner="1"':''}><div class="avatar">${initials(c.name)}</div></div>
+          <div class="mole-lid ${isWin?'':'closed'}" data-lid-id="${c.id}"></div>
         </div>
       </div>`;
   }).join('');
@@ -2117,9 +2124,10 @@ function playMoleChanceReveal(prefix){
   if(!moles.length){ revealAnimationLock = false; return; }
   const winnerMole = moles.find(m => m.dataset.winner === '1');
   const losers = moles.filter(m => m.dataset.winner !== '1');
-  moles.forEach(m => { m.classList.remove('mole-down', 'mole-win'); m.classList.add('mole-up'); });
+  moles.forEach(m => m.classList.remove('mole-win'));
+  const lidFor = (mole) => cabinet.querySelector('[data-lid-id="'+mole.dataset.moleId+'"]');
   const order = losers.slice().sort(() => Math.random() - 0.5);
-  const perLockDelay = order.length ? Math.max(450, MOLE_KNOCK_BUDGET_MS / order.length) : 0;
+  const perLockDelay = order.length ? Math.max(500, MOLE_KNOCK_BUDGET_MS / order.length) : 0;
 
   const finish = () => {
     cabinet.classList.add('win');
@@ -2142,41 +2150,40 @@ function playMoleChanceReveal(prefix){
   };
 
   // Ingen hammer længere — den var upræcis at animere troværdigt på en lille
-  // skærm (svært at se om den rent faktisk "rammer"). I stedet flimrer ALLE
-  // huller op/i som slot-hjul der endnu ikke er begyndt at bremse — samme
-  // deceleration-følelse som wheel-runden. Frekvensen sænkes gradvist over
-  // hele forløbet (både optakt og elimineringsfasen), og et hul der bliver
-  // låst (elimineret) forsvinder ud af flimmer-puljen med det samme, så det
-  // hele visuelt "falder til ro" ét hul ad gangen, indtil kun vinderens hul
-  // stadig flimrer — og til sidst tvinges åbent for godt.
-  let flickerDelay = 90;
-  const MOLE_MAX_FLICKER_DELAY = 260;
-  let flickerTimer = null;
-  const flickerPool = new Set(moles);
-  const flickerTick = () => {
-    flickerPool.forEach(m => {
-      const up = Math.random() < 0.55;
-      m.classList.toggle('mole-up', up);
-      m.classList.toggle('mole-down', !up);
-    });
-    flickerDelay = Math.min(MOLE_MAX_FLICKER_DELAY, flickerDelay * 1.15);
-    flickerTimer = setTimeout(flickerTick, flickerDelay);
+  // skærm. Det er LÅGET på hvert hul der åbner/lukker (se .mole-lid), ikke
+  // molen selv, og hvert hul flapper UAFHÆNGIGT af de andre i sit eget
+  // tempo — bevidst IKKE ét synkront hjul der bremser samlet (det er
+  // Chancen-hjulets look, se casinobrok, det skal ikke ligne det samme her).
+  // Et hul flapper mange gange mens det stadig er "i spil", og stopper med
+  // det samme det bliver udelukket — ét hul ad gangen, indtil kun vinderens
+  // hul flapper tilbage, som til sidst tvinges åbent for godt.
+  const flapTimers = new Map();
+  const activeMoles = new Set(moles);
+  const flap = (mole) => {
+    if(!activeMoles.has(mole)) return;
+    const lid = lidFor(mole);
+    if(lid) lid.classList.toggle('closed');
+    flapTimers.set(mole, setTimeout(()=>flap(mole), 150 + Math.random() * 130));
   };
-  flickerTick();
+  moles.forEach(m => setTimeout(()=>flap(m), Math.random() * 200));
 
   let i = 0;
   const lockNext = () => {
     if(i < order.length){
       const mole = order[i];
-      flickerPool.delete(mole);
-      mole.classList.remove('mole-up');
-      mole.classList.add('mole-down');
+      activeMoles.delete(mole);
+      clearTimeout(flapTimers.get(mole));
+      const lid = lidFor(mole);
+      if(lid) lid.classList.add('closed');
       i++;
       setTimeout(lockNext, perLockDelay);
     }else{
-      clearTimeout(flickerTimer);
-      flickerPool.clear();
-      if(winnerMole){ winnerMole.classList.remove('mole-down'); winnerMole.classList.add('mole-up'); }
+      if(winnerMole){
+        activeMoles.delete(winnerMole);
+        clearTimeout(flapTimers.get(winnerMole));
+        const winnerLid = lidFor(winnerMole);
+        if(winnerLid) winnerLid.classList.remove('closed');
+      }
       setTimeout(finish, MOLE_POST_PAUSE_MS);
     }
   };
