@@ -289,19 +289,31 @@
      bredde her betyder hullerne altid retter sig efter den PLADS der
      faktisk er, med en øvre grænse så de heller ikke bliver kæmpestore på
      brede skærme. */
-  .mole-hole-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; gap:5px; width:100%; max-width:132px; padding-top:8px; }
+  .mole-hole-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; gap:5px; width:100%; max-width:132px; padding-top:44px; }
   .mole-hole{ position:relative; width:100%; max-width:104px; aspect-ratio:1/1; border-radius:50%; background:radial-gradient(circle at 50% 30%, #5c4128, #241a10); overflow:hidden; box-shadow:inset 0 4px 10px rgba(0,0,0,.6); }
+  /* Håndbygget hammer (ikke emoji'en 🔨) — emoji-glyffer skalerer og
+     proportionerer forskelligt på tværs af telefoner/skrifttyper, hvilket
+     gjorde den svær at ramme rigtigt i størrelse. Hoved + skaft som to
+     simple div'er der roterer samlet giver fuld kontrol over proportionerne
+     og en tydeligere silhuet på en lille mobilskærm. */
+  .mole-hammer{ position:absolute; top:-20px; left:50%; width:74px; height:79px; margin-left:-37px; transform:rotate(-60deg); transform-origin:76% 86%; opacity:0; pointer-events:none; z-index:5; }
+  .mole-hammer-head{ position:absolute; top:0; left:10px; width:52px; height:30px; border-radius:6px; background:linear-gradient(160deg,#d99a5b,#8a5a28); box-shadow:0 2px 5px rgba(0,0,0,.45), inset 0 -3px 5px rgba(0,0,0,.3); }
+  .mole-hammer-handle{ position:absolute; top:22px; left:30px; width:12px; height:54px; border-radius:4px; background:linear-gradient(180deg,#8a5a30,#4a2c14); }
+  @keyframes hammerWhack{ 0%{ transform:rotate(-60deg); opacity:1; } 45%{ transform:rotate(24deg) translateY(28px); opacity:1; } 62%{ transform:rotate(16deg) translateY(22px); opacity:1; } 100%{ transform:rotate(-60deg); opacity:0; } }
+  .mole-hammer.whacking{ animation:hammerWhack .5s cubic-bezier(.36,.07,.19,.97); }
   .mole{ position:absolute; left:50%; bottom:-8px; width:74px; height:74px; transform:translate(-50%, -18px); z-index:1; }
-  .mole .avatar{ width:74px; height:74px; font-size:23px; }
+  .mole .avatar{ position:relative; width:74px; height:74px; font-size:23px; }
   @keyframes moleWinPop{ 0%{ transform:translate(-50%,-18px) scale(1); } 35%{ transform:translate(-50%,-24px) scale(1.15) rotate(-4deg); } 65%{ transform:translate(-50%,-18px) scale(1.05) rotate(4deg); } 100%{ transform:translate(-50%,-18px) scale(1) rotate(0deg); } }
   .mole.mole-win{ animation:moleWinPop .5s ease-out; }
-  /* Låget ER hullet der åbner/lukker — molen selv står stille bagved, låget
-     glider ned foran den som en guillotine (matcher hullets egen radial
-     baggrund, så et lukket låg er visuelt umuligt at skelne fra selve
-     hullet). Læses langt tydeligere som "hullet lukker sig" end en karakter
-     der dykker ned og op — det var kritikken af den forrige version. */
-  .mole-lid{ position:absolute; inset:0; border-radius:50%; background:radial-gradient(circle at 50% 30%, #5c4128, #241a10); transform:translateY(-100%); transition:transform .14s ease-out; z-index:2; }
-  .mole-lid.closed{ transform:translateY(0); }
+  /* Pointen er IKKE at hammeren rammer præcist (umuligt at sælge troværdigt
+     i den størrelse) — det er molens overdrevne, permanente "smadret"-
+     reaktion der bærer sjovet, uanset hvornår/hvor godt hammeren rammer
+     visuelt. Fladtrykt + gråtone + en kort "stjerner"-pop for at sælge
+     svimmelheden. */
+  @keyframes moleSquash{ 0%{ transform:translate(-50%,-18px) scaleY(1) scaleX(1); } 45%{ transform:translate(-50%,10px) scaleY(.32) scaleX(1.4); } 100%{ transform:translate(-50%,7px) scaleY(.4) scaleX(1.3); } }
+  .mole.mole-hit{ animation:moleSquash .32s cubic-bezier(.4,0,.6,1) forwards; filter:grayscale(1) brightness(.55); }
+  @keyframes moleHitStars{ 0%{ opacity:0; transform:translate(-50%,4px) scale(.6); } 35%{ opacity:1; transform:translate(-50%,-8px) scale(1.15); } 100%{ opacity:0; transform:translate(-50%,-14px) scale(1); } }
+  .mole.mole-hit .avatar::after{ content:'💫'; position:absolute; top:-16px; left:50%; font-size:20px; opacity:0; animation:moleHitStars .55s ease-out .1s; }
   /* Fuldskærms fejrings-banner (se showMoleWinBanner) — Brokspillets eget
      teal/guld-tema, lever UDEN FOR det almindelige render()-kredsløb (append
      til body, ikke en del af app.innerHTML), så den ikke kan blive visket
@@ -504,7 +516,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-64';
+const BUILD_TAG = 'build-2026-08-07-65';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -2068,18 +2080,18 @@ function playWheelChanceReveal(prefix){
 // oppe og fejrer), så et almindeligt gen-render ikke nulstiller visningen.
 function buildMoleChanceHtml(prefix, candidates, winner, bannerText, winnerQuote){
   if(!winner || !candidates.length) return '';
-  // Ren tilfældighed, ingen tekst — kun avatar-bogstavet. Det er LÅGET (se
-  // .mole-lid + playMoleChanceReveal), ikke navnet/molen selv, der flapper
-  // op og ned — molen står stille bag ved, låget glider ned og dækker den.
-  // Ingen hammer — en hammer der "svinger" er svær at få til at se ud som
-  // den rent faktisk rammer/misser præcist på en lille mobilskærm.
+  // Ren tilfældighed, ingen tekst — kun avatar-bogstavet. Hammeren er
+  // tilbage, men pointen er nu IKKE at ramme præcist (umuligt at sælge
+  // troværdigt på en lille skærm) — det ER molens overdrevne "smadret"-
+  // reaktion (se .mole-hit + playMoleChanceReveal) der bærer sjovet, uanset
+  // hvor "præcist" hammeren rammer visuelt.
   const holes = candidates.map(c=>{
     const isWin = c.id === winner.id;
     return `
       <div class="mole-hole-wrap">
+        <div class="mole-hammer" data-hammer-id="${c.id}"><div class="mole-hammer-head"></div><div class="mole-hammer-handle"></div></div>
         <div class="mole-hole">
-          <div class="mole ${isWin?'mole-win':''}" data-mole-id="${c.id}" ${isWin?'data-winner="1"':''}><div class="avatar">${initials(c.name)}</div></div>
-          <div class="mole-lid ${isWin?'':'closed'}" data-lid-id="${c.id}"></div>
+          <div class="mole ${isWin?'mole-win':'mole-hit'}" data-mole-id="${c.id}" ${isWin?'data-winner="1"':''}><div class="avatar">${initials(c.name)}</div></div>
         </div>
       </div>`;
   }).join('');
@@ -2124,10 +2136,10 @@ function playMoleChanceReveal(prefix){
   if(!moles.length){ revealAnimationLock = false; return; }
   const winnerMole = moles.find(m => m.dataset.winner === '1');
   const losers = moles.filter(m => m.dataset.winner !== '1');
-  moles.forEach(m => m.classList.remove('mole-win'));
-  const lidFor = (mole) => cabinet.querySelector('[data-lid-id="'+mole.dataset.moleId+'"]');
+  moles.forEach(m => m.classList.remove('mole-win', 'mole-hit'));
+  const hammerFor = (mole) => cabinet.querySelector('[data-hammer-id="'+mole.dataset.moleId+'"]');
   const order = losers.slice().sort(() => Math.random() - 0.5);
-  const perLockDelay = order.length ? Math.max(500, MOLE_KNOCK_BUDGET_MS / order.length) : 0;
+  const perHitDelay = order.length ? Math.max(500, MOLE_KNOCK_BUDGET_MS / order.length) : 0;
 
   const finish = () => {
     cabinet.classList.add('win');
@@ -2149,45 +2161,40 @@ function playMoleChanceReveal(prefix){
     }, 500);
   };
 
-  // Ingen hammer længere — den var upræcis at animere troværdigt på en lille
-  // skærm. Det er LÅGET på hvert hul der åbner/lukker (se .mole-lid), ikke
-  // molen selv, og hvert hul flapper UAFHÆNGIGT af de andre i sit eget
-  // tempo — bevidst IKKE ét synkront hjul der bremser samlet (det er
-  // Chancen-hjulets look, se casinobrok, det skal ikke ligne det samme her).
-  // Et hul flapper mange gange mens det stadig er "i spil", og stopper med
-  // det samme det bliver udelukket — ét hul ad gangen, indtil kun vinderens
-  // hul flapper tilbage, som til sidst tvinges åbent for godt.
-  const flapTimers = new Map();
-  const activeMoles = new Set(moles);
-  const flap = (mole) => {
-    if(!activeMoles.has(mole)) return;
-    const lid = lidFor(mole);
-    if(lid) lid.classList.toggle('closed');
-    flapTimers.set(mole, setTimeout(()=>flap(mole), 150 + Math.random() * 130));
+  // Pointen er ikke længere at hammeren rammer PRÆCIST — det er umuligt at
+  // sælge troværdigt på en lille skærm. I stedet svinger tilfældige hamre
+  // løs på må og få i optakten (ren kaotisk tekstur/"mange sving", ingen af
+  // dem rammer noget endnu), mens den AFGØRENDE eliminering sker ét hul ad
+  // gangen bagefter — det svingende hammerslag udløser molens overdrevne,
+  // permanente "smadret"-reaktion (se .mole-hit), som bærer hele sjovet
+  // uanset hvor "rigtigt" selve hammerslaget ser ud til at ramme.
+  let ambientTimer = null;
+  const ambientSwing = () => {
+    const mole = moles[Math.floor(Math.random() * moles.length)];
+    const hammer = hammerFor(mole);
+    if(hammer && !mole.classList.contains('mole-hit')){
+      hammer.classList.add('whacking');
+      setTimeout(()=>hammer.classList.remove('whacking'), 420);
+    }
+    ambientTimer = setTimeout(ambientSwing, 240 + Math.random() * 260);
   };
-  moles.forEach(m => setTimeout(()=>flap(m), Math.random() * 200));
+  ambientSwing();
 
   let i = 0;
-  const lockNext = () => {
+  const hitNext = () => {
     if(i < order.length){
       const mole = order[i];
-      activeMoles.delete(mole);
-      clearTimeout(flapTimers.get(mole));
-      const lid = lidFor(mole);
-      if(lid) lid.classList.add('closed');
+      const hammer = hammerFor(mole);
+      if(hammer) hammer.classList.add('whacking');
+      setTimeout(()=>mole.classList.add('mole-hit'), 220);
       i++;
-      setTimeout(lockNext, perLockDelay);
+      setTimeout(hitNext, perHitDelay);
     }else{
-      if(winnerMole){
-        activeMoles.delete(winnerMole);
-        clearTimeout(flapTimers.get(winnerMole));
-        const winnerLid = lidFor(winnerMole);
-        if(winnerLid) winnerLid.classList.remove('closed');
-      }
+      clearTimeout(ambientTimer);
       setTimeout(finish, MOLE_POST_PAUSE_MS);
     }
   };
-  setTimeout(lockNext, MOLE_PREROLL_MS);
+  setTimeout(hitNext, MOLE_PREROLL_MS);
 }
 
 // Fuldskærms fejrings-banner for Chancens vinder — lille "X vandt!" foroven,
