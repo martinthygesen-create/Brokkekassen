@@ -242,11 +242,15 @@ function generateTriviaQuestion(state) {
     }
   }
 
-  // "Brok fra Brokkekassen — hvem sagde det?" og den omvendte variant —
-  // bruger ÆGTE tidligere loggede brok som spørgsmål i stedet for kun
-  // optalte statistikker. Vælges TILFÆLDIGT blandt alle rigtige brok hver
-  // gang (ikke altid "flest/færrest"), så det jævner sig ud hvem der
-  // bliver spurgt om over mange runder, i stedet for altid samme person.
+  // "Hvem blev det brokket over?" og den omvendte variant — bruger ÆGTE
+  // tidligere loggede brok som spørgsmål i stedet for kun optalte
+  // statistikker. Bevidst IKKE "hvem sagde/skrev det" — memberId er den der
+  // blev ANKLAGET (se accuse-handleren i brok.js), ikke nødvendigvis den der
+  // selv tastede anklagen ind i appen, så "brokkede sig over" er den eneste
+  // framing der stemmer overens med hvad data faktisk betyder. Vælges
+  // TILFÆLDIGT blandt alle rigtige brok hver gang (ikke altid "flest/
+  // færrest"), så det jævner sig ud hvem der bliver spurgt om over mange
+  // runder, i stedet for altid samme person.
   const brokEvents = allEvents.filter(e => e.message && e.message.trim() && members.find(m => m.id === e.memberId));
   if (brokEvents.length && members.length >= 3) {
     candidates.push(() => {
@@ -254,7 +258,7 @@ function generateTriviaQuestion(state) {
       const correct = members.find(m => m.id === ev.memberId);
       const distractors = shuffle(members.filter(m => m.id !== ev.memberId)).slice(0, 3).map(m => m.name);
       const { options, correctIndex } = buildOptions(correct.name, distractors);
-      return { question: `Brok fra Brokkekassen: "${ev.message}" — hvem sagde det?`, options, correctIndex };
+      return { question: `Ifølge Brokkekassen brokkede nogen sig over: "${ev.message}" — hvem var det?`, options, correctIndex };
     });
     // Kun med hvis der reelt findes nok ANDRE forskellige brok-tekster at
     // bruge som decoys — ellers ville spørgsmålet ikke kunne stilles fair.
@@ -271,7 +275,7 @@ function generateTriviaQuestion(state) {
         const otherTexts = [...new Set(brokEvents.filter(e => e.memberId !== target.id).map(e => e.message))];
         const distractors = shuffle(otherTexts).slice(0, 3);
         const { options, correctIndex } = buildOptions(correct, distractors);
-        return { question: `Hvilket af disse brok skrev ${target.name}?`, options, correctIndex };
+        return { question: `Hvilket af disse ting brokkede ${target.name} sig over?`, options, correctIndex };
       });
     }
   }
