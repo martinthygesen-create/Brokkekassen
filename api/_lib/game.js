@@ -428,7 +428,35 @@ function beginRound(state, players) {
   // spil — mere end halvdelen af runderne blev ren tilfældighed uden nogen
   // rigtig quiz-runde overhovedet.
   if (!state.game.roundTypeBag || !state.game.roundTypeBag.length) {
-    state.game.roundTypeBag = shuffle(ROUND_TYPES.slice());
+    const lastType = state.game.current && state.game.current.type;
+    const bag = shuffle(ROUND_TYPES.slice());
+    // pop() trækker fra ENDEN af arrayet — så bag[bag.length-1] er den
+    // NÆSTE der bliver trukket. Uden dette tjek kunne en frisk pose (8+
+    // runder, ny cyklus efter alle 6 er brugt) tilfældigvis starte med
+    // PRÆCIS samme type som lige blev spillet — en synlig gentagelse i
+    // gentagelse, selvom det teknisk set er to uafhængige cyklusser.
+    if (lastType && bag[bag.length - 1] === lastType) {
+      const swapIdx = bag.findIndex((t, idx) => idx !== bag.length - 1 && t !== lastType);
+      if (swapIdx !== -1) {
+        const tmp = bag[bag.length - 1];
+        bag[bag.length - 1] = bag[swapIdx];
+        bag[swapIdx] = tmp;
+      }
+    }
+    // Trivia er den ENESTE rene skills-runde (resten er held/kreativitet) —
+    // den skal komme TIDLIGT i cyklussen (blandt de 3 første trukne), ikke
+    // bare "et sted blandt de 6". Ellers kan et kort spil, eller ét der
+    // afsluttes før alle 8/12 runder er spillet, sagtens aldrig nå at vise
+    // den, selvom den reelt lå i posen — hvilket var præcis klagen.
+    const earlySlotStart = bag.length - 3;
+    const triviaIdx = bag.indexOf('trivia');
+    if (triviaIdx !== -1 && triviaIdx < earlySlotStart) {
+      const targetIdx = earlySlotStart + Math.floor(Math.random() * 3);
+      const tmp = bag[triviaIdx];
+      bag[triviaIdx] = bag[targetIdx];
+      bag[targetIdx] = tmp;
+    }
+    state.game.roundTypeBag = bag;
   }
   const type = state.game.roundTypeBag.pop();
   if (type === 'quiplash') {

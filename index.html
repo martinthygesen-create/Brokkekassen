@@ -247,7 +247,17 @@
   .wheel-lights{ position:absolute; inset:0; z-index:1; pointer-events:none; }
   .wheel-bulb{ position:absolute; width:7px; height:7px; margin:-3.5px 0 0 -3.5px; border-radius:50%; background:radial-gradient(circle at 35% 30%, #fff6d0, var(--coin) 60%, #b8860b); box-shadow:0 0 6px rgba(255,201,60,.75); animation:bulbTwinkle 1.6s ease-in-out infinite; }
   @keyframes bulbTwinkle{ 0%,100%{ opacity:1; } 50%{ opacity:.45; } }
-  .wheel-svg{ position:relative; z-index:2; width:100%; height:100%; display:block; filter:drop-shadow(0 6px 14px rgba(0,0,0,.5)); transform-origin:50% 50%; }
+  .wheel-svg{ position:relative; z-index:2; width:100%; height:100%; display:block; filter:drop-shadow(0 6px 14px rgba(0,0,0,.5)); }
+  /* Spinnet roteres på en INDRE <g>, IKKE på selve <svg>-roden — CSS
+     transform på en SVG-rod blander SVG'ens egen koordinat-transform sammen
+     med CSS-boksens, hvilket i praksis viste sig upålideligt på tværs af
+     browsere (tekst-labels der "slipper" deres stykke under et langt/hurtigt
+     spin, mens selve stykkerne roterer korrekt — de deler ikke nødvendigvis
+     samme kompositerings-lag). En <g> med et eksplicit transform-origin i
+     SVG-brugerenheder er entydig og opfører sig ens alle steder.
+     will-change beder browseren kompositere HELE gruppen (stykker+labels)
+     som ét samlet GPU-lag i stedet for at risikere de behandles separat. */
+  .wheel-spin-group{ transform-origin:110px 110px; will-change:transform; }
   .wheel-slice-win{ filter:drop-shadow(0 0 5px rgba(255,201,60,.9)); }
   /* Kort glimt lige når hjulet vises, FØR selve spinnet begynder — så hver
      spiller med det samme kan se (uden at læse) at deres eget ord rent
@@ -540,7 +550,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-68';
+const BUILD_TAG = 'build-2026-08-07-69';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -562,6 +572,16 @@ let lastAnimatedGameKey = null; // undgår at gen-afspille kortets indgangs-anim
 let lastComplaintKey = null; // undgår at genstarte brok-nedtællingens visning ved hvert stille poll
 let wheelRevealTimeout = null; // se scheduleWheelChanceReveal
 let revealAnimationLock = false; // se renderGameScreen — blokerer gen-render mens hjul/mole-afsløring spiller
+// Hvilken hjul-runde (identificeret ved dens phaseStartedAt) DENNE klient
+// selv har set spinnet færdigt for. Wheel's "revealed" kunne IKKE bare
+// regnes ud fra vægur-tid (Date.now()-phaseStartedAt >= WHEEL_REVEAL_DELAY_MS)
+// — en klient der åbner appen/poller EFTER det tidspunkt allerede er passeret
+// (fx var væk et øjeblik) fik vist vinderen med det samme (guld-kabinet,
+// glødende felt, navn), for derefter at blive nulstillet igen når selve
+// spin-animationen startede lokalt (den nulstiller altid opacity/klasser
+// først) — et synligt "afslør, nulstil, spin forfra"-glimt. Nu er "revealed"
+// kun sandt når DENNE klients egen spin-animation faktisk er kørt færdig.
+let wheelRevealedPhaseKey = null;
 let lastAnimatedMrbrokKey = null;
 let lastComplaintKeyMrbrok = null; // samme flimmer-fix som lastComplaintKey, men for MrBrok's egen brok-nedtælling
 
@@ -1908,7 +1928,7 @@ function wheelLightsHtml(n){
   return html;
 }
 
-function buildWheelChanceHtml(prefix, candidates, winner, bannerText, revealed){
+function buildWheelChanceHtml(prefix, candidates, winner, bannerText, revealed, phaseStartedAt){
   if(!winner || !candidates.length) return '';
   // revealed=false (kun brugt af Casinobrok, som venter til et fælles
   // tidspunkt før spinnet — se scheduleWheelChanceReveal): hjulets HVILE-
@@ -1982,14 +2002,16 @@ function buildWheelChanceHtml(prefix, candidates, winner, bannerText, revealed){
   return `
     <div style="text-align:center;">
       <div class="slot-banner">${bannerText}</div>
-      <div class="wheel-cabinet${revealed?' win':''}" id="${prefix}Cabinet" data-winner-cid="${winner.id}">
+      <div class="wheel-cabinet${revealed?' win':''}" id="${prefix}Cabinet" data-winner-cid="${winner.id}" data-phase-started="${phaseStartedAt||''}">
         <div class="wheel-pointer"></div>
         <div class="wheel-wrap">
           <div class="wheel-lights">${wheelLightsHtml(14)}</div>
-          <svg id="${prefix}WheelSvg" class="wheel-svg" viewBox="0 0 220 220" style="transform:rotate(${restAngle}deg);" data-rest-angle="${restAngle}">
-            ${slicesHtml}
-            ${labelsHtml}
-            <circle cx="110" cy="110" r="14" fill="#052024" stroke="${revealed ? WHEEL_COLORS[winnerIdx % WHEEL_COLORS.length] : '#8a6b1f'}" stroke-width="3"></circle>
+          <svg id="${prefix}WheelSvg" class="wheel-svg" viewBox="0 0 220 220">
+            <g id="${prefix}WheelSpinGroup" class="wheel-spin-group" data-rest-angle="${restAngle}" style="transform:rotate(${restAngle}deg);">
+              ${slicesHtml}
+              ${labelsHtml}
+              <circle cx="110" cy="110" r="14" fill="#052024" stroke="${revealed ? WHEEL_COLORS[winnerIdx % WHEEL_COLORS.length] : '#8a6b1f'}" stroke-width="3"></circle>
+            </g>
           </svg>
         </div>
         <div class="slot-winner-name" id="${prefix}WinnerName" style="opacity:${revealed?1:0};">${escapeHtml(winner.name)} vandt! 🍀</div>
@@ -2025,7 +2047,7 @@ function scheduleWheelChanceReveal(prefix, phaseStartedAt){
 
 // Kort visuel bekræftelse af at ens EGET ord rent faktisk er på hjulet —
 // spillerne kan se alle ord med det samme (de er aldrig hemmelige, se
-// buildWheelChanceHtml), men med op til 8 sekunder før spinnet overhovedet
+// buildWheelChanceHtml), men med op til WHEEL_REVEAL_DELAY_MS før spinnet overhovedet
 // begynder er det let at overse hvor ens eget stykke egentlig sidder. Et
 // ord kan optræde på FLERE stykker (se MIN_SLICES-gentagelsen), så alle
 // forekomster glimter, ikke kun den første. Kører kun én gang pr. nyt
@@ -2053,9 +2075,9 @@ function playWheelChanceReveal(prefix){
   const wordEl = document.getElementById(prefix+'WinnerWord');
   if(nameEl) nameEl.style.opacity = '0';
   if(wordEl) wordEl.style.opacity = '0';
-  const svg = document.getElementById(prefix+'WheelSvg');
-  if(!svg){ revealAnimationLock = false; return; }
-  const restAngle = parseFloat(svg.dataset.restAngle || '0');
+  const spinGroup = document.getElementById(prefix+'WheelSpinGroup');
+  if(!spinGroup){ revealAnimationLock = false; return; }
+  const restAngle = parseFloat(spinGroup.dataset.restAngle || '0');
   const spins = 9; // flere omgange for at fylde de længere sekunder ordentligt ud, ikke bare rotere hurtigt forbi
   const finalAngle = restAngle + 360*spins;
   const onDone = ()=>{
@@ -2082,14 +2104,21 @@ function playWheelChanceReveal(prefix){
       cabinet.querySelectorAll('g[data-cid="'+winnerCid+'"] text').forEach(el=>el.classList.add('wheel-winner-text-flash'));
     }
     fireConfetti(cabinet);
+    // Markerer at DENNE klient nu selv har set spinnet for denne runde køre
+    // færdigt — casinobrokHtml's "revealed" bruger dette (ikke vægur-tid) til
+    // at vise vinderen i listen/på hjulet, så en klient der åbner/poller
+    // sent aldrig ser et "afslør, nulstil, spin forfra"-glimt (se
+    // wheelRevealedPhaseKey).
+    const phaseStarted = cabinet.dataset.phaseStarted;
+    if(phaseStarted) wheelRevealedPhaseKey = Number(phaseStarted);
     revealAnimationLock = false; // gen-render må nu godt køre igen (fx en anden spillers "klar"-tryk imens vi ventede)
   };
-  svg.style.transition = 'none';
-  svg.style.transform = 'rotate(0deg)';
+  spinGroup.style.transition = 'none';
+  spinGroup.style.transform = 'rotate(0deg)';
   requestAnimationFrame(()=>{
     requestAnimationFrame(()=>{
-      svg.style.transition = `transform ${WHEEL_SPIN_DURATION_MS/1000}s cubic-bezier(.16,.84,.28,1)`;
-      svg.style.transform = `rotate(${finalAngle}deg)`;
+      spinGroup.style.transition = `transform ${WHEEL_SPIN_DURATION_MS/1000}s cubic-bezier(.16,.84,.28,1)`;
+      spinGroup.style.transform = `rotate(${finalAngle}deg)`;
     });
   });
   setTimeout(onDone, WHEEL_SPIN_DURATION_MS);
@@ -2690,14 +2719,16 @@ function casinobrokHtml(g, cur){
   });
   const winner = candidates.find(c=>c.id===cur.winnerId);
   // Vinderen står allerede fast server-side, men må ikke AFSLØRES visuelt
-  // (hverken på hjulet eller i listen herunder) før det planlagte fælles
-  // spin-tidspunkt — ellers kan man se svaret længe før hjulet overhovedet
-  // begynder at snurre. Se scheduleWheelChanceReveal.
-  const revealed = !cur.phaseStartedAt || (Date.now() - cur.phaseStartedAt) >= WHEEL_REVEAL_DELAY_MS;
+  // (hverken på hjulet eller i listen herunder) FØR DENNE KLIENTS EGET spin
+  // faktisk er kørt færdig (se wheelRevealedPhaseKey) — IKKE ud fra
+  // vægur-tid, som ville afsløre svaret med det samme for en klient der
+  // åbner/poller appen efter det planlagte fælles spin-tidspunkt allerede
+  // er passeret.
+  const revealed = !cur.phaseStartedAt || wheelRevealedPhaseKey === cur.phaseStartedAt;
   return `
     <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
     <div class="game-card" id="gameCard" style="text-align:center;">
-      ${buildWheelChanceHtml('chance', candidates, winner, '🎰 CASINOBROK TRÆKKER LOD', revealed)}
+      ${buildWheelChanceHtml('chance', candidates, winner, '🎰 CASINOBROK TRÆKKER LOD', revealed, cur.phaseStartedAt)}
       ${candidates.map(c=>{
         const won = revealed && c.id === cur.winnerId;
         return `<div class="feed-item${won?' quip-slot-win':''}" style="${won?'border-color:var(--coin); background:rgba(255,201,60,0.16);':''}">
