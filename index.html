@@ -567,7 +567,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-08-74';
+const BUILD_TAG = 'build-2026-08-08-75';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -631,6 +631,10 @@ let mrbrokTipText = null; // client-only "hint til vinkel"-forslag — nulstille
 // synligt fra en tidligere tur.
 let mrbrokRoleRevealed = false;
 let mrbrokRoleRevealedRound = null;
+// Auto-skjules igen efter ~7 sek, samme begrundelse som ovenfor — man skal
+// ikke selv huske at trykke det væk igen, hvis man lægger telefonen fra sig
+// mens feltet er åbent.
+let mrbrokRoleHideTimer = null;
 let roseMatchSelections = {}; // GLOBAL (ikke lokal i bindGameHandlers) så et almindeligt poll-gen-render ikke visker synlige gæt ud, se roseHtml
 let roseMatchSelectionsKey = null; // hvilken runde roseMatchSelections hører til — nulstilles kun ved en ny runde
 
@@ -3524,6 +3528,7 @@ function mrbrokTopicBanner(m){
   if(mrbrokRoleRevealedRound !== m.round){
     mrbrokRoleRevealedRound = m.round;
     mrbrokRoleRevealed = false;
+    if(mrbrokRoleHideTimer){ clearTimeout(mrbrokRoleHideTimer); mrbrokRoleHideTimer = null; }
   }
   if(!mrbrokRoleRevealed){
     return `<div class="game-card mrbrok-role-hidden" id="mrbrokRoleToggle" style="text-align:center; cursor:pointer;">
@@ -3847,7 +3852,14 @@ function mrbrokOverHtml(m, cur){
 function bindMrbrokHandlers(m){
   const cur = m.current;
   const roleToggle = document.getElementById('mrbrokRoleToggle');
-  if(roleToggle) roleToggle.onclick = ()=>{ mrbrokRoleRevealed = !mrbrokRoleRevealed; render(); };
+  if(roleToggle) roleToggle.onclick = ()=>{
+    if(mrbrokRoleHideTimer){ clearTimeout(mrbrokRoleHideTimer); mrbrokRoleHideTimer = null; }
+    mrbrokRoleRevealed = !mrbrokRoleRevealed;
+    if(mrbrokRoleRevealed){
+      mrbrokRoleHideTimer = setTimeout(()=>{ mrbrokRoleHideTimer = null; mrbrokRoleRevealed = false; render(); }, 7000);
+    }
+    render();
+  };
   const instrToggle = document.getElementById('mrbrokInstructionsToggle');
   if(instrToggle) instrToggle.onclick = ()=>{ mrbrokInstructionsOpen = !mrbrokInstructionsOpen; render(); };
   document.querySelectorAll('[data-mrbrok-wager]').forEach(el=>{
