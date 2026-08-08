@@ -338,6 +338,32 @@ function neededVotes(totalMembers) {
   return Math.min(others, Math.max(2, Math.ceil((others * 2) / 3)));
 }
 
+// Bots (test-spillere, se room.js's join-handler) kan aldrig stemme — de er
+// bevidst skjult fra afstemnings-UI'en (se index.html) — så en anklage der
+// beregnede sit "need" ud fra state.members.length (bots iberegnet) kunne
+// blive hængende under det nødvendige antal for evigt. Genberegner "need" ud
+// fra kun de RIGTIGE medlemmer, og flytter enhver afstemning der allerede
+// har nok stemmer over i feedet med det samme. Kaldes både fra hver
+// brok-handling og fra state.js's poll, så en gammel hængende anklage
+// selv-helbreder uden at nogen behøver stemme igen.
+function healPendingVotes(state) {
+  if (!state.pendingList || !state.pendingList.length) return [];
+  const realMemberCount = state.members.filter(m => !m.isBot).length;
+  const correctNeed = neededVotes(realMemberCount);
+  state.pendingList.forEach(p => { if (p.need > correctNeed) p.need = correctNeed; });
+
+  const confirmedIds = [];
+  state.pendingList = state.pendingList.filter(p => {
+    if (p.votes.length < p.need) return true;
+    const free = !!(state.freeBrokMemberId && state.freeBrokMemberId === p.memberId);
+    state.events.push({ id: p.id, memberId: p.memberId, message: p.message, ts: Date.now(), votes: p.votes, free });
+    if (free) state.freeBrokMemberId = null;
+    confirmedIds.push(p.id);
+    return false;
+  });
+  return confirmedIds;
+}
+
 // MrBrok gemmer en hemmelighed i state.mrbrok (hvem der er MrBrok, og selve
 // emnet) — men hele state sendes som én samlet JSON-blob til klienten ved
 // hver poll/handling, så vi er nødt til at maskere de hemmelige felter ud
@@ -363,4 +389,4 @@ function redactStateFor(state, viewerId) {
   return { ...state, mrbrok: safe };
 }
 
-module.exports = { getState, setState, mutateState, ApiError, deleteRoom, createRoom, genRoomId, uid, emptyState, neededVotes, isAdmin, settleRound, updateStreaksAndDrawLottery, processPendingExpiry, checkSilenceNudge, checkPoolMilestone, redactStateFor };
+module.exports = { getState, setState, mutateState, ApiError, deleteRoom, createRoom, genRoomId, uid, emptyState, neededVotes, healPendingVotes, isAdmin, settleRound, updateStreaksAndDrawLottery, processPendingExpiry, checkSilenceNudge, checkPoolMilestone, redactStateFor };

@@ -1,4 +1,4 @@
-const { getState, setState, uid, neededVotes, isAdmin, checkPoolMilestone, redactStateFor } = require('./_lib/store');
+const { getState, setState, uid, neededVotes, healPendingVotes, isAdmin, checkPoolMilestone, redactStateFor } = require('./_lib/store');
 const { pushToMembers } = require('./_lib/push');
 
 const MILESTONE_LINES = [
@@ -17,9 +17,22 @@ module.exports = async (req, res) => {
     const state = await getState(roomId);
     if (!state) return res.status(404).json({ error: 'ukendt brokkekasse' });
 
+    // Selv-helbreder ÅBNE afstemninger der sidder fast pga. bots iberegnet i
+    // "need" (se healPendingVotes i store.js) — kaldes på ENHVER brok-
+    // handling, ikke kun 'vote', så en hængende anklage rettes med det
+    // samme uden at nogen behøver stemme igen.
+    const healedConfirmedIds = healPendingVotes(state);
+    if (healedConfirmedIds.length) {
+      checkPoolMilestone(state); // ryddet op i tælleren, selve push-linjen er ikke vigtig nok til at vente på her
+      await setState(roomId, state);
+    }
+
     if (action === 'vote') {
       const { voterId, pendingId } = req.body || {};
       if (!voterId || !pendingId) return res.status(400).json({ error: 'mangler data' });
+      if (healedConfirmedIds.includes(pendingId)) {
+        return res.status(200).json({ state: redactStateFor(state, voterId), confirmed: true, free: false });
+      }
       const pending = state.pendingList.find(p => p.id === pendingId);
       if (!pending) return res.status(409).json({ error: 'afstemningen er ikke længere aktiv — genindlæs og prøv igen' });
 
@@ -27,22 +40,9 @@ module.exports = async (req, res) => {
       if (idx === -1) pending.votes.push(voterId);
       else pending.votes.splice(idx, 1);
 
-      let confirmed = false;
-      let free = false;
-      if (pending.votes.length >= pending.need) {
-        free = !!(state.freeBrokMemberId && state.freeBrokMemberId === pending.memberId);
-        state.events.push({
-          id: pending.id,
-          memberId: pending.memberId,
-          message: pending.message,
-          ts: Date.now(),
-          votes: pending.votes,
-          free,
-        });
-        if (free) state.freeBrokMemberId = null;
-        state.pendingList = state.pendingList.filter(p => p.id !== pendingId);
-        confirmed = true;
-      }
+      const confirmedIds = healPendingVotes(state);
+      const confirmed = confirmedIds.includes(pendingId);
+      const free = confirmed && !!(state.events.find(e => e.id === pendingId) || {}).free;
       const milestone = confirmed ? checkPoolMilestone(state) : null;
       await setState(roomId, state);
 
@@ -86,7 +86,7 @@ module.exports = async (req, res) => {
       message: cleanMessage,
       votes: initialVotes,
       openedAt: Date.now(),
-      need: neededVotes(state.members.length),
+      need: neededVotes(state.members.filter(m => !m.isBot).length),
     });
     await setState(roomId, state);
 

@@ -1,4 +1,4 @@
-const { getState, setState, mutateState, processPendingExpiry, checkSilenceNudge, redactStateFor } = require('./_lib/store');
+const { getState, setState, mutateState, processPendingExpiry, checkSilenceNudge, healPendingVotes, redactStateFor } = require('./_lib/store');
 const { expireGamePhaseIfDue, BROKSPILLET_AUTO_MS, COMPLAINT_COUNTDOWN_MS } = require('./_lib/gameFlow');
 const { expireMrbrokPhaseIfDue } = require('./_lib/mrbrokFlow');
 const { pushToMembers } = require('./_lib/push');
@@ -48,7 +48,11 @@ module.exports = async (req, res) => {
     // hængende anklager for reminder/udløb.
     const dueReminders = processPendingExpiry(state);
     const nudgeSilence = checkSilenceNudge(state);
-    if (dueReminders.length || nudgeSilence) await setState(roomId, state);
+    // Selv samme selv-helbredning som brok.js — fanger en anklage der blev
+    // hængende (fx pga. bots i "need") uden at kræve at nogen rører selve
+    // afstemningen igen, siden klienterne poller herind konstant.
+    const healedIds = healPendingVotes(state);
+    if (dueReminders.length || nudgeSilence || healedIds.length) await setState(roomId, state);
 
     // Samme opportunistiske mønster for Brokspillets fase-timing — men denne
     // mutation involverer Math.random() (Chancen, indhold osv.), så den skal
