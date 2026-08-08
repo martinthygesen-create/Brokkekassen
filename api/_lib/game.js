@@ -416,6 +416,15 @@ function buildRoseDerangement(ids) {
 // brok-historik, uanset hvem der spiller med lige nu.
 const ROUND_TYPES = ['quiplash', 'truefalse', 'trivia', 'guessbrok', 'casinobrok', 'rose'];
 
+// Casinobrok (hjul) og rose er rene "held/fyld"-runder uden reelt
+// færdigheds- eller vote-element — begrænses til HØJST ÉN gang pr. HELE
+// spillet (ikke bare pr. 6-cyklus som resten), så et langt spil på 8/12
+// runder ikke viser den samme hjul-tur to gange. Quiplash er bevidst IKKE
+// med her, selvom den nogle gange (uafgjort/2 spillere) også lander i
+// Chancen — resten af tiden er den en rigtig afstemningsrunde, ikke ren
+// tilfældighed, så den skal stadig kunne gentages på tværs af cyklusser.
+const ONCE_PER_GAME_TYPES = ['casinobrok', 'rose'];
+
 function beginRound(state, players) {
   state.game.round += 1;
   const playerIds = players.map(m => m.id);
@@ -429,13 +438,15 @@ function beginRound(state, players) {
   // rigtig quiz-runde overhovedet.
   if (!state.game.roundTypeBag || !state.game.roundTypeBag.length) {
     const lastType = state.game.current && state.game.current.type;
-    const bag = shuffle(ROUND_TYPES.slice());
+    if (!state.game.usedOnceTypes) state.game.usedOnceTypes = [];
+    const pool = ROUND_TYPES.filter(t => !state.game.usedOnceTypes.includes(t));
+    const bag = shuffle(pool.slice());
     // pop() trækker fra ENDEN af arrayet — så bag[bag.length-1] er den
     // NÆSTE der bliver trukket. Uden dette tjek kunne en frisk pose (8+
     // runder, ny cyklus efter alle 6 er brugt) tilfældigvis starte med
     // PRÆCIS samme type som lige blev spillet — en synlig gentagelse i
     // gentagelse, selvom det teknisk set er to uafhængige cyklusser.
-    if (lastType && bag[bag.length - 1] === lastType) {
+    if (lastType && bag.length > 1 && bag[bag.length - 1] === lastType) {
       const swapIdx = bag.findIndex((t, idx) => idx !== bag.length - 1 && t !== lastType);
       if (swapIdx !== -1) {
         const tmp = bag[bag.length - 1];
@@ -448,10 +459,10 @@ function beginRound(state, players) {
     // bare "et sted blandt de 6". Ellers kan et kort spil, eller ét der
     // afsluttes før alle 8/12 runder er spillet, sagtens aldrig nå at vise
     // den, selvom den reelt lå i posen — hvilket var præcis klagen.
-    const earlySlotStart = bag.length - 3;
+    const earlySlotStart = Math.max(0, bag.length - 3);
     const triviaIdx = bag.indexOf('trivia');
     if (triviaIdx !== -1 && triviaIdx < earlySlotStart) {
-      const targetIdx = earlySlotStart + Math.floor(Math.random() * 3);
+      const targetIdx = earlySlotStart + Math.floor(Math.random() * (bag.length - earlySlotStart));
       const tmp = bag[triviaIdx];
       bag[triviaIdx] = bag[targetIdx];
       bag[targetIdx] = tmp;
@@ -459,6 +470,9 @@ function beginRound(state, players) {
     state.game.roundTypeBag = bag;
   }
   const type = state.game.roundTypeBag.pop();
+  if (ONCE_PER_GAME_TYPES.includes(type) && !state.game.usedOnceTypes.includes(type)) {
+    state.game.usedOnceTypes.push(type);
+  }
   if (type === 'quiplash') {
     // Ved præcis 2 spillere er der ingen rigtig afstemning (se
     // resolveQuiplashRandom) — runden ender ALTID i Chancen, så prompten er
@@ -519,7 +533,11 @@ function beginRound(state, players) {
     // sagtens skrive samme ord, hver indsendelse er sit eget lod uanset
     // tekst, så det er reelt en tilfældig person der vindes over, bare
     // camoufleret som et ord-lod i stedet for en direkte navnetrækning.
-    state.game.current = { type, phase: 'write', words: {} };
+    // chanceVisual afgøres HER (server-side, én gang), ikke klient-side —
+    // ellers ville forskellige spilleres skærme kunne vise FORSKELLIGE
+    // visninger (hjul vs. spillemaskine) af samme runde. Ren kosmetisk
+    // variation, ikke en del af selve tilfældighedsmekanikken.
+    state.game.current = { type, phase: 'write', words: {}, chanceVisual: Math.random() < 0.5 ? 'wheel' : 'slot' };
   } else {
     // "Rose" — ikke alt skal handle om brok. Hver spiller skriver en ægte,
     // kort ros til én tilfældigt tildelt medspiller (aldrig sig selv), og

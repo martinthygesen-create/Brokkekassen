@@ -550,7 +550,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-07-69';
+const BUILD_TAG = 'build-2026-08-07-70';
 const params = new URLSearchParams(location.search);
 let roomId = (params.get('r') || localStorage.getItem('bk_lastRoom') || null);
 if(roomId) roomId = roomId.toLowerCase();
@@ -572,16 +572,17 @@ let lastAnimatedGameKey = null; // undgår at gen-afspille kortets indgangs-anim
 let lastComplaintKey = null; // undgår at genstarte brok-nedtællingens visning ved hvert stille poll
 let wheelRevealTimeout = null; // se scheduleWheelChanceReveal
 let revealAnimationLock = false; // se renderGameScreen — blokerer gen-render mens hjul/mole-afsløring spiller
-// Hvilken hjul-runde (identificeret ved dens phaseStartedAt) DENNE klient
-// selv har set spinnet færdigt for. Wheel's "revealed" kunne IKKE bare
-// regnes ud fra vægur-tid (Date.now()-phaseStartedAt >= WHEEL_REVEAL_DELAY_MS)
-// — en klient der åbner appen/poller EFTER det tidspunkt allerede er passeret
-// (fx var væk et øjeblik) fik vist vinderen med det samme (guld-kabinet,
-// glødende felt, navn), for derefter at blive nulstillet igen når selve
-// spin-animationen startede lokalt (den nulstiller altid opacity/klasser
-// først) — et synligt "afslør, nulstil, spin forfra"-glimt. Nu er "revealed"
-// kun sandt når DENNE klients egen spin-animation faktisk er kørt færdig.
-let wheelRevealedPhaseKey = null;
+// Hvilken Chancen-runde (identificeret ved dens phaseStartedAt) DENNE klient
+// selv har set afgørelsen (hjul ELLER spillemaskine, se casinobrokHtml's
+// chanceVisual) færdig for. "revealed" kunne IKKE bare regnes ud fra
+// vægur-tid (Date.now()-phaseStartedAt >= WHEEL_REVEAL_DELAY_MS) — en klient
+// der åbner appen/poller EFTER det tidspunkt allerede er passeret (fx var
+// væk et øjeblik) fik vist vinderen med det samme (guld-kabinet, glødende
+// felt, navn), for derefter at blive nulstillet igen når selve animationen
+// startede lokalt (den nulstiller altid opacity/klasser først) — et synligt
+// "afslør, nulstil, forfra"-glimt. Nu er "revealed" kun sandt når DENNE
+// klients egen animation faktisk er kørt færdig.
+let chanceRevealedPhaseKey = null;
 let lastAnimatedMrbrokKey = null;
 let lastComplaintKeyMrbrok = null; // samme flimmer-fix som lastComplaintKey, men for MrBrok's egen brok-nedtælling
 
@@ -1818,8 +1819,12 @@ function renderGameScreen(){
     playMoleChanceReveal('chance');
   }
   if(isNewGamePhase && g.current && g.current.type === 'casinobrok' && g.current.phase === 'results'){
-    scheduleWheelChanceReveal('chance', g.current.phaseStartedAt);
-    pulseMyWordOnWheel('chance');
+    if(g.current.chanceVisual === 'slot'){
+      scheduleChanceReveal(playSlotChanceReveal, 'chance', g.current.phaseStartedAt);
+    }else{
+      scheduleChanceReveal(playWheelChanceReveal, 'chance', g.current.phaseStartedAt);
+      pulseMyWordOnWheel('chance');
+    }
   }
 }
 
@@ -1833,8 +1838,9 @@ const SLOT_REEL_H = 58;
 // gen-render (fx fordi en anden spiller trykker "klar" mens man kigger på
 // resultatet) viser den korrekte, landede tilstand med det samme — kun den
 // FØRSTE visning kører den egentlige spin-animation (se playSlotChanceReveal).
-function buildSlotCabinetHtml(prefix, candidates, winner, bannerText){
+function buildSlotCabinetHtml(prefix, candidates, winner, bannerText, revealed, phaseStartedAt){
   if(!winner || !candidates.length) return '';
+  if(revealed === undefined) revealed = true;
   function buildStrip(){
     const n = 10 + Math.floor(Math.random()*4);
     const syms = [];
@@ -1851,9 +1857,10 @@ function buildSlotCabinetHtml(prefix, candidates, winner, bannerText){
   return `
     <div style="text-align:center;">
       <div class="slot-banner">${bannerText}</div>
-      <div class="slot-cabinet win" id="${prefix}Cabinet">
+      <div class="slot-cabinet${revealed?' win':''}" id="${prefix}Cabinet" data-winner-cid="${winner.id}" data-phase-started="${phaseStartedAt||''}">
         <div class="slot-window">${reelsHtml}</div>
-        <div class="slot-winner-name" id="${prefix}WinnerName" style="opacity:1;">${escapeHtml(winner.name)} vandt! 🍀</div>
+        <div class="slot-winner-name" id="${prefix}WinnerName" style="opacity:${revealed?1:0};">${escapeHtml(winner.name)} vandt! 🍀</div>
+        ${winner.label ? `<div class="slot-winner-word" id="${prefix}WinnerWord" style="opacity:${revealed?1:0};">med ordet "${escapeHtml(winner.label)}"</div>` : ''}
       </div>
     </div>
   `;
@@ -1864,13 +1871,19 @@ function buildSlotCabinetHtml(prefix, candidates, winner, bannerText){
 // dem rulle ned til den position markup'et allerede sagde de skulle lande
 // på. Kører kun én gang pr. ny resultat-fase, styret af isNewGamePhase i
 // renderGameScreen — den bagvedliggende vinder er allerede afgjort
-// server-side, dette er ren visuel spænding, ikke selve afgørelsen.
+// server-side, dette er ren visuel spænding, ikke selve afgørelsen. Samme
+// revealAnimationLock/chanceRevealedPhaseKey-mønster som hjulet (se
+// playWheelChanceReveal) — uden det kunne et gen-render midt i spinnet
+// (fx en anden spillers "klar"-tryk) nulstille hjulene halvvejs.
 function playSlotChanceReveal(prefix){
   const cabinet = document.getElementById(prefix+'Cabinet');
   if(!cabinet) return;
+  revealAnimationLock = true; // se renderGameScreen — intet gen-render må afbryde spinnet
   cabinet.classList.remove('win');
   const nameEl = document.getElementById(prefix+'WinnerName');
+  const wordEl = document.getElementById(prefix+'WinnerWord');
   if(nameEl) nameEl.style.opacity = '0';
+  if(wordEl) wordEl.style.opacity = '0';
   const strips = [...cabinet.querySelectorAll('.reel-strip')];
   const durations = [1.0, 1.5, 2.1];
   let doneCount = 0;
@@ -1880,7 +1893,14 @@ function playSlotChanceReveal(prefix){
       if(typeof gsap !== 'undefined') gsap.fromTo(nameEl, {opacity:0, y:6}, {opacity:1, y:0, duration:.4, ease:'power2.out'});
       else nameEl.style.opacity = '1';
     }
+    if(wordEl){
+      if(typeof gsap !== 'undefined') gsap.fromTo(wordEl, {opacity:0, y:6}, {opacity:1, y:0, duration:.4, ease:'power2.out', delay:.3});
+      else wordEl.style.opacity = '1';
+    }
     fireConfetti(cabinet);
+    const phaseStarted = cabinet.dataset.phaseStarted;
+    if(phaseStarted) chanceRevealedPhaseKey = Number(phaseStarted);
+    revealAnimationLock = false; // gen-render må nu godt køre igen
   };
   strips.forEach((strip, ri) => {
     const distance = strip.children.length ? (strip.children.length-1)*SLOT_REEL_H : 0;
@@ -2038,11 +2058,17 @@ function buildWheelChanceHtml(prefix, candidates, winner, bannerText, revealed, 
 // telefon der lige er kommet tilbage), spilles det bare med det samme.
 const WHEEL_REVEAL_DELAY_MS = 4000;
 const WHEEL_SPIN_DURATION_MS = 6000; // ægte 5-7 sekunders spin, ikke et hop
-function scheduleWheelChanceReveal(prefix, phaseStartedAt){
+// Fælles ventetid før BEGGE Casinobrok-visninger (hjul eller spillemaskine,
+// se casinobrokHtml's chanceVisual) starter — samme princip uanset hvilken
+// af de to der er valgt for denne runde.
+function scheduleChanceReveal(playFn, prefix, phaseStartedAt){
   clearTimeout(wheelRevealTimeout);
   const target = (phaseStartedAt || Date.now()) + WHEEL_REVEAL_DELAY_MS;
   const delay = Math.max(0, target - Date.now());
-  wheelRevealTimeout = setTimeout(()=> playWheelChanceReveal(prefix), delay);
+  wheelRevealTimeout = setTimeout(()=> playFn(prefix), delay);
+}
+function scheduleWheelChanceReveal(prefix, phaseStartedAt){
+  scheduleChanceReveal(playWheelChanceReveal, prefix, phaseStartedAt);
 }
 
 // Kort visuel bekræftelse af at ens EGET ord rent faktisk er på hjulet —
@@ -2108,9 +2134,9 @@ function playWheelChanceReveal(prefix){
     // færdigt — casinobrokHtml's "revealed" bruger dette (ikke vægur-tid) til
     // at vise vinderen i listen/på hjulet, så en klient der åbner/poller
     // sent aldrig ser et "afslør, nulstil, spin forfra"-glimt (se
-    // wheelRevealedPhaseKey).
+    // chanceRevealedPhaseKey).
     const phaseStarted = cabinet.dataset.phaseStarted;
-    if(phaseStarted) wheelRevealedPhaseKey = Number(phaseStarted);
+    if(phaseStarted) chanceRevealedPhaseKey = Number(phaseStarted);
     revealAnimationLock = false; // gen-render må nu godt køre igen (fx en anden spillers "klar"-tryk imens vi ventede)
   };
   spinGroup.style.transition = 'none';
@@ -2720,15 +2746,17 @@ function casinobrokHtml(g, cur){
   const winner = candidates.find(c=>c.id===cur.winnerId);
   // Vinderen står allerede fast server-side, men må ikke AFSLØRES visuelt
   // (hverken på hjulet eller i listen herunder) FØR DENNE KLIENTS EGET spin
-  // faktisk er kørt færdig (se wheelRevealedPhaseKey) — IKKE ud fra
+  // faktisk er kørt færdig (se chanceRevealedPhaseKey) — IKKE ud fra
   // vægur-tid, som ville afsløre svaret med det samme for en klient der
   // åbner/poller appen efter det planlagte fælles spin-tidspunkt allerede
   // er passeret.
-  const revealed = !cur.phaseStartedAt || wheelRevealedPhaseKey === cur.phaseStartedAt;
+  const revealed = !cur.phaseStartedAt || chanceRevealedPhaseKey === cur.phaseStartedAt;
   return `
     <div class="game-badge" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"><span>Runde ${g.round}/${g.totalRounds} · Resultat</span><span id="gameTimer" style="font-size:16px; font-weight:800; opacity:1;"></span></div>
     <div class="game-card" id="gameCard" style="text-align:center;">
-      ${buildWheelChanceHtml('chance', candidates, winner, '🎰 CASINOBROK TRÆKKER LOD', revealed, cur.phaseStartedAt)}
+      ${cur.chanceVisual === 'slot'
+        ? buildSlotCabinetHtml('chance', candidates, winner, '🎰 CASINOBROK TRÆKKER LOD', revealed, cur.phaseStartedAt)
+        : buildWheelChanceHtml('chance', candidates, winner, '🎰 CASINOBROK TRÆKKER LOD', revealed, cur.phaseStartedAt)}
       ${candidates.map(c=>{
         const won = revealed && c.id === cur.winnerId;
         return `<div class="feed-item${won?' quip-slot-win':''}" style="${won?'border-color:var(--coin); background:rgba(255,201,60,0.16);':''}">
