@@ -600,7 +600,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-09-85';
+const BUILD_TAG = 'build-2026-08-09-86';
 // Skal matche api/_lib/gameFlow.js's CASINOBROK_BET_*-konstanter — kun brugt
 // til visning her (server afgør altid den reelle udbetaling).
 const CASINOBROK_BET_SAFE_POINTS = 1;
@@ -4245,7 +4245,15 @@ function renderComplainerScreen(){
 // Brokkeri-splashes, men uden deres egen dedikerede tilstand pr. type —
 // nøglen (fx "round:<startedAt>:<round>") sikrer den kun vises ÉN gang pr.
 // overgang, ikke ved hvert almindeligt poll/gen-render.
-function showComplainerSuspenseSplash(key, emoji, title, subtitle, autoCloseMs){
+// extraHtml er valgfri, IKKE escaped (i modsætning til title/subtitle) —
+// bruges til at folde det kompakte scoreboard ind i runde-start-beatsne
+// (se maybeShowComplainerSuspenseSplashes), fordi Martin bad om at
+// scoreboardet vises MELLEM runderne, ikke permanent på complain/vote/bet-
+// skærmene (se complainerScoreboardHtml's kaldesteder, som blev fjernet
+// derfra). Samme "vises kun én gang pr. overgang, lukker selv"-disciplin
+// gælder også med extraHtml — det er stadig et forbigående beat, ikke en
+// ny permanent placering.
+function showComplainerSuspenseSplash(key, emoji, title, subtitle, autoCloseMs, extraHtml){
   if(complainerSuspenseShownKeys.has(key)) return;
   complainerSuspenseShownKeys.add(key);
   const backdropHtml = `<div class="complainer-splash-backdrop" id="complainerSuspenseBackdrop"><div class="complainer-splash" id="complainerSuspenseInner"></div></div>`;
@@ -4259,6 +4267,7 @@ function showComplainerSuspenseSplash(key, emoji, title, subtitle, autoCloseMs){
     <div style="font-size:52px;">${emoji}</div>
     <h3>${escapeHtml(title)}</h3>
     ${subtitle ? `<p>${escapeHtml(subtitle)}</p>` : ''}
+    ${extraHtml || ''}
   `;
   if(typeof gsap !== 'undefined') gsap.fromTo(inner, {opacity:0, scale:.95}, {opacity:1, scale:1, duration:.35, ease:'back.out(1.6)'});
   setTimeout(close, autoCloseMs || 1800);
@@ -4269,11 +4278,19 @@ function showComplainerSuspenseSplash(key, emoji, title, subtitle, autoCloseMs){
 // før rundens mistanke-resultat vises (bet-fasen afslører hvem der topper),
 // og lige før det endelige udfald (gameover). Samme "vises kun én gang pr.
 // overgang"-filosofi som resten af splashene i appen.
+//
+// Scoreboardet (complainerScoreboardHtml) foldes ind i de to
+// runde-start-agtige beats herunder (normal runde-start + den ekstra sidste
+// afstemningsrunde) — IKKE på complain/vote/bet-skærmene selv. Martins
+// eksplicitte ønske efter playtesten: stillingen skal vises MELLEM
+// runderne, ikke sidde permanent fremme mens man rent faktisk spiller. Da
+// splashen i forvejen kun vises én gang pr. overgang og lukker sig selv, får
+// scoreboardet automatisk samme "kort glimt, så væk igen"-egenskab.
 function maybeShowComplainerSuspenseSplashes(c){
   if(!c || !c.active || !c.current) return;
   const cur = c.current;
   if(cur.type === 'complain' && cur.turnIndex === 0 && cur.round > 1){
-    showComplainerSuspenseSplash('cxround:'+c.startedAt+':'+cur.round, '🪤', `Runde ${cur.round} starter...`, 'Nye, skarpere spørgsmål venter.', 1800);
+    showComplainerSuspenseSplash('cxround:'+c.startedAt+':'+cur.round, '🪤', `Runde ${cur.round} starter...`, 'Nye, skarpere spørgsmål venter.', 2400, complainerScoreboardHtml(c));
   }
   // Den ekstra, sidste afstemningsrunde (se beginFinalVoteRound i
   // complainerFlow.js) — ingen ny brok-fase, kun ét sidste strategisk
@@ -4281,7 +4298,7 @@ function maybeShowComplainerSuspenseSplashes(c){
   // almindelige runde-start-splash ovenfor, fordi den IKKE varsler nye
   // spørgsmål (der kommer ingen), kun en sidste chance for at flytte mistanken.
   if(cur.type === 'vote' && cur.round > c.totalRounds){
-    showComplainerSuspenseSplash('cxfinalvote:'+c.startedAt, '🚨', 'Sidste afstemning!', 'Ingen nye spørgsmål — men mistanken kan stadig nå at flytte sig.', 2200);
+    showComplainerSuspenseSplash('cxfinalvote:'+c.startedAt, '🚨', 'Sidste afstemning!', 'Ingen nye spørgsmål — men mistanken kan stadig nå at flytte sig.', 2800, complainerScoreboardHtml(c));
   }
   if(cur.type === 'bet'){
     showComplainerSuspenseSplash('cxresults:'+c.startedAt+':'+cur.round, '🗳️', 'Stemmerne er talt op...', 'Hvem topper mistanken?', 1600);
@@ -4607,7 +4624,6 @@ function complainerComplainHtml(c, cur){
   if(isSpeaker){
     return `
       ${badge}
-      ${complainerScoreboardHtml(c)}
       ${complainerRoleBanner(c)}
       ${complainerTurnOrderHtml(c, cur)}
       <div class="game-card" id="complainerCard" style="text-align:center; border-color:rgba(255,122,61,0.5); background:rgba(255,122,61,0.08);">
@@ -4622,7 +4638,6 @@ function complainerComplainHtml(c, cur){
   }
   return `
     ${badge}
-    ${complainerScoreboardHtml(c)}
     <div class="mrbrok-dim">
       ${complainerRoleBanner(c)}
       ${complainerTurnOrderHtml(c, cur)}
@@ -4653,11 +4668,10 @@ function complainerVoteHtml(c, cur){
   const eligible = c.players.length;
   const already = profile && cur.votes && cur.votes[profile.memberId] !== undefined;
   if(already){
-    return `${badge}${complainerScoreboardHtml(c)}<div class="empty-state"><span class="emoji">🤫</span><b>Din stemme er registreret</b>Ingen facit endnu — det er ren mistanke, ikke et bevis.</div>${gameProgressHtml(cur.voteCount||0, eligible, 'har stemt')}${complainerComplaintBlockHtml(c, cur)}`;
+    return `${badge}<div class="empty-state"><span class="emoji">🤫</span><b>Din stemme er registreret</b>Ingen facit endnu — det er ren mistanke, ikke et bevis.</div>${gameProgressHtml(cur.voteCount||0, eligible, 'har stemt')}${complainerComplaintBlockHtml(c, cur)}`;
   }
   return `
     ${badge}
-    ${complainerScoreboardHtml(c)}
     <p class="hint" style="text-align:center; margin:0 0 8px; color:rgba(255,247,232,0.7);"><b style="color:rgba(255,247,232,0.92);">Hvem tror du er Den Store Brokker?</b> Ingen ved det endnu, heller ikke dem selv — ren mavefornemmelse. Din stemme er hemmelig indtil alle har stemt.</p>
     ${complainerVoteOptionsHtml(c, cur)}
     ${gameProgressHtml(cur.voteCount||0, eligible, 'har stemt')}
@@ -4710,11 +4724,10 @@ function complainerBetHtml(c, cur){
       : `<p class="hint" style="color:rgba(255,247,232,0.7); text-align:center;">😬 ${escapeHtml(gm?gm.name:'?')} var IKKE topmest mistænkt denne gang — satsningen gik tabt.</p>`;
   })() : '';
   if(!isTop){
-    return `${badge}${complainerScoreboardHtml(c)}${gambleNote}<div class="empty-state"><span class="emoji">😳</span><b>${escapeHtml(topMember?topMember.name:'?')} er rundens mest mistænkte</b>${isFinalRound ? 'De banker nu deres sidste point, lige inden afsløringen.' : 'De vælger nu om de vil banke et sikkert point, eller satse dobbelt op.'}</div>${complainerChallengeBlockHtml(c, cur)}`;
+    return `${badge}${gambleNote}<div class="empty-state"><span class="emoji">😳</span><b>${escapeHtml(topMember?topMember.name:'?')} er rundens mest mistænkte</b>${isFinalRound ? 'De banker nu deres sidste point, lige inden afsløringen.' : 'De vælger nu om de vil banke et sikkert point, eller satse dobbelt op.'}</div>${complainerChallengeBlockHtml(c, cur)}`;
   }
   return `
     ${badge}
-    ${complainerScoreboardHtml(c)}
     ${gambleNote}
     ${complainerChallengeBlockHtml(c, cur)}
     <div class="game-card" id="complainerCard" style="text-align:center;">
