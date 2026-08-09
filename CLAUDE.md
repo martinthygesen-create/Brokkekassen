@@ -1,0 +1,47 @@
+# CLAUDE.md
+
+Instruktioner og kontekst til fremtidige Claude Code-sessioner på dette repo.
+
+## Projektet
+
+Brokkekassen er en dansk familie-ferie-PWA med et fælles regnskab ("krukken")
+og to mini-spil, delt via `activeApp` i `index.html`:
+
+- **Brokspillet** (`activeApp = 'spil'`) — quiz/afstemnings-mini-spil (quiplash,
+  sandt/falsk, trivia, guessbrok, casinobrok, rose). Logik i `api/game.js`,
+  `api/_lib/game.js`, `api/_lib/gameFlow.js`.
+- **MrBrok** (`activeApp = 'mrbrok'`) — Mr. White-agtigt social deduktionsspil.
+  Logik i `api/mrbrok.js`, `api/_lib/mrbrok.js`, `api/_lib/mrbrokFlow.js`.
+
+Begge deler rummets lobby/medlemmer (`state.members`) og regnskab, men har hver
+sin egen `state.game`/`state.mrbrok`-gren og kan ikke være aktive samtidig i
+samme rum.
+
+## Planlagt: "The Big Complainer" — VIGTIGT arkitektur-krav
+
+Der er under overvejelse et **helt nyt, tredje standalone spil** (arbejdstitel
+"The Big Complainer" / "Den Store Brokker"), IKKE en videreudvikling eller
+variant af MrBrok — selvom det oprindeligt blev diskuteret som "et omvendt
+MrBrok".
+
+**Når/hvis dette bygges, skal det:**
+- Være sit eget spil med egen `state`-gren (fx `state.bigComplainer`), egen
+  `api/bigcomplainer.js` + `api/_lib/bigComplainerFlow.js`, egen
+  `activeApp`-værdi — ikke bygges ind i eller forgrene sig fra
+  `state.mrbrok`/`api/mrbrok.js`.
+- Må godt **genbruge delte elementer** hvor det giver mening — fx rummets
+  lobby/spillervalg-UI, medlemslisten, push-mønsteret, `mutateState`-CAS-
+  mønsteret osv. — men kun ved at referere til de samme DELTE helper-
+  funktioner/komponenter, aldrig ved at hooke ind i eller forgrene MrBroks
+  egen state/flow.
+- **Må ikke kunne påvirke Brokspillet eller MrBrok** — hverken deres state,
+  deres "kun ét spil aktivt ad gangen i et rum"-regel (det tredje spil skal
+  indgå i den samme gensidige udelukkelse, ikke omgå den), eller deres
+  indholdspuljer (fx MrBrok's `MRBROK_TOPICS`/`pickTopic`-rotation).
+
+Kort sagt: samme fundament, tre uafhængige spil ovenpå — ikke ét spil der
+forgrener sig i tre retninger.
+
+Koncept-noter (arketyper, opbygningsrunder, mistankeafstemning, organisk
+afsløring, gættefinale) er ikke skrevet ned et fast sted endnu — spørg
+Martin om det fulde koncept-notat før implementering påbegyndes.
