@@ -1,4 +1,11 @@
 const { redis } = require('./redis');
+// Det Store Brokkeri ("The Big Complainer") — helt selvstændigt tredje spil (se
+// CLAUDE.md), egen state-gren (state.complainer), eget flow
+// (_lib/complainerFlow.js). Kun redaktions-hjælperen bruges herfra, og kun
+// fra _lib/complainer.js (INDHOLD, ingen afhængighed af store.js), for at
+// undgå en cirkulær require med _lib/complainerFlow.js (som selv bruger
+// store.js's uid()).
+const { redactComplainerFor } = require('./complainer');
 
 // Fejl med en HTTP-statuskode knyttet til sig — kastes inde fra en
 // mutateState-mutator for at afbryde MED DET SAMME (ingen retry, en
@@ -45,11 +52,15 @@ function emptyState() {
     gameStats: {}, // memberId -> {played, wins} — highscore på tværs af afsluttede Brokspil-runder
     mrbrok: { active: false }, // MrBrok — se api/mrbrok.js + api/_lib/mrbrok.js
     mrbrokStats: {}, // memberId -> {played, wins} — highscore på tværs af afsluttede MrBrok-runder
-    // Sat én gang ved oprettelse — Brokkekassen, Brokspillet og MrBrok er
-    // ligestillede valg, man kan vælge en, flere eller alle. Styrer kun hvad der vises.
+    complainer: { active: false }, // Det Store Brokkeri — se api/complainer.js + api/_lib/complainerFlow.js. Tredje, HELT selvstændige spil — ikke en gren af MrBrok, se CLAUDE.md.
+    complainerStats: {}, // memberId -> {played, wins} — highscore på tværs af afsluttede Det Store Brokkeri-runder
+    // Sat én gang ved oprettelse — Brokkekassen, Brokspillet, MrBrok og
+    // Det Store Brokkeri er ligestillede valg, man kan vælge en, flere eller alle.
+    // Styrer kun hvad der vises.
     kasseEnabled: true,
     gameEnabled: true,
     mrbrokEnabled: true,
+    complainerEnabled: true,
     gameContentBank: { truefalse: [] }, // sandt/falsk-udsagn folk har skrevet — genbruges nogle gange i senere spil
   };
 }
@@ -250,6 +261,12 @@ function applyMigrations(state) {
   if (!state.mrbrok) state.mrbrok = { active: false };
   if (state.mrbrok.active && !state.mrbrok.players) state.mrbrok = { active: false };
   if (!state.mrbrokStats) state.mrbrokStats = {};
+  if (state.complainerEnabled === undefined) state.complainerEnabled = true;
+  if (!state.complainer) state.complainer = { active: false };
+  // Selvhelbred et spil startet under en ældre version uden players-feltet —
+  // samme filosofi som Brokspillet/MrBrok ovenfor.
+  if (state.complainer.active && !state.complainer.players) state.complainer = { active: false };
+  if (!state.complainerStats) state.complainerStats = {};
   if (!state.gameContentBank) state.gameContentBank = { truefalse: [] };
   if (!state.pendingList) {
     // migrering fra det gamle enkelt-pending-felt til en liste
@@ -336,6 +353,7 @@ async function createRoom(roomId, opts) {
   if (opts && opts.kasseEnabled === false) state.kasseEnabled = false;
   if (opts && opts.gameEnabled === false) state.gameEnabled = false;
   if (opts && opts.mrbrokEnabled === false) state.mrbrokEnabled = false;
+  if (opts && opts.complainerEnabled === false) state.complainerEnabled = false;
   await setState(roomId, state);
   return state;
 }
@@ -389,7 +407,12 @@ function healPendingVotes(state) {
 // af alle api/-filer der returnerer `state` i deres svar.
 function redactStateFor(state, viewerId) {
   const m = state.mrbrok;
-  if (!m || !m.active || (m.current && m.current.type === 'gameover')) return state;
+  // VIGTIGT: dette tidlige return dækker KUN mrbrok-redaktionen — det må
+  // ALDRIG kortslutte hele funktionen, for så springes Det Store Brokkeris
+  // egen redaktion (redactComplainerFor) over hver gang MrBrok ikke er
+  // aktivt, hvilket ville lække guiltyId til alle klienter i praksis (fanget
+  // af dette spils egen smoke-test, se scripts_test_complainer.js).
+  if (!m || !m.active || (m.current && m.current.type === 'gameover')) return redactComplainerFor(state, viewerId);
   const isMrBrok = !!(viewerId && viewerId === m.mrBrokId);
   // voteHistory (tidligere runders afstemninger) holdes skjult MENS spillet
   // er i gang — samme filosofi som Brokspillets round-history — og
@@ -404,7 +427,12 @@ function redactStateFor(state, viewerId) {
     // lække andres stemmer.
     safe.current = { ...safe.current, voteCount: Object.keys(safe.current.votes).length, votes: mine ? { [viewerId]: safe.current.votes[viewerId] } : {} };
   }
-  return { ...state, mrbrok: safe };
+  const withMrbrok = { ...state, mrbrok: safe };
+  // Det Store Brokkeri har sin egen hemmelighed (hvem der er "skyldig") og sin
+  // egen redaktion — se _lib/complainer.js's redactComplainerFor. Kædet
+  // herfra så ALLE svar (inkl. api/state.js's poll) maskerer den, ikke kun
+  // api/complainer.js selv.
+  return redactComplainerFor(withMrbrok, viewerId);
 }
 
 module.exports = { getState, setState, mutateState, ApiError, deleteRoom, createRoom, genRoomId, uid, emptyState, neededVotes, healPendingVotes, isAdmin, settleRound, updateStreaksAndDrawLottery, redrawFreeBrok, processPendingExpiry, checkSilenceNudge, checkPoolMilestone, redactStateFor };

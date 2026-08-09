@@ -31,8 +31,9 @@ module.exports = async (req, res) => {
     const kasseEnabled = !(req.body && req.body.kasseEnabled === false);
     const gameEnabled = !(req.body && req.body.gameEnabled === false);
     const mrbrokEnabled = !(req.body && req.body.mrbrokEnabled === false);
-    if (!kasseEnabled && !gameEnabled && !mrbrokEnabled) return res.status(400).json({ error: 'vælg mindst én af de tre' });
-    const state = await createRoom(roomId, { kasseEnabled, gameEnabled, mrbrokEnabled });
+    const complainerEnabled = !(req.body && req.body.complainerEnabled === false);
+    if (!kasseEnabled && !gameEnabled && !mrbrokEnabled && !complainerEnabled) return res.status(400).json({ error: 'vælg mindst én' });
+    const state = await createRoom(roomId, { kasseEnabled, gameEnabled, mrbrokEnabled, complainerEnabled });
     res.status(200).json({ roomId, state });
   } catch (e) {
     res.status(500).json({ error: e.message });
