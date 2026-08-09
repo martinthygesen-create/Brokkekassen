@@ -66,7 +66,7 @@ module.exports = async (req, res) => {
 
         const starter = state.members.find(mm => mm.id === actorId);
         const notInGame = state.members.map(mm => mm.id).filter(id => !players.includes(id));
-        pushInfo = { excludeIds: [actorId, ...notInGame], title: '🪤 Det Store Brokkeri er i gang!', body: `${starter ? starter.name : 'Nogen'} startede et spil — kom med!`, url: '/?r=' + roomId };
+        pushInfo = [{ excludeIds: [actorId, ...notInGame], title: '🪤 Det Store Brokkeri er i gang!', body: `${starter ? starter.name : 'Nogen'} startede et spil — kom med!`, url: '/?r=' + roomId }];
         return;
       }
 
@@ -118,14 +118,30 @@ module.exports = async (req, res) => {
           throw new ApiError(400, 'ugyldig handling lige nu');
         }
 
-        // Den private afsløring skal ALDRIG broadcastes — kun Den Store
-        // Brokker selv får en push, i det øjeblik faserne netop skiftede
-        // til 'guess' (dvs. beginReveal blev kaldt af resolveBet ovenfor).
+        // Den private afsløring: INDHOLDET skal aldrig broadcastes (kun Den
+        // Store Brokker selv får at vide hvem de er), men PUSHEN skal — hvis
+        // kun ét medlems telefon lyser op ved bordet i akkurat dette
+        // øjeblik, ER det i sig selv et afsløringstegn, uanset hvad der reelt
+        // står i notifikationen (produktejer-rettelse — samme fejltype som
+        // MrBrok-sessionen i CLAUDE.md, bare flyttet fra runde 1 til dette
+        // øjeblik). Derfor sender vi til ALLE spillere samtidig når faserne
+        // netop skiftede til 'guess' — kun ordlyden er forskellig pr.
+        // modtager (pushToMembers har ikke pr.-modtager-indhold, se
+        // _lib/push.js, så vi kalder den to gange i parallel: én batch til
+        // kun den skyldige med det rigtige indhold, én batch til alle andre
+        // med en neutral, "der sker noget"-besked). Selve skærmbilledet de
+        // ser når de tjekker er stadig korrekt kildet fra den eksisterende
+        // per-viewer-redaktion (youAreGuilty/current.type), denne push
+        // ændrer kun TIMINGEN af hvornår folk kigger, ikke hvad de ser.
         if (state.complainer.current && state.complainer.current.type === 'guess'
             && state.complainer.revealed && !state.complainer.current.targetId
             && cur.type === 'bet') {
-          const others = state.members.map(mm => mm.id).filter(id => id !== state.complainer.guiltyId);
-          pushInfo = { excludeIds: others, title: '🪤 Du er Den Store Brokker!', body: 'Bliv i karakter — og gæt en detalje om en af de andre.', url: '/?r=' + roomId };
+          const guiltyId = state.complainer.guiltyId;
+          const others = state.members.map(mm => mm.id).filter(id => id !== guiltyId);
+          pushInfo = [
+            { excludeIds: others, title: '🪤 Du er Den Store Brokker!', body: 'Bliv i karakter — og gæt en detalje om en af de andre.', url: '/?r=' + roomId },
+            { excludeIds: [guiltyId], title: '🪤 Det Store Brokkeri', body: 'Der sker noget lige nu — tjek appen.', url: '/?r=' + roomId },
+          ];
         }
         return;
       }
@@ -160,8 +176,15 @@ module.exports = async (req, res) => {
     const { state } = mutated;
 
     if (pushInfo) {
-      try { await pushToMembers(state, pushInfo.excludeIds, { title: pushInfo.title, body: pushInfo.body, url: pushInfo.url }); }
-      catch (e) { /* push-fejl må ikke vælte selve handlingen */ }
+      // Sendes i PARALLEL (Promise.all), ikke i serie — hele pointen ved
+      // afsløringens to-batch-push (se kommentaren ved reveal-tjekket
+      // ovenfor) er at ALLES telefoner lyser op på samme tidspunkt, ikke at
+      // den skyldiges telefon konsekvent lyser op nogle millisekunder før
+      // de andres.
+      await Promise.all(pushInfo.map(info =>
+        pushToMembers(state, info.excludeIds, { title: info.title, body: info.body, url: info.url })
+          .catch(e => { /* push-fejl må ikke vælte selve handlingen */ })
+      ));
     }
 
     return res.status(200).json({ state: redactStateFor(state, actorId) });

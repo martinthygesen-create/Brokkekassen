@@ -4234,18 +4234,22 @@ function renderComplainerScreen(){
   maybeShowComplainerRevealSplash(c);
 }
 
-// Den PRIVATE afsløring (se beginReveal i complainerFlow.js) sender en push
-// til den skyldige — men push kan fejle stille (VAPID ikke sat op, browseren
-// afviste tilladelsen, telefonen lå i lommen...), og uden ANDEN tydelig,
-// umulig-at-overse markering ville den skyldige spiller nemt overse at det
-// nu er deres tur, mens resten af bordet oplever spillet som gået i stå på
-// "Nogen tænker..."-skærmen. Denne splash er derfor det egentlige,
-// robuste signal — den virker uanset om pushen kom frem, ved næste
-// almindelige poll/gen-render, ikke kun i det øjeblik afsløringen sker.
-// Vises højst én gang pr. spil (keyed på c.startedAt, samme mønster som
-// MrBrok's rolle-splash keyet på m.startedAt).
+// Den PRIVATE afsløring (se beginReveal i complainerFlow.js) — men BÅDE
+// pushen (se api/complainer.js's to-batch-push) OG denne splash vises for
+// ALLE spillere samtidig, ikke kun den skyldige. Havde kun den skyldiges
+// telefon lyst op/vist noget nyt lige nu, ville DET i sig selv være et
+// afsløringstegn ved bordet — uanset hvad der reelt stod i det (produktejer-
+// rettelse, samme fejltype som CLAUDE.md's MrBrok-anekdote, bare flyttet fra
+// runde 1 til dette øjeblik). Indholdet er stadig korrekt kildet fra den
+// eksisterende per-viewer-redaktion (c.youAreGuilty) — kun TIMINGEN af
+// hvornår alle kigger på skærmen er synkroniseret, ikke hvad de ser.
+// Fungerer desuden som det robuste, poll-baserede reserve-signal hvis en
+// push fejler stille (VAPID ikke sat op, tilladelse afvist, telefonen lå i
+// lommen...) — virker ved næste almindelige gen-render, ikke kun i selve
+// øjeblikket. Vises højst én gang pr. spil (keyed på c.startedAt, samme
+// mønster som MrBrok's rolle-splash keyet på m.startedAt).
 function maybeShowComplainerRevealSplash(c){
-  if(!c || !c.active || !c.youAreGuilty || !c.current || c.current.type !== 'guess') return;
+  if(!c || !c.active || !c.current || c.current.type !== 'guess') return;
   if(complainerRevealSplashShownFor === c.startedAt) return;
   complainerRevealSplashShownFor = c.startedAt;
 
@@ -4256,14 +4260,29 @@ function maybeShowComplainerRevealSplash(c){
   requestAnimationFrame(()=>backdrop.classList.add('show'));
   const close = ()=>{ backdrop.classList.remove('show'); setTimeout(()=>backdrop.remove(), 250); };
   backdrop.addEventListener('click', e=>{ if(e.target === backdrop) close(); });
+
+  if(c.youAreGuilty){
+    inner.innerHTML = `
+      <div style="font-size:52px;">🪤</div>
+      <h3>Du er Den Store Brokker!</h3>
+      <p>Bliv i karakter — og gæt en konkret detalje om en af de andre, ud fra det de har sagt undervejs. Ingen andre ved det er dig endnu.</p>
+      <button class="game-btn" id="complainerRevealCloseBtn">Forstået, lad os gætte</button>
+    `;
+    if(typeof gsap !== 'undefined') gsap.fromTo(inner, {opacity:0, scale:.95}, {opacity:1, scale:1, duration:.35, ease:'back.out(1.6)'});
+    document.getElementById('complainerRevealCloseBtn').onclick = close;
+    return;
+  }
+  // Neutral, in-theme "der sker noget"-skærm — bevidst UDEN reelt indhold
+  // (afslører hverken ja eller nej om noget), skal bare se ud som om DENNE
+  // telefon også lige fik en besked, akkurat som den skyldiges. Lukker
+  // automatisk efter kort tid, ingen handling krævet.
   inner.innerHTML = `
     <div style="font-size:52px;">🪤</div>
-    <h3>Du er Den Store Brokker!</h3>
-    <p>Bliv i karakter — og gæt en konkret detalje om en af de andre, ud fra det de har sagt undervejs. Ingen andre ved det er dig endnu.</p>
-    <button class="game-btn" id="complainerRevealCloseBtn">Forstået, lad os gætte</button>
+    <h3>Der sker noget...</h3>
+    <p>Nogen har lige fundet ud af noget. Hold øje med bordet.</p>
   `;
   if(typeof gsap !== 'undefined') gsap.fromTo(inner, {opacity:0, scale:.95}, {opacity:1, scale:1, duration:.35, ease:'back.out(1.6)'});
-  document.getElementById('complainerRevealCloseBtn').onclick = close;
+  setTimeout(close, 2600);
 }
 
 function complainerBodyHtml(c){
