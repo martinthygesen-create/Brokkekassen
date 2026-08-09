@@ -1,6 +1,7 @@
 const { getState, setState, mutateState, processPendingExpiry, checkSilenceNudge, healPendingVotes, redactStateFor } = require('./_lib/store');
 const { expireGamePhaseIfDue, BROKSPILLET_AUTO_MS, COMPLAINT_COUNTDOWN_MS } = require('./_lib/gameFlow');
 const { expireMrbrokPhaseIfDue } = require('./_lib/mrbrokFlow');
+const { expireComplainerPhaseIfDue } = require('./_lib/complainerFlow');
 const { pushToMembers } = require('./_lib/push');
 
 // Billig, ikke-muterende forhåndstjek: er der overhovedet en chance for at
@@ -21,6 +22,25 @@ function mrbrokExpiryMightBeDue(state) {
   const m = state.mrbrok;
   if (!m || !m.active || !m.current || !m.current.phaseStartedAt) return false;
   const cur = m.current;
+  const now = Date.now();
+  if (cur.complaint) return (now - cur.complaint.startedAt) >= COMPLAINT_COUNTDOWN_MS;
+  return (now - cur.phaseStartedAt) >= BROKSPILLET_AUTO_MS;
+}
+
+// Samme billige forhåndstjek som gameExpiryMightBeDue/mrbrokExpiryMightBeDue,
+// men for Det Store Brokkeri. VIGTIGT: uden dette (og det manglede — se
+// commit-historikken) er expireComplainerPhaseIfDue kun nogensinde blevet
+// kaldt fra api/complainer.js's egen handler, som kun kører når NOGEN rent
+// faktisk POST'er en handling — men netop DÉT er hvad der ikke sker når en
+// fase hænger fast (fx en test-bot der aldrig kan gætte fordi den ikke ved
+// den er skyldig, se index.html's driveBotsForComplainer-kommentar). Uden
+// dette opkald her — samme sted klienterne ALLIGEVEL poller hvert par
+// sekunder — havde nødbremsen ingenting at trække i, og en hængt fase
+// hang for evigt i stedet for at blive tvunget videre efter tid.
+function complainerExpiryMightBeDue(state) {
+  const c = state.complainer;
+  if (!c || !c.active || !c.current || !c.current.phaseStartedAt) return false;
+  const cur = c.current;
   const now = Date.now();
   if (cur.complaint) return (now - cur.complaint.startedAt) >= COMPLAINT_COUNTDOWN_MS;
   return (now - cur.phaseStartedAt) >= BROKSPILLET_AUTO_MS;
@@ -70,6 +90,14 @@ module.exports = async (req, res) => {
     if (mrbrokExpiryMightBeDue(state)) {
       const mutated = await mutateState(roomId, async (fresh) => {
         expireMrbrokPhaseIfDue(fresh);
+      });
+      if (mutated) state = mutated.state;
+    }
+
+    // Samme opportunistiske mønster for Det Store Brokkeris fase-timing.
+    if (complainerExpiryMightBeDue(state)) {
+      const mutated = await mutateState(roomId, async (fresh) => {
+        expireComplainerPhaseIfDue(fresh);
       });
       if (mutated) state = mutated.state;
     }
