@@ -3,7 +3,7 @@ const { assignArchetypesAndSituations } = require('./_lib/complainer');
 const {
   MIN_COMPLAIN_AGE_MS,
   beginComplainRound,
-  beginVoteRound,
+  advanceComplain,
   resolveSuspicionRound,
   resolveBet,
   submitGuess,
@@ -80,12 +80,12 @@ module.exports = async (req, res) => {
         if (!cur || !payload) throw new ApiError(400, 'mangler data');
 
         if (cur.type === 'complain') {
-          if (!c.players.includes(actorId)) throw new ApiError(403, 'du er ikke med i dette spil af Det Store Brokkeri');
-          if (cur.texts[actorId] !== undefined) throw new ApiError(409, 'du har allerede svaret denne runde');
-          const text = (payload.text || '').toString().trim().slice(0, 240);
-          if (!text) throw new ApiError(400, 'skriv dit brok');
-          cur.texts[actorId] = text;
-          if (Object.keys(cur.texts).length >= c.players.length) beginVoteRound(state);
+          // Broksene siges HØJT ved bordet — intet tekstfelt, kun en
+          // bekræftelse fra den der har turen, nøjagtig samme mønster som
+          // MrBrok's clue-fase (se api/mrbrok.js's 'submit'-håndtering af
+          // cur.type === 'clue').
+          if (actorId !== cur.speakerId) throw new ApiError(403, 'det er ikke din tur lige nu');
+          advanceComplain(state);
         } else if (cur.type === 'vote') {
           if (!c.players.includes(actorId)) throw new ApiError(403, 'du er ikke med i dette spil af Det Store Brokkeri');
           const votedForId = payload.votedForId;

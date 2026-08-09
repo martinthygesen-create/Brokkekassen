@@ -205,10 +205,13 @@ function pickPromptFor(playerId, situation, round, totalRounds, usedIds) {
 //
 // Skyldig-identiteten holdes hemmelig for ALLE (inklusive den skyldige selv)
 // indtil c.revealed bliver sat af beginReveal() i complainerFlow.js — det er
-// selve pointen i spillet (se CLAUDE.md). Under opbygningsrunderne vises
-// desuden kun ens EGEN prompt/brok mens man stadig er ved at svare (for ikke
-// at forudindtage andres svar) — allerede besvarede runder ligger i
-// c.history, som er offentlig for alle så snart runden er færdig.
+// selve pointen i spillet (se CLAUDE.md). Opbygningsrundernes brok siges HØJT
+// ved bordet (se beginComplainRound i complainerFlow.js) — der er intet
+// tekstfelt og intet der gemmes af selve ordlyden, kun HVEM der har turen
+// (order/turnIndex/speakerId) og HVILKEN prompt de fik, hvilket ikke er
+// hemmeligt for nogen — så 'complain'-fasen kræver ingen redaktion
+// overhovedet, i modsætning til vote/judge som stadig er hemmelige
+// afstemninger indtil alle har stemt.
 function redactComplainerFor(state, viewerId) {
   const c = state.complainer;
   if (!c || !c.active || (c.current && c.current.type === 'gameover')) return state;
@@ -216,13 +219,7 @@ function redactComplainerFor(state, viewerId) {
   const safe = { ...c, guiltyId: undefined, youAreGuilty: isGuilty };
   if (safe.current) {
     const cur = { ...safe.current };
-    if (cur.type === 'complain') {
-      const myPrompt = viewerId && cur.prompts ? cur.prompts[viewerId] : undefined;
-      cur.submittedCount = Object.keys(cur.texts || {}).length;
-      const myText = viewerId && cur.texts ? cur.texts[viewerId] : undefined;
-      cur.prompts = myPrompt !== undefined ? { [viewerId]: myPrompt } : {};
-      cur.texts = myText !== undefined ? { [viewerId]: myText } : {};
-    } else if (cur.type === 'vote') {
+    if (cur.type === 'vote') {
       const mine = viewerId && Object.prototype.hasOwnProperty.call(cur.votes || {}, viewerId);
       cur.voteCount = Object.keys(cur.votes || {}).length;
       cur.votes = mine ? { [viewerId]: cur.votes[viewerId] } : {};

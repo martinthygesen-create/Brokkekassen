@@ -10,7 +10,7 @@
 // state.mrbrok/state.game eller deres flow-filer. Se CLAUDE.md.
 
 const { uid } = require('./store');
-const { pickRandom } = require('./game');
+const { pickRandom, shuffle } = require('./game');
 const { assignArchetypesAndSituations, pickPromptFor } = require('./complainer');
 // Genbruger de delte tids-konstanter og "phase stamp"-hjælperen fra
 // Brokspillets gameFlow.js (samme mønster MrBrok allerede gør) — importerer
@@ -35,7 +35,15 @@ function stampPhaseComplainer(cur) {
 }
 
 // Starter en helt ny opbygningsrunde: nye, eskalerende prompts til alle
-// stadig deltagende spillere, matchet til deres situation.
+// stadig deltagende spillere (matchet til deres situation), OG en ny
+// tur-rækkefølge — broksene siges HØJT ved bordet, én spiller ad gangen,
+// nøjagtig samme mønster som MrBrok's clue-fase (se beginClueRound i
+// mrbrokFlow.js) og bevidst IKKE samtidig indtastning. Der er intet
+// tekstfelt og intet der gemmes af selve broksens ORDLYD — kun HVEM der har
+// sagt sit brok (turnIndex), aldrig HVAD de sagde. Det er en bevidst
+// designbeslutning (produktejer-rettelse): gættefinalen skal hvile på
+// spillernes egen hukommelse om hvad der blev sagt ved bordet, ikke på en
+// app-gemt facitliste — se submitGuess længere nede.
 function beginComplainRound(state, roundNumber) {
   const c = state.complainer;
   c.round = roundNumber;
@@ -46,19 +54,36 @@ function beginComplainRound(state, roundNumber) {
     if (!c.usedPromptIds[id]) c.usedPromptIds[id] = [];
     c.usedPromptIds[id].push(prompt.id);
   });
-  c.current = { type: 'complain', round: roundNumber, prompts, texts: {} };
+  const order = shuffle(c.players);
+  c.current = { type: 'complain', round: roundNumber, order, turnIndex: 0, speakerId: order[0], prompts };
   stampPhaseComplainer(c.current);
 }
 
-// Alle har afleveret deres brok — arkivér rundens prompts+svar i den
-// OFFENTLIGE historik (ingen hemmeligheder i selve broksene — det er jo
-// pointen at alle skal have hørt dem, og gættefinalen skal kunne bladre
-// tilbage i det), og gå videre til hemmelig mistankeafstemning.
+// Den aktuelle taler har markeret deres tur som ovre (sagt deres brok højt —
+// intet tekstfelt, kun en bekræftelse). Går videre til næste taler i
+// rækkefølgen, eller (når hele runden er igennem) den hemmelige
+// mistankeafstemning. Samme struktur som MrBrok's advanceClue.
+function advanceComplain(state) {
+  const c = state.complainer;
+  const cur = c.current;
+  const next = cur.turnIndex + 1;
+  if (next < cur.order.length) {
+    c.current = { type: 'complain', round: cur.round, order: cur.order, turnIndex: next, speakerId: cur.order[next], prompts: cur.prompts };
+    stampPhaseComplainer(c.current);
+  } else {
+    beginVoteRound(state);
+  }
+}
+
+// Alle har sagt deres brok højt — arkivér kun HVILKEN prompt hver spiller
+// fik (til reference/genkaldelse), ALDRIG selve broksens ordlyd (den findes
+// kun i den fysiske samtale ved bordet, se beginComplainRound), og gå
+// videre til hemmelig mistankeafstemning.
 function beginVoteRound(state) {
   const c = state.complainer;
   const cur = c.current;
   if (!c.history) c.history = [];
-  c.history.push({ round: cur.round, prompts: cur.prompts, texts: cur.texts });
+  c.history.push({ round: cur.round, prompts: cur.prompts });
   c.current = { type: 'vote', round: cur.round, votes: {} };
   stampPhaseComplainer(c.current);
 }
@@ -143,7 +168,12 @@ function beginReveal(state) {
 }
 
 // Den Store Brokker gætter — STADIG I KARAKTER — en konkret detalje om en
-// navngiven medspiller ud fra hvad de har sagt i opbygningsrunderne.
+// navngiven medspiller ud fra hvad de har sagt i opbygningsrunderne. Dette
+// hviler UDELUKKENDE på spillernes egen hukommelse fra bordet (broksene blev
+// sagt højt, aldrig gemt som tekst, se beginComplainRound) — akkurat som
+// MrBrok's eget tyveri-gæt (resolveSteal i mrbrokFlow.js) allerede virker
+// fra hukommelse uden nogen app-facitliste. Ikke et hul der mangler at blive
+// lukket, men en bevidst del af konceptet.
 function submitGuess(state, targetId, detail) {
   const c = state.complainer;
   c.current.targetId = targetId;
@@ -197,7 +227,7 @@ function endComplainerGame(state, guiltyWon) {
 function getPendingComplainerIds(c) {
   const cur = c.current;
   if (!cur) return [];
-  if (cur.type === 'complain') return c.players.filter(id => cur.texts[id] === undefined);
+  if (cur.type === 'complain') return [cur.speakerId];
   if (cur.type === 'vote') return c.players.filter(id => cur.votes[id] === undefined);
   if (cur.type === 'bet') return cur.choice ? [] : [cur.topId];
   if (cur.type === 'guess') return cur.targetId ? [] : [c.guiltyId];
@@ -214,8 +244,7 @@ function forceResolveComplainerPhase(state) {
   const cur = c.current;
   const pending = getPendingComplainerIds(c);
   if (cur.type === 'complain') {
-    pending.forEach(id => { cur.texts[id] = '(nåede ikke at svare)'; });
-    beginVoteRound(state);
+    advanceComplain(state);
   } else if (cur.type === 'vote') {
     pending.forEach(id => {
       const others = c.players.filter(p => p !== id);
@@ -260,6 +289,7 @@ module.exports = {
   COMPLAINT_COUNTDOWN_MS,
   assignArchetypesAndSituations,
   beginComplainRound,
+  advanceComplain,
   beginVoteRound,
   resolveSuspicionRound,
   resolveBet,
