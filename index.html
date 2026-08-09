@@ -567,7 +567,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-09-77';
+const BUILD_TAG = 'build-2026-08-09-78';
 // Skal matche api/_lib/gameFlow.js's CASINOBROK_BET_*-konstanter — kun brugt
 // til visning her (server afgør altid den reelle udbetaling).
 const CASINOBROK_BET_SAFE_POINTS = 1;
@@ -642,6 +642,20 @@ let mrbrokRoleRevealedRound = null;
 let mrbrokRoleHideTimer = null;
 let roseMatchSelections = {}; // GLOBAL (ikke lokal i bindGameHandlers) så et almindeligt poll-gen-render ikke visker synlige gæt ud, se roseHtml
 let roseMatchSelectionsKey = null; // hvilken runde roseMatchSelections hører til — nulstilles kun ved en ny runde
+
+/* ============ BROKKEFÆLDEN (client-state — se api/complainer.js + api/_lib/complainerFlow.js for selve spillet) ============ */
+let complainerWager = 'fun';
+let complainerRounds = 4; // 3-6, samme host-konfigurerbare mønster som mrbrokWarmup
+let complainerSelectedPlayers = null;
+let complainerKnownMemberIds = null;
+let complainerInstructionsOpen = null;
+let lastAnimatedComplainerKey = null;
+let lastComplaintKeyComplainer = null;
+let complainerRoleRevealed = false; // samme "skjult som standard, kræver et tryk"-mønster som mrbrokRoleRevealed
+let complainerRoleRevealedRound = null;
+let complainerRoleHideTimer = null;
+let complainerGuessTargetId = null; // lokalt valg under gættefinalen, indtil det sendes
+let complainerHistoryOpenRounds = new Set(); // hvilke tidligere runder i "Sådan gik det hidtil" der er foldet ud
 
 // Bot-testspil — se startBotTestGame/driveBotsIfNeeded. botAutoplay er kun
 // sat i DENNE browser-fane (ikke gemt/delt), og styrer om vi overhovedet
@@ -920,6 +934,7 @@ async function enterRoom(){
   }
   if(!state.kasseEnabled && state.gameEnabled) activeApp = 'spil';
   else if(!state.kasseEnabled && !state.gameEnabled && state.mrbrokEnabled) activeApp = 'mrbrok';
+  else if(!state.kasseEnabled && !state.gameEnabled && !state.mrbrokEnabled && state.complainerEnabled) activeApp = 'complainer';
   else if(state.kasseEnabled) activeApp = 'kasse';
   rememberRoom();
   render();
@@ -1064,6 +1079,10 @@ function renderCreateOrJoin(errorMsg){
               <div class="app-pick-icon">🕵️</div>
               <div class="app-pick-label">MrBrok</div>
             </div>
+            <div class="onboard-pick app-pick selected" data-pick="complainer" style="background:var(--sea); color:#fff;">
+              <div class="app-pick-icon">🪤</div>
+              <div class="app-pick-label">Det Store Brokkeri</div>
+            </div>
           </div>
           <div class="app-pick-scroll-hint left">‹</div>
           <div class="app-pick-scroll-hint right">›</div>
@@ -1116,7 +1135,8 @@ function renderCreateOrJoin(errorMsg){
       const kasseEnabled = document.querySelector('[data-pick="kasse"]').classList.contains('selected');
       const gameEnabled = document.querySelector('[data-pick="spil"]').classList.contains('selected');
       const mrbrokEnabled = document.querySelector('[data-pick="mrbrok"]').classList.contains('selected');
-      const r = await api('room', { kasseEnabled, gameEnabled, mrbrokEnabled });
+      const complainerEnabled = document.querySelector('[data-pick="complainer"]').classList.contains('selected');
+      const r = await api('room', { kasseEnabled, gameEnabled, mrbrokEnabled, complainerEnabled });
       roomId = r.roomId;
       const u = new URL(location.href); u.search = '?r=' + roomId;
       history.replaceState(null,'',u.toString());
@@ -1169,6 +1189,8 @@ function renderWhoAmI(justCreated){
       rememberRoom();
       state = r.state;
       if(!state.kasseEnabled && state.gameEnabled) activeApp = 'spil';
+      else if(!state.kasseEnabled && !state.gameEnabled && state.mrbrokEnabled) activeApp = 'mrbrok';
+      else if(!state.kasseEnabled && !state.gameEnabled && !state.mrbrokEnabled && state.complainerEnabled) activeApp = 'complainer';
       else if(state.kasseEnabled) activeApp = 'kasse';
       render();
       startPolling();
@@ -1230,7 +1252,8 @@ async function startBotTestGame(kind){
   botAutoplay = true;
   botTestStartedAt = Date.now();
   if(kind === 'game') await gameApi('start', { wager:'fun', playerIds, totalRounds:5 });
-  else await mrbrokApi('start', { wager:'fun', playerIds, warmupRounds:2 });
+  else if(kind === 'mrbrok') await mrbrokApi('start', { wager:'fun', playerIds, warmupRounds:2 });
+  else await complainerApi('start', { wager:'fun', playerIds, totalRounds:3 });
   toast('🤖 Bots spiller automatisk — du styrer kun din egen tur');
 }
 
@@ -1289,6 +1312,7 @@ function driveBotsIfNeeded(){
   try{
     if(state.game && state.game.active && state.game.current) driveBotsForGame(state.game);
     if(state.mrbrok && state.mrbrok.active && state.mrbrok.current) driveBotsForMrbrok(state.mrbrok);
+    if(state.complainer && state.complainer.active && state.complainer.current) driveBotsForComplainer(state.complainer);
   }catch(e){ console.error('driveBotsIfNeeded fejlede (ufarligt, prøves igen ved næste render):', e); }
 }
 
@@ -1355,6 +1379,48 @@ async function runMrbrokBotAction(m, cur, botId){
   if(cur.type === 'steal' && cur.guess) return botSubmit('mrbrok', botId, { closeEnough: Math.random() < 0.5 });
 }
 
+// Samme begrænsning som getPendingMrbrokIdsClient: guiltyId er ALTID
+// maskeret client-side (se redactComplainerFor), også for bot-testspil, så
+// et bot-forsøg på at gætte/dømme når det ikke er relevant for dem fejler
+// bare stille (botSubmit sluger fejlen) — spillet rykker alligevel videre
+// via server-timeouten hvis ingen bot rammer rigtigt. Kun brugt til
+// bot-autoplay, IKKE til at afgøre hvad der reelt vises for et rigtigt menneske.
+function getPendingComplainerIdsClient(c, cur){
+  if(!cur || !c.players) return [];
+  if(cur.type === 'complain') return c.players.filter(id=>!(cur.texts && cur.texts[id] !== undefined));
+  if(cur.type === 'vote') return c.players.filter(id=>!(cur.votes && cur.votes[id] !== undefined));
+  if(cur.type === 'bet') return cur.choice ? [] : [cur.topId];
+  if(cur.type === 'guess') return cur.targetId ? [] : (c.youAreGuilty && profile ? [profile.memberId] : c.players.slice());
+  if(cur.type === 'judge') return c.players.filter(id=>!(cur.votes && cur.votes[id] !== undefined));
+  return [];
+}
+
+function driveBotsForComplainer(c){
+  const cur = c.current;
+  if(!cur || cur.type === 'gameover') return;
+  const phaseKey = cur.round + ':' + cur.type;
+  const pending = getPendingComplainerIdsClient(c, cur);
+  pending.filter(isBotMember).forEach((botId,i)=>{
+    scheduleBotOnce('complainer:'+phaseKey+':'+botId, ()=>runComplainerBotAction(c, cur, botId), Math.max(mrbrokBotActionDelay(i), botStartGraceRemaining()));
+  });
+}
+
+async function runComplainerBotAction(c, cur, botId){
+  if(cur.type === 'complain') return botSubmit('complainer', botId, { text: pickBotFiller(BOT_FILLER_STATEMENTS) });
+  if(cur.type === 'vote'){
+    const options = (c.players||[]).filter(id=>id!==botId);
+    if(!options.length) return;
+    return botSubmit('complainer', botId, { votedForId: pickBotFiller(options) });
+  }
+  if(cur.type === 'bet' && cur.topId === botId) return botSubmit('complainer', botId, { choice: Math.random() < 0.5 ? 'gamble' : 'safe' });
+  if(cur.type === 'guess' && c.youAreGuilty){
+    const options = (c.players||[]).filter(id=>id!==botId);
+    if(!options.length) return;
+    return botSubmit('complainer', botId, { targetId: pickBotFiller(options), detail: pickBotFiller(BOT_FILLER_STATEMENTS) });
+  }
+  if(cur.type === 'judge') return botSubmit('complainer', botId, { closeEnough: Math.random() < 0.5 });
+}
+
 // Enhver af de MANGE ting der kalder render() (eget svar, en andens svar
 // via poll, en bot der handler, en klar-markering...) bygger HELE
 // app.innerHTML om fra bunden. Uden dette ville en igangværende skrive-fase
@@ -1387,12 +1453,16 @@ function renderInner(){
   // Forsvar mod at stå i en visning der er slået fra i dette rum.
   if(activeApp === 'spil' && !state.gameEnabled) activeApp = 'kasse';
   if(activeApp === 'mrbrok' && !state.mrbrokEnabled) activeApp = 'kasse';
-  if(activeApp === 'kasse' && !state.kasseEnabled) activeApp = state.gameEnabled ? 'spil' : (state.mrbrokEnabled ? 'mrbrok' : 'kasse');
+  if(activeApp === 'complainer' && !state.complainerEnabled) activeApp = 'kasse';
+  if(activeApp === 'kasse' && !state.kasseEnabled) activeApp = state.gameEnabled ? 'spil' : (state.mrbrokEnabled ? 'mrbrok' : (state.complainerEnabled ? 'complainer' : 'kasse'));
   // Det mørke "efterforskningslokale" gælder nu HELE MrBrok — både lobby og
   // selve spillet, ikke kun før det starter. Skiftede tilbage til det
   // fælles teal midt i spillet gjorde det svært at se det som "sit eget"
-  // spil (matcher heller ikke rolle-splashens mørke/guld look).
-  const isMrbrokTheme = activeApp === 'mrbrok';
+  // spil (matcher heller ikke rolle-splashens mørke/guld look). Det Store Brokkeri
+  // genbruger bevidst SAMME mørke tema — den deler samme "afsløring under
+  // overfladen"-følelse, og det sparer en hel ny farve-variant for et
+  // splinternyt tredje spil.
+  const isMrbrokTheme = activeApp === 'mrbrok' || activeApp === 'complainer';
   // Rose-runden skal tydeligt IKKE ligne resten af Brokspillet mens den
   // står på — se CSS-kommentaren ved html.theme-rose. Kun aktiv præcis så
   // længe den aktuelle runde faktisk ER type 'rose', falder automatisk
@@ -1413,6 +1483,7 @@ function renderInner(){
   if(themeColorMeta) themeColorMeta.setAttribute('content', isMrbrokTheme ? '#0A1416' : (isRoseTheme ? '#3a1530' : '#12666b'));
   if(activeApp === 'spil') return renderGameScreen();
   if(activeApp === 'mrbrok') return renderMrbrokScreen();
+  if(activeApp === 'complainer') return renderComplainerScreen();
   const prevMain = document.getElementById('main');
   const savedMainScroll = prevMain ? prevMain.scrollTop : 0;
   const savedWindowScroll = window.scrollY;
@@ -1477,6 +1548,10 @@ function openAppMenuSheet(){
           <div class="app-pick-icon">🕵️</div>
           <div class="app-pick-label">MrBrok</div>
         </div>` : ''}
+        ${state.complainerEnabled ? `<div class="app-pick" data-goto-app="complainer" style="background:${activeApp==='complainer'?'var(--sea)':'rgba(5,32,36,0.06)'}; color:${activeApp==='complainer'?'#fff':'var(--ink)'};">
+          <div class="app-pick-icon">🪤</div>
+          <div class="app-pick-label">Det Store Brokkeri</div>
+        </div>` : ''}
       </div>
       <div class="app-pick-scroll-hint left">‹</div>
       <div class="app-pick-scroll-hint right">›</div>
@@ -1489,7 +1564,7 @@ function openAppMenuSheet(){
     ${isAdmin() ? `
       <div class="divider">admin</div>
       <div class="menu-row-list">
-        <div class="menu-row" id="menuAdminBtn"><div class="menu-row-icon">⚙️</div><div class="menu-row-label">Admin for ${activeApp==='spil'?'Brokspillet':(activeApp==='mrbrok'?'MrBrok':'Brokkekassen')}</div><span class="menu-row-chevron">›</span></div>
+        <div class="menu-row" id="menuAdminBtn"><div class="menu-row-icon">⚙️</div><div class="menu-row-label">Admin for ${activeApp==='spil'?'Brokspillet':(activeApp==='mrbrok'?'MrBrok':(activeApp==='complainer'?'Det Store Brokkeri':'Brokkekassen'))}</div><span class="menu-row-chevron">›</span></div>
       </div>
     ` : ''}
   `, ()=>{
@@ -1503,7 +1578,7 @@ function openAppMenuSheet(){
     const adminBtn = document.getElementById('menuAdminBtn');
     if(adminBtn) adminBtn.onclick = ()=>{
       closeSheet();
-      const openFn = activeApp==='spil' ? openGameAdminMenuSheet : (activeApp==='mrbrok' ? openMrbrokAdminMenuSheet : openAdminMenuSheet);
+      const openFn = activeApp==='spil' ? openGameAdminMenuSheet : (activeApp==='mrbrok' ? openMrbrokAdminMenuSheet : (activeApp==='complainer' ? openComplainerAdminMenuSheet : openAdminMenuSheet));
       setTimeout(openFn, 230);
     };
     markAppPickScrollable();
@@ -4009,6 +4084,523 @@ function bindMrbrokHandlers(m){
   if(cur.type === 'steal' && cur.guess && !m.youAreMrBrok){
     document.querySelectorAll('[data-mrbrok-steal-vote]').forEach(el=>{
       el.onclick = ()=> mrbrokApi('submit', { payload: { closeEnough: el.dataset.mrbrokStealVote === 'true' } });
+    });
+  }
+}
+
+/* ============ BROKKEFÆLDEN ("The Big Complainer") ============
+   Helt selvstændigt tredje spil (se CLAUDE.md) — samme UI-mønstre som
+   MrBrok ovenfor (lobby/spillervalg, skjult rolle-banner, brok-nedtælling,
+   gemte skrivefelter), men egen state-gren (state.complainer), eget
+   flow (api/complainer.js + api/_lib/complainerFlow.js). Rører aldrig
+   state.mrbrok/state.game. */
+const SUSPECT_POINTS_CLIENT = 2; // skal matche SUSPECT_POINTS i api/_lib/complainerFlow.js — kun til visningstekst, selve pointtallet afgøres altid server-side
+const COMPLAINER_ARCHETYPE_INFO = {
+  indre: { name:'Den indre brokker', hint:'Du holder det inde — men det siver ud via stikpiller og små hentydninger, ikke rå udbrud.' },
+  udadvendt: { name:'Den udadvendte', hint:'Du brøler det ud uden filter — jo mere du overdriver, jo bedre.' },
+  passivaggressiv: { name:'Den passiv-aggressive', hint:'"Det er helt fint" — men tonen, pauserne og suk\'et siger noget helt andet.' },
+  martyr: { name:'Den martyr-agtige', hint:'Du brokker dig ved at gøre dig selv til det evige offer — "det er jo altid mig der...".' },
+};
+const COMPLAINER_SITUATION_LABELS = { chef:'chefen', nabo:'naboen', familie:'familien', kollega:'en kollega', ven:'en ven' };
+
+async function complainerApi(action, extra){
+  if(action === 'end') botAutoplay = false; // se samme kommentar i gameApi
+  try{
+    const r = await api('complainer', Object.assign({ action, roomId, actorId: profile.memberId }, extra||{}));
+    state = r.state;
+    render();
+  }catch(e){
+    if(e.message === 'ugyldig handling lige nu'){
+      toast('🔄 Runden nåede at gå videre — opdaterer...');
+      await refreshState(false);
+    } else {
+      toast(e.message);
+    }
+  }
+}
+
+function openComplainerAdminMenuSheet(){
+  const active = state.complainer && state.complainer.active;
+  // Samme gensidige udelukkelse som Brokspillet/MrBrok allerede viser hinanden
+  // — Det Store Brokkeri deltager i samme regel, se api/complainer.js's 'start'-tjek.
+  const blockedByGame = !active && state.game && state.game.active;
+  const blockedByMrbrok = !active && state.mrbrok && state.mrbrok.active;
+  const blockedByOther = blockedByGame || blockedByMrbrok;
+  const blockedName = blockedByGame ? 'Brokspillet' : 'MrBrok';
+  openSheet(`
+    <h2>Det Store Brokkeri-admin ⚙️</h2>
+    <p class="hint">${active ? 'Der er et spil i gang lige nu.' : (blockedByOther ? `${blockedName} er i gang lige nu — afslut det for at kunne starte Det Store Brokkeri.` : 'Der er ikke noget spil i gang lige nu.')}</p>
+    ${active || blockedByOther ? '' : `<button class="sheet-btn test" id="complainerAdminBotTestBtn">🤖 Test-spil med 3 bots</button>`}
+    ${active ? `<button class="sheet-btn danger" id="complainerAdminRestartBtn">🛑 Afslut Det Store Brokkeri</button>` : ''}
+    ${blockedByOther ? `<button class="sheet-btn danger" id="complainerAdminEndOtherBtn">🛑 Afslut ${blockedName}</button>` : ''}
+    <button class="sheet-btn ghost" id="complainerAdminCloseBtn">Luk menu</button>
+    <p class="hint" style="text-align:center; font-size:10.5px; opacity:.5; margin-top:6px;">${BUILD_TAG}</p>
+  `, ()=>{
+    const botBtn = document.getElementById('complainerAdminBotTestBtn');
+    if(botBtn) botBtn.onclick = ()=> startBotTestGame('complainer');
+    const restartBtn = document.getElementById('complainerAdminRestartBtn');
+    if(restartBtn) restartBtn.onclick = async ()=>{
+      closeSheet();
+      await complainerApi('end', {});
+      toast('🛑 Det Store Brokkeri er afsluttet — klar til en ny omgang');
+    };
+    const endOtherBtn = document.getElementById('complainerAdminEndOtherBtn');
+    if(endOtherBtn) endOtherBtn.onclick = async ()=>{
+      closeSheet();
+      if(blockedByGame) await gameApi('end', {}); else await mrbrokApi('end', {});
+      toast(`🛑 ${blockedName} er afsluttet — Det Store Brokkeri kan nu startes`);
+    };
+    document.getElementById('complainerAdminCloseBtn').onclick = closeSheet;
+  });
+}
+
+function renderComplainerScreen(){
+  const c = state.complainer || { active:false };
+  app.innerHTML = `
+    <header class="theme-mrbrok">
+      <div class="title" style="font-size:30px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+        <span>Det Store <span>Brokkeri</span> 🪤</span>
+        <button id="btnAppMenu" title="Menu" style="width:32px; height:32px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.85); border-radius:100px; flex:0 0 auto;">☰</button>
+      </div>
+    </header>
+    <main id="main" style="padding:0 16px 40px;">${complainerBodyHtml(c)}</main>
+  `;
+  document.getElementById('btnAppMenu').onclick = openAppMenuSheet;
+  bindComplainerHandlers(c);
+  const card = document.getElementById('complainerCard') || document.getElementById('complainerReveal');
+  const cur = c.active ? c.current : null;
+  const animKey = cur ? (c.round + ':' + cur.type) : 'lobby';
+  const isNewPhase = animKey !== lastAnimatedComplainerKey;
+  lastAnimatedComplainerKey = animKey;
+  if(card && typeof gsap !== 'undefined' && isNewPhase){
+    gsap.fromTo(card, { opacity:0, y:22, scale:.96 }, { opacity:1, y:0, scale:1, duration:.5, ease:'back.out(1.4)' });
+  }
+  const complaintKey = cur && cur.complaint ? (animKey + ':' + cur.complaint.startedAt) : null;
+  if(complaintKey !== lastComplaintKeyComplainer){
+    lastComplaintKeyComplainer = complaintKey;
+    startComplaintCountdown(cur, false);
+  }
+}
+
+function complainerBodyHtml(c){
+  if(!c.active || !c.current) return complainerLobbyHtml();
+  const cur = c.current;
+  if(cur.type !== 'gameover' && profile && c.players && !c.players.includes(profile.memberId)){
+    return `
+      <div class="game-badge">Runde ${c.round}/${c.totalRounds} · 👀 Du kigger med</div>
+      <div class="empty-state"><span class="emoji">🍿</span><b>Du er ikke med i denne omgang</b>De andre spiller videre — du er velkommen næste spil.</div>
+    `;
+  }
+  if(cur.type === 'gameover') return complainerOverHtml(c, cur);
+  if(cur.type === 'complain') return complainerComplainHtml(c, cur);
+  if(cur.type === 'vote') return complainerVoteHtml(c, cur);
+  if(cur.type === 'bet') return complainerBetHtml(c, cur);
+  if(cur.type === 'guess') return complainerGuessHtml(c, cur);
+  if(cur.type === 'judge') return complainerJudgeHtml(c, cur);
+  return '';
+}
+
+function complainerHighscoreHtml(){
+  const stats = state.complainerStats || {};
+  const ranked = state.members
+    .filter(mm => !mm.isBot && stats[mm.id] && stats[mm.id].played > 0)
+    .sort((a,b) => (stats[b.id].wins - stats[a.id].wins) || (stats[b.id].played - stats[a.id].played));
+  if(!ranked.length) return '';
+  const rows = ranked.map((mm,i)=>`
+    <div class="bal-row">
+      <div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${i===0?'🏆':(i+1)}</div>
+      <div class="feed-body"><div class="bal-name">${escapeHtml(mm.name)}</div><div style="font-size:12px; color:rgba(255,247,232,0.68);">${stats[mm.id].played} spillet</div></div>
+      <div class="bal-amt">${stats[mm.id].wins} sejre</div>
+    </div>
+  `).join('');
+  return `<div class="section-label">🏆 Highscore</div>${rows}`;
+}
+
+function complainerLobbyHtml(){
+  const realMembers = state.members.filter(mm=>!mm.isBot);
+  const allIds = realMembers.map(mm=>mm.id);
+  if(!complainerSelectedPlayers || !complainerKnownMemberIds){
+    complainerSelectedPlayers = allIds.slice();
+  }else{
+    const newcomers = allIds.filter(id=>!complainerKnownMemberIds.includes(id));
+    complainerSelectedPlayers = [...complainerSelectedPlayers.filter(id=>allIds.includes(id)), ...newcomers];
+  }
+  complainerKnownMemberIds = allIds.slice();
+  const chips = realMembers.map(mm=>{
+    const on = complainerSelectedPlayers.includes(mm.id);
+    return `<div class="name-pill ${on?'selected':''}" data-complainer-player="${mm.id}" style="${on?'':'opacity:.5;'}">${on?'✅':'➖'} ${escapeHtml(mm.name)}</div>`;
+  }).join('');
+  const enough = complainerSelectedPlayers.length >= 3;
+  const steps = [
+    ['🎭', 'Alle får hemmeligt en <b>arketype</b> (fx "den indre brokker") og en hverdags-situation (chef, nabo, familie, kollega, ven)'],
+    ['🗒️', 'Hver opbygningsrunde skriver alle et kort, konkret brok i karakter — ud fra et spørgsmål der bliver skarpere for hver runde'],
+    ['🤫', 'Bagefter stemmer alle HEMMELIGT om hvem der virker mest skyldig lige nu — ingen ved endnu hvem der reelt ER det'],
+    ['🎰', 'Rundens topmest mistænkte vælger: bank et lille sikkert point, eller sats det dobbelt op på at være topmest mistænkt IGEN næste runde'],
+    ['🪤', 'Én af jer er hemmeligt "Den Store Brokker" — men <b>ingen ved det, heller ikke den skyldige selv</b>, før spillet afslører det for dem alene'],
+    ['🎯', 'Når det sker, skal Den Store Brokker — stadig i karakter — gætte en konkret detalje om en anden spiller ud fra det de har sagt'],
+    ['✅', 'De andre stemmer hemmeligt om gættet er tæt nok. Rammer det, vinder Den Store Brokker'],
+  ];
+  if(complainerInstructionsOpen === null) complainerInstructionsOpen = !localStorage.getItem('bk_complainer_seen_instructions');
+  localStorage.setItem('bk_complainer_seen_instructions', '1');
+  return `
+    <div class="empty-state" style="padding-top:18px; padding-bottom:10px;">
+      <span class="emoji">🪤</span>
+      <b>Det Store Brokkeri</b>
+      Brok dig i karakter — men pas på, der er ingen sikker måde at reagere på mistanke.
+    </div>
+    <div class="game-card" style="margin:10px 0 10px;">
+      <div id="complainerInstructionsToggle" style="display:flex; align-items:center; justify-content:space-between; cursor:pointer; ${complainerInstructionsOpen?'margin-bottom:8px;':''}">
+        <label class="field-label" style="color:rgba(255,247,232,0.7); margin:0;">Sådan foregår det</label>
+        <span style="color:rgba(255,247,232,0.5); font-size:13px; transition:transform .2s; display:inline-block; ${complainerInstructionsOpen?'transform:rotate(180deg);':''}">⌄</span>
+      </div>
+      ${complainerInstructionsOpen ? steps.map(([icon,text])=>`
+        <div style="display:flex; gap:10px; align-items:flex-start; margin-bottom:9px;">
+          <span style="font-size:16px; line-height:1.4;">${icon}</span>
+          <p style="margin:0; font-size:13px; line-height:1.4; color:rgba(255,247,232,0.8);">${text}</p>
+        </div>
+      `).join('') : ''}
+    </div>
+    <div class="game-card" style="margin:10px 0;">
+      <label class="field-label" style="color:rgba(255,247,232,0.7);">Hvem er med? (mindst 3)</label>
+      <div class="name-grid" id="complainerPlayerGrid">${chips}</div>
+      <label class="field-label" style="color:rgba(255,247,232,0.7);">Spil om</label>
+      <div class="segmented" style="margin-bottom:14px;">
+        <div class="seg ${complainerWager!=='euro'?'active':''}" data-complainer-wager="fun">🏅 Æren</div>
+        <div class="seg ${complainerWager==='euro'?'active':''}" data-complainer-wager="euro">💶 1 euro i kassen</div>
+      </div>
+      <label class="field-label" style="color:rgba(255,247,232,0.7);">Antal opbygningsrunder</label>
+      <div class="segmented" style="margin-bottom:0;">
+        ${[3,4,5,6].map(n=>`<div class="seg ${complainerRounds===n?'active':''}" data-complainer-rounds="${n}">${n}</div>`).join('')}
+      </div>
+      <p class="hint" style="margin:6px 0 0; color:rgba(255,247,232,0.55);">4 runder giver typisk et spil på ca. 15-20 minutter. Afsløringen kommer altid lige efter sidste runde — aldrig et fast rundetal I selv kan tælle jer frem til fra start.</p>
+    </div>
+    <button class="game-btn" id="startComplainerBtn" ${enough?'':'disabled'}>🪤 Start Det Store Brokkeri (${complainerSelectedPlayers.length} spillere)</button>
+    ${enough?'':'<p class="hint" style="text-align:center;">Vælg mindst 3 spillere</p>'}
+    ${complainerHighscoreHtml()}
+  `;
+}
+
+// Skjult som standard (kræver et tryk), samme filosofi/mønster som
+// MrBroks mrbrokTopicBanner — nulstilles til skjult ved hver ny runde.
+function complainerRoleBanner(c){
+  if(complainerRoleRevealedRound !== c.round){
+    complainerRoleRevealedRound = c.round;
+    complainerRoleRevealed = false;
+    if(complainerRoleHideTimer){ clearTimeout(complainerRoleHideTimer); complainerRoleHideTimer = null; }
+  }
+  if(!profile) return '';
+  const archetypeId = c.archetypes && c.archetypes[profile.memberId];
+  const situation = c.situations && c.situations[profile.memberId];
+  const info = COMPLAINER_ARCHETYPE_INFO[archetypeId] || { name:'?', hint:'' };
+  if(!complainerRoleRevealed){
+    return `<div class="game-card mrbrok-role-hidden" id="complainerRoleToggle" style="text-align:center; cursor:pointer; margin-bottom:14px;">
+      <div style="font-size:26px;">🔒</div>
+      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; margin:4px 0 0;">Tryk for at se din karakter</p>
+      <p class="hint" style="color:rgba(255,247,232,0.55);">Skjult som standard — nogen kunne jo kigge med på telefonen</p>
+    </div>`;
+  }
+  return `<div class="game-card" id="complainerRoleToggle" style="text-align:center; cursor:pointer; margin-bottom:14px;">
+    <p class="hint" style="margin:0 0 4px; color:rgba(255,247,232,0.6);">Du er:</p>
+    <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:0;">${escapeHtml(info.name)}</p>
+    <p class="hint" style="margin:6px 0 0; color:rgba(255,247,232,0.75);">${escapeHtml(info.hint)}</p>
+    <p class="hint" style="margin:6px 0 0; color:rgba(255,247,232,0.55);">Din situation lige nu: brok dig over ${escapeHtml(COMPLAINER_SITUATION_LABELS[situation]||situation||'?')}</p>
+    <p class="hint" style="margin-top:10px; color:rgba(255,247,232,0.4); font-size:11.5px;">Tryk for at skjule igen</p>
+  </div>`;
+}
+
+function complainerComplainHtml(c, cur){
+  const badge = `<div class="game-badge">Runde ${c.round}/${c.totalRounds} · 🗒️ Byg videre på jeres karakter</div>`;
+  const already = profile && cur.texts && cur.texts[profile.memberId] !== undefined;
+  const myPrompt = cur.prompts ? cur.prompts[profile.memberId] : null;
+  if(already){
+    return `${badge}${complainerRoleBanner(c)}<div class="empty-state"><span class="emoji">✍️</span><b>Dit brok er sendt</b>Vent på at alle andre er færdige.</div>${gameProgressHtml(cur.submittedCount||0, c.players.length, 'har svaret')}`;
+  }
+  return `
+    ${badge}
+    ${complainerRoleBanner(c)}
+    <div class="game-card" id="complainerCard">
+      <p class="hint" style="margin:0 0 8px; color:rgba(255,247,232,0.6);">Dit spørgsmål lige nu:</p>
+      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:18px; margin:0 0 12px;">${myPrompt ? escapeHtml(myPrompt.text) : '...'}</p>
+      <textarea id="complainerTextInput" rows="3" maxlength="240" placeholder="Brok dig — kort og skarpt, i karakter..."></textarea>
+      <button class="game-btn" id="complainerSubmitBtn" style="margin-top:10px;">✅ Send mit brok</button>
+    </div>
+    ${gameProgressHtml(cur.submittedCount||0, c.players.length, 'har svaret')}
+    ${complainerComplaintBlockHtml(c, cur)}
+  `;
+}
+
+function complainerVoteOptionsHtml(c, cur){
+  const options = state.members.filter(mm=>c.players.includes(mm.id) && mm.id !== profile.memberId);
+  return options.map(mm=>`
+    <div class="bal-row game-pick" data-complainer-vote="${mm.id}" style="cursor:pointer;">
+      <div class="avatar">${initials(mm.name)}</div>
+      <div class="feed-body"><div class="bal-name">${escapeHtml(mm.name)}</div></div>
+    </div>
+  `).join('');
+}
+
+function complainerVoteHtml(c, cur){
+  const badge = `<div class="game-badge">Runde ${c.round}/${c.totalRounds} · 🤔 Hvem virker mest skyldig?</div>`;
+  const eligible = c.players.length;
+  const already = profile && cur.votes && cur.votes[profile.memberId] !== undefined;
+  if(already){
+    return `${badge}<div class="empty-state"><span class="emoji">🤫</span><b>Din stemme er registreret</b>Ingen facit endnu — det er ren mistanke, ikke et bevis.</div>${gameProgressHtml(cur.voteCount||0, eligible, 'har stemt')}${complainerComplaintBlockHtml(c, cur)}`;
+  }
+  return `
+    ${badge}
+    <p class="hint" style="text-align:center; margin:0 0 8px; color:rgba(255,247,232,0.7);"><b style="color:rgba(255,247,232,0.92);">Hvem tror du er Den Store Brokker?</b> Ingen ved det endnu, heller ikke dem selv — ren mavefornemmelse. Din stemme er hemmelig indtil alle har stemt.</p>
+    ${complainerVoteOptionsHtml(c, cur)}
+    ${gameProgressHtml(cur.voteCount||0, eligible, 'har stemt')}
+    ${complainerComplaintBlockHtml(c, cur)}
+  `;
+}
+
+function complainerBetHtml(c, cur){
+  const badge = `<div class="game-badge">Runde ${c.round}/${c.totalRounds} · 🎰 Rundens mest mistænkte</div>`;
+  const topMember = state.members.find(mm=>mm.id===cur.topId);
+  const isTop = profile && profile.memberId === cur.topId;
+  const gambleNote = c.lastGambleResult ? (()=>{
+    const gm = state.members.find(mm=>mm.id===c.lastGambleResult.playerId);
+    return c.lastGambleResult.won
+      ? `<p class="hint" style="color:rgba(255,201,60,0.9); font-weight:600; text-align:center;">🎉 ${escapeHtml(gm?gm.name:'?')} var topmest mistænkt igen — satsningen gav dobbelt op!</p>`
+      : `<p class="hint" style="color:rgba(255,247,232,0.7); text-align:center;">😬 ${escapeHtml(gm?gm.name:'?')} var IKKE topmest mistænkt denne gang — satsningen gik tabt.</p>`;
+  })() : '';
+  if(!isTop){
+    return `${badge}${gambleNote}<div class="empty-state"><span class="emoji">😳</span><b>${escapeHtml(topMember?topMember.name:'?')} er rundens mest mistænkte</b>De vælger nu om de vil banke et sikkert point, eller satse dobbelt op.</div>`;
+  }
+  return `
+    ${badge}
+    ${gambleNote}
+    <div class="game-card" id="complainerCard" style="text-align:center;">
+      <div style="font-size:26px;">😳</div>
+      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:4px 0 6px;">Du er rundens mest mistænkte!</p>
+      <p class="hint" style="color:rgba(255,247,232,0.7); margin:0 0 16px;">Bank ${SUSPECT_POINTS_CLIENT} sikkert point nu, eller sats dem — bliver du topmest mistænkt IGEN næste runde, får du det dobbelte. Ellers er de tabt.</p>
+      <div style="display:flex; gap:10px;">
+        <button class="game-btn" data-complainer-bet="safe" style="margin-top:0; background:linear-gradient(160deg, var(--sea), var(--sea-deep)); box-shadow:0 8px 18px rgba(11,58,63,0.4);">🏦 Bank ${SUSPECT_POINTS_CLIENT} sikkert</button>
+        <button class="game-btn" data-complainer-bet="gamble" style="margin-top:0;">🎰 Sats dobbelt op</button>
+      </div>
+    </div>
+  `;
+}
+
+function complainerHistoryHtml(c){
+  if(!c.history || !c.history.length) return '';
+  const rows = c.history.map((h,i)=>{
+    const isOpen = complainerHistoryOpenRounds.has(i);
+    const lines = c.players.map(id=>{
+      const mm = state.members.find(x=>x.id===id);
+      const prompt = h.prompts && h.prompts[id];
+      const text = h.texts && h.texts[id];
+      if(!text) return '';
+      return `<div style="margin-bottom:8px;"><p class="hint" style="margin:0; color:rgba(255,247,232,0.5); font-size:11px;">${escapeHtml(mm?mm.name:'?')}${prompt?` · ${escapeHtml(prompt.text)}`:''}</p><p style="margin:2px 0 0; font-size:13.5px; color:rgba(255,247,232,0.9);">"${escapeHtml(text)}"</p></div>`;
+    }).join('');
+    return `<div class="game-card" style="text-align:left; margin-bottom:8px;">
+      <div data-complainer-history-toggle="${i}" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
+        <p class="hint" style="margin:0; color:rgba(255,247,232,0.55);">Runde ${h.round}</p>
+        <span style="font-size:12px; color:rgba(255,247,232,0.5); text-decoration:underline;">${isOpen?'Skjul':'Vis'}</span>
+      </div>
+      ${isOpen?`<div style="margin-top:8px;">${lines}</div>`:''}
+    </div>`;
+  }).join('');
+  return `<div class="section-label">📜 Sådan gik det hidtil</div>${rows}`;
+}
+
+function complainerGuessHtml(c, cur){
+  const badge = `<div class="game-badge">🪤 Afsløringen er sket — privat</div>`;
+  if(c.youAreGuilty){
+    if(!cur.targetId){
+      const options = state.members.filter(mm=>c.players.includes(mm.id) && mm.id !== profile.memberId);
+      return `
+        ${badge}
+        <div class="game-card" id="complainerCard">
+          <p class="hint" style="margin:0 0 8px; color:rgba(255,247,232,0.7);">Du er Den Store Brokker! Bliv i karakter — gæt en konkret detalje om en af de andre, ud fra det de har sagt undervejs.</p>
+          <label class="field-label" style="color:rgba(255,247,232,0.7);">Om hvem?</label>
+          <div class="name-grid" style="margin-bottom:12px;">
+            ${options.map(mm=>`<div class="name-pill ${complainerGuessTargetId===mm.id?'selected':''}" data-complainer-guess-target="${mm.id}">${escapeHtml(mm.name)}</div>`).join('')}
+          </div>
+          <textarea id="complainerGuessInput" rows="2" maxlength="240" placeholder="Dit konkrete gæt om detaljen..."></textarea>
+          <button class="game-btn" id="complainerGuessBtn" style="margin-top:10px;">🎯 Send gæt</button>
+        </div>
+        ${complainerHistoryHtml(c)}
+      `;
+    }
+    return `${badge}<div class="empty-state"><span class="emoji">🤞</span><b>Dit gæt er sendt</b>De andre stemmer nu om det er tæt nok.</div>`;
+  }
+  return `${badge}<div class="empty-state"><span class="emoji">⏳</span><b>Nogen tænker...</b>Vent på Den Store Brokkers sidste gæt — I finder snart ud af hvem det er.</div>${complainerHistoryHtml(c)}`;
+}
+
+function complainerJudgeHtml(c, cur){
+  const badge = `<div class="game-badge">🎯 Gættefinale</div>`;
+  const targetMember = state.members.find(mm=>mm.id===cur.targetId);
+  if(c.youAreGuilty){
+    return `${badge}<div class="empty-state"><span class="emoji">🤞</span><b>Dit gæt er sendt</b>Vent på de andres dom.</div>`;
+  }
+  const already = profile && cur.votes && cur.votes[profile.memberId] !== undefined;
+  if(already){
+    return `${badge}<div class="empty-state"><span class="emoji">🤫</span><b>Din dom er registreret</b>Vent på de andre.</div>${gameProgressHtml(cur.voteCount||0, Math.max(1,c.players.length-1), 'har dømt')}`;
+  }
+  return `
+    ${badge}
+    <div class="game-card" id="complainerCard" style="text-align:center;">
+      <p class="hint" style="margin:0 0 6px; color:rgba(255,247,232,0.6);">Den Store Brokker gættede om ${escapeHtml(targetMember?targetMember.name:'?')}:</p>
+      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:18px;">"${escapeHtml(cur.detail||'?')}"</p>
+      <p class="hint" style="margin:10px 0; color:rgba(255,247,232,0.6);">Er det tæt nok? Vær ærlig — det er kun sjovt hvis dommen er fair.</p>
+      <div style="display:flex; gap:10px;">
+        <button class="game-btn" data-complainer-judge="true" style="margin-top:0; background:linear-gradient(160deg, var(--sea), var(--sea-deep)); box-shadow:0 8px 18px rgba(11,58,63,0.4);">✅ Tæt nok</button>
+        <button class="game-btn" data-complainer-judge="false" style="margin-top:0;">❌ Ikke tæt nok</button>
+      </div>
+    </div>
+    ${gameProgressHtml(cur.voteCount||0, Math.max(1,c.players.length-1), 'har dømt')}
+  `;
+}
+
+function complainerOverHtml(c, cur){
+  const guiltyMember = state.members.find(mm=>mm.id===cur.guiltyId);
+  const targetMember = state.members.find(mm=>mm.id===cur.targetId);
+  const ranked = state.members.filter(mm=>c.players.includes(mm.id)).sort((a,b)=>(cur.scores[b.id]||0)-(cur.scores[a.id]||0));
+  const scoreRows = ranked.map((mm,i)=>`
+    <div class="bal-row">
+      <div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${i===0?'🏆':(i+1)}</div>
+      <div class="feed-body"><div class="bal-name">${escapeHtml(mm.name)}${mm.id===cur.guiltyId?' 🪤':''}</div></div>
+      <div class="bal-amt">${cur.scores[mm.id]||0} point</div>
+    </div>
+  `).join('');
+  return `
+    <div class="game-badge">🎉 Det Store Brokkeri er slut!</div>
+    <div class="game-card" id="complainerReveal" style="text-align:center; margin-bottom:12px;">
+      <div style="font-size:34px;">🫵</div>
+      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:6px 0;">Den Store Brokker var... ${escapeHtml(guiltyMember?guiltyMember.name:'?')}!</p>
+      <p class="hint" style="color:rgba(255,247,232,0.6);">Gættede om <b style="color:rgba(255,247,232,0.85);">${escapeHtml(targetMember?targetMember.name:'?')}</b>: "${escapeHtml(cur.detail||'?')}"</p>
+      <p style="font-family:'Baloo 2',sans-serif; font-weight:800; margin-top:8px; color:${cur.guiltyWon?'var(--coin)':'var(--coral)'};">${cur.guiltyWon ? '👑 Den Store Brokker vandt!' : '👑 De andre gennemskuede gættet!'}</p>
+      ${c.wager==='euro' ? `<p class="hint" style="color:rgba(255,247,232,0.7);">${cur.guiltyWon ? 'De andre lægger 1€ hver i puljen.' : 'Den Store Brokker lægger 1€ i puljen.'}</p>` : '<p class="hint" style="color:rgba(255,247,232,0.7);">Kun for sjov denne gang.</p>'}
+    </div>
+    <div class="section-label">🎯 Mistanke-regnskab</div>
+    ${scoreRows}
+    ${complainerHistoryHtml(c)}
+    ${complainerHighscoreHtml()}
+    <button class="game-btn" id="complainerPlayAgainBtn" style="margin-top:16px;">🪤 Spil igen</button>
+    <button class="game-btn ghost" id="complainerEndBtn">Tilbage til lobbyen</button>
+  `;
+}
+
+// Samme "ambient brok mod langsomme"-mekanik som Brokspillet/MrBrok — se
+// mrbrokComplaintBlockHtml. Ingen anonymisering her (der er ingen turrækkefølge
+// at skjule bag, i modsætning til MrBrok's clue-fase).
+function complainerComplaintBlockHtml(c, cur){
+  if(!cur || !profile) return '';
+  const pending = getPendingComplainerIdsClient(c, cur);
+  if(!pending.length) return '';
+  const myId = profile.memberId;
+  if(cur.complaint){
+    const byName = cur.complaint.by === 'brokkefaelden' ? 'Spillet' : ((state.members.find(mm=>mm.id===cur.complaint.by)||{}).name || 'Nogen');
+    const targetName = (state.members.find(mm=>mm.id===cur.complaint.targetId)||{}).name || 'nogen';
+    return `
+      <div class="complaint-banner">
+        <span>${cur.complaint.by === 'brokkefaelden' ? '🎙️' : '🐌'} <b>${escapeHtml(byName)}</b> brokker sig over at <b>${escapeHtml(targetName)}</b> bruger sin tid</span>
+        <span id="complaintCountdown" class="complaint-countdown"></span>
+      </div>
+    `;
+  }
+  if(pending.includes(myId)) return ''; // man skal selv være færdig for at kunne brokke sig
+  const age = cur.phaseStartedAt ? (Date.now() - cur.phaseStartedAt) : 0;
+  if(age < MIN_COMPLAIN_AGE_MS) return '';
+  const growth = Math.min(1, (age - MIN_COMPLAIN_AGE_MS) / 30000);
+  const targetName = pending.length === 1 ? (state.members.find(mm=>mm.id===pending[0])||{}).name : null;
+  const label = targetName ? `🐌 Brok over ${escapeHtml(targetName)}s tempo` : `🐌 Brok over de langsomme`;
+  return `<button class="complain-btn" id="complainBtn" data-target="${pending[0]}" style="transform:scale(${(1+growth*0.16).toFixed(2)}); opacity:${(0.6+growth*0.4).toFixed(2)};">${label}</button>`;
+}
+
+function bindComplainerHandlers(c){
+  const cur = c.current;
+  const roleToggle = document.getElementById('complainerRoleToggle');
+  if(roleToggle) roleToggle.onclick = ()=>{
+    if(complainerRoleHideTimer){ clearTimeout(complainerRoleHideTimer); complainerRoleHideTimer = null; }
+    complainerRoleRevealed = !complainerRoleRevealed;
+    if(complainerRoleRevealed){
+      complainerRoleHideTimer = setTimeout(()=>{ complainerRoleHideTimer = null; complainerRoleRevealed = false; render(); }, 7000);
+    }
+    render();
+  };
+  const instrToggle = document.getElementById('complainerInstructionsToggle');
+  if(instrToggle) instrToggle.onclick = ()=>{ complainerInstructionsOpen = !complainerInstructionsOpen; render(); };
+  document.querySelectorAll('[data-complainer-wager]').forEach(el=>{
+    el.onclick = ()=>{ complainerWager = el.dataset.complainerWager; render(); };
+  });
+  document.querySelectorAll('[data-complainer-rounds]').forEach(el=>{
+    el.onclick = ()=>{ complainerRounds = parseInt(el.dataset.complainerRounds,10); render(); };
+  });
+  document.querySelectorAll('[data-complainer-player]').forEach(el=>{
+    el.onclick = ()=>{
+      const id = el.dataset.complainerPlayer;
+      if(complainerSelectedPlayers.includes(id)) complainerSelectedPlayers = complainerSelectedPlayers.filter(x=>x!==id);
+      else complainerSelectedPlayers = [...complainerSelectedPlayers, id];
+      render();
+    };
+  });
+  const startBtn = document.getElementById('startComplainerBtn');
+  if(startBtn) startBtn.onclick = ()=> complainerApi('start', { wager: complainerWager, playerIds: complainerSelectedPlayers, totalRounds: complainerRounds });
+
+  const playAgainBtn = document.getElementById('complainerPlayAgainBtn');
+  if(playAgainBtn) playAgainBtn.onclick = ()=>{
+    complainerApi('end', {}).then(()=> complainerApi('start', { wager: complainerWager, playerIds: complainerSelectedPlayers, totalRounds: complainerRounds }));
+  };
+  const endBtn = document.getElementById('complainerEndBtn');
+  if(endBtn) endBtn.onclick = ()=> complainerApi('end', {});
+
+  const complainBtn = document.getElementById('complainBtn');
+  if(complainBtn) complainBtn.onclick = ()=> complainerApi('complain', { payload: { targetId: complainBtn.dataset.target } });
+
+  document.querySelectorAll('[data-complainer-history-toggle]').forEach(el=>{
+    el.onclick = ()=>{
+      const i = parseInt(el.dataset.complainerHistoryToggle, 10);
+      if(complainerHistoryOpenRounds.has(i)) complainerHistoryOpenRounds.delete(i);
+      else complainerHistoryOpenRounds.add(i);
+      render();
+    };
+  });
+
+  if(!cur) return;
+
+  if(cur.type === 'complain'){
+    const submitBtn = document.getElementById('complainerSubmitBtn');
+    if(submitBtn) submitBtn.onclick = ()=>{
+      const text = document.getElementById('complainerTextInput').value.trim();
+      if(!text) return;
+      lockSubmitBtn(submitBtn, 'Sender...');
+      complainerApi('submit', { payload: { text } });
+    };
+  }
+  if(cur.type === 'vote'){
+    document.querySelectorAll('[data-complainer-vote]').forEach(el=>{
+      el.onclick = ()=>{
+        document.querySelectorAll('[data-complainer-vote]').forEach(x=>x.style.opacity='.4');
+        el.style.opacity='1'; el.style.outline='2px solid var(--coin)';
+        complainerApi('submit', { payload: { votedForId: el.dataset.complainerVote } });
+      };
+    });
+  }
+  if(cur.type === 'bet' && profile && profile.memberId === cur.topId){
+    document.querySelectorAll('[data-complainer-bet]').forEach(el=>{
+      el.onclick = ()=> complainerApi('submit', { payload: { choice: el.dataset.complainerBet } });
+    });
+  }
+  if(cur.type === 'guess' && c.youAreGuilty && !cur.targetId){
+    document.querySelectorAll('[data-complainer-guess-target]').forEach(el=>{
+      el.onclick = ()=>{ complainerGuessTargetId = el.dataset.complainerGuessTarget; render(); };
+    });
+    const btn = document.getElementById('complainerGuessBtn');
+    if(btn) btn.onclick = ()=>{
+      const detail = document.getElementById('complainerGuessInput').value.trim();
+      if(!detail || !complainerGuessTargetId){ toast('Vælg hvem, og skriv dit gæt'); return; }
+      lockSubmitBtn(btn, 'Sender...');
+      const targetId = complainerGuessTargetId;
+      complainerGuessTargetId = null;
+      complainerApi('submit', { payload: { targetId, detail } });
+    };
+  }
+  if(cur.type === 'judge' && !c.youAreGuilty){
+    document.querySelectorAll('[data-complainer-judge]').forEach(el=>{
+      el.onclick = ()=> complainerApi('submit', { payload: { closeEnough: el.dataset.complainerJudge === 'true' } });
     });
   }
 }
