@@ -139,36 +139,48 @@ const COMPLAINER_SITUATIONS = ['chef', 'nabo', 'familie', 'kollega', 'ven'];
 // situation — de "relationelle vinkel"-spørgsmål fra konceptet, der skaber
 // en lille ironisk dobbeltlags-karakter: en brokker der ikke selv ser sin
 // egen rolle i andres brok). `tier` 1-3 styrer eskalering hen over runderne
-// (1 = bred åbner, 3 = skarp/personlig). Bevidst IKKE vandede/vage formuleringer
-// — produktejeren har været eksplicit om at der skal være max saft, alle
+// (1 = bred åbner, 3 = skarp/personlig).
+//
+// SCENARIE-SKABELON (produktejer-rettelse — de oprindelige bare-spørgsmål
+// var for abstrakte til at give noget konkret at spille på): hver prompt er
+// nu EN LILLE SCENE, ikke bare et spørgsmål, bygget af fire faste dele —
+// (a) en konkret UDLØSENDE HÆNDELSE, (b) en PERSONLIG GRUND til at det
+// stikker ekstra (træthed, skam, gammel konflikt...), (c) et SPECIFIKT —
+// ofte lidt ironisk-forkert — PUBLIKUM at brokke sig til (en der intet har
+// med sagen at gøre, eller ligefrem burde være den sidste man sagde det
+// til), og (d) selve spørgsmålet ("Hvad siger du?"). Samme struktur som
+// produktejerens eget eksempel: "Dine børn ringer og vil ha' penge til is.
+// Du har ikke selv fået is længe, og det pisser dig af. Du brokker dig til
+// en kollega uden børn — hvad siger du?" — se rel1 nedenfor, som ER det
+// eksempel. Bevidst IKKE vandede/vage formuleringer — max saft, alle
 // brokker sig hårdt i karakter.
 const COMPLAINER_PROMPTS = [
   // --- chef ---
-  { id: 'chef1', category: 'chef', tier: 1, text: 'Hvad er det seneste din chef har bedt dig om, som fik dig til at trække vejret dybt først?' },
-  { id: 'chef2', category: 'chef', tier: 2, text: 'Nævn en konkret ting din chef siger igen og igen, som du er dødtræt af at høre.' },
-  { id: 'chef3', category: 'chef', tier: 3, text: 'Hvad brokker du dig over til din chef, som du aldrig ville sige højt derhjemme?' },
-  { id: 'chef4', category: 'chef', tier: 3, text: 'Beskriv det møde med din chef, du helst ville have sluppet for at deltage i.' },
+  { id: 'chef1', category: 'chef', tier: 1, text: 'Din chef beder dig blive en time ekstra fredag eftermiddag — igen. Du brokker dig til rengøringsassistenten, som er ved at låse af og bare vil hjem. Hvad siger du?' },
+  { id: 'chef2', category: 'chef', tier: 2, text: 'Din chef roser dig for et projekt, du selv ved du kludrede i det meste af. Du brokker dig til din partner om det bagefter, som bare spurgte hvordan dagen gik. Hvad siger du?' },
+  { id: 'chef3', category: 'chef', tier: 3, text: 'Din chef har lige givet en kollega den forfremmelse, du selv har knoklet for i to år. Du brokker dig til din bedste ven over telefonen, som egentlig ringede om noget helt andet. Hvad siger du?' },
+  { id: 'chef4', category: 'chef', tier: 3, text: 'Din chef beder dig "lige" tage endnu et møde klokken 16 en fredag. Du brokker dig til naboen over hækken, som slet ikke aner hvad du overhovedet laver til daglig. Hvad siger du?' },
   // --- nabo ---
-  { id: 'nabo1', category: 'nabo', tier: 1, text: 'Hvad er det første, du lagde mærke til ved din nabo, som irriterede dig?' },
-  { id: 'nabo2', category: 'nabo', tier: 2, text: 'Beskriv den lyd fra din nabo, du kan genkende med lukkede øjne — og hader.' },
-  { id: 'nabo3', category: 'nabo', tier: 3, text: 'Hvad er det værste din nabo nogensinde har gjort, uden selv at ane det?' },
+  { id: 'nabo1', category: 'nabo', tier: 1, text: 'Din nabo har igen parkeret foran din indkørsel. Du brokker dig til postbuddet, som lige er kommet forbi med en pakke og bare vil videre. Hvad siger du?' },
+  { id: 'nabo2', category: 'nabo', tier: 2, text: 'Din nabo klipper græsplænen klokken syv en søndag morgen. Du brokker dig til din partner, som stadig prøver at sove videre ved siden af dig. Hvad siger du?' },
+  { id: 'nabo3', category: 'nabo', tier: 3, text: 'Din nabo har klaget over din hæk til grundejerforeningen — bag din ryg. Du brokker dig til en fælles bekendt, som er gode venner med jer begge. Hvad siger du?' },
   // --- familie ---
-  { id: 'familie1', category: 'familie', tier: 1, text: 'Hvad siger et familiemedlem altid til dig, som du er træt af at høre?' },
-  { id: 'familie2', category: 'familie', tier: 2, text: 'Nævn en tradition i din familie, du helst ville skippe, men aldrig tør sige det højt.' },
-  { id: 'familie3', category: 'familie', tier: 3, text: 'Hvad er det værste nogen i din familie har sagt til dig, som du stadig ikke forstår hvorfor du skal høre på?' },
+  { id: 'familie1', category: 'familie', tier: 1, text: 'Din svigermor ringer for tredje gang denne uge med et "lille" råd om opdragelsen. Du brokker dig til en kollega, som ikke selv har børn. Hvad siger du?' },
+  { id: 'familie2', category: 'familie', tier: 2, text: 'Din bror glemmer, igen, din fødselsdag — men husker alle andres. Du brokker dig til din mor, som altid ender med at tage hans parti. Hvad siger du?' },
+  { id: 'familie3', category: 'familie', tier: 3, text: 'Dine forældre blander sig i, hvor I skal holde jul, for tredje år i træk. Du brokker dig til din svoger, som du ellers aldrig taler privat med. Hvad siger du?' },
   // --- kollega ---
-  { id: 'kollega1', category: 'kollega', tier: 1, text: 'Hvad gør en kollega, som får dig til at rulle med øjnene hver gang?' },
-  { id: 'kollega2', category: 'kollega', tier: 2, text: 'Beskriv den kollega der altid får æren for dit arbejde — uden at nævne navn.' },
-  { id: 'kollega3', category: 'kollega', tier: 3, text: 'Hvad har en kollega gjort, som du aldrig helt har tilgivet dem for?' },
+  { id: 'kollega1', category: 'kollega', tier: 1, text: 'En kollega tager æren for din idé på mødet, mens du sidder lige ved siden af. Du brokker dig til receptionisten, som knap nok kender dig. Hvad siger du?' },
+  { id: 'kollega2', category: 'kollega', tier: 2, text: 'En kollega "glemmer" igen at invitere dig med til frokost. Du brokker dig til den nye praktikant, som lige er startet og ikke aner hvem der er hvem. Hvad siger du?' },
+  { id: 'kollega3', category: 'kollega', tier: 3, text: 'En kollega har brugt din research uden at nævne dig i rapporten til direktøren. Du brokker dig til HR, som egentlig bare spurgte hvordan du havde det. Hvad siger du?' },
   // --- ven ---
-  { id: 'ven1', category: 'ven', tier: 1, text: 'Hvad er den mest irriterende vane en ven af dig har?' },
-  { id: 'ven2', category: 'ven', tier: 2, text: 'Nævn en gang en ven svigtede en aftale — og hvordan de bortforklarede det.' },
-  { id: 'ven3', category: 'ven', tier: 3, text: 'Hvad er det du aldrig har turdet sige til en ven, selvom det brænder i dig?' },
+  { id: 'ven1', category: 'ven', tier: 1, text: 'Din bedste ven aflyser jeres aftale for tredje gang i træk — igen i sidste øjeblik. Du brokker dig til en kollega, som aldrig har mødt vedkommende. Hvad siger du?' },
+  { id: 'ven2', category: 'ven', tier: 2, text: 'En ven låner penge af dig og "glemmer" det hver eneste gang, det bliver nævnt. Du brokker dig til din frisør, mens du sidder fastspændt i stolen. Hvad siger du?' },
+  { id: 'ven3', category: 'ven', tier: 3, text: 'En ven har fortalt din hemmelighed videre til folk, du slet ikke stoler på. Du brokker dig til vennens kæreste, som du normalt aldrig taler alene med. Hvad siger du?' },
   // --- relational (bruges af alle, uanset situation) ---
-  { id: 'rel1', category: 'relational', tier: 1, text: 'Hvem brokker sig mest til DIG, og hvad siger de?' },
-  { id: 'rel2', category: 'relational', tier: 2, text: 'Hvad er det værste nogen har sagt til dig, som du stadig ikke forstår hvorfor du skal høre på?' },
-  { id: 'rel3', category: 'relational', tier: 3, text: 'Hvad brokker du dig over hos andre, som du selv er mindst lige så slem til?' },
-  { id: 'rel4', category: 'relational', tier: 3, text: 'Hvem i dit liv ville blive mest overrasket over at høre, at du brokker dig over dem — og hvad ville de høre?' },
+  { id: 'rel1', category: 'relational', tier: 1, text: 'Dine børn ringer og vil ha\' penge til is. Du har ikke selv fået is længe, og det pisser dig af. Du brokker dig til en kollega uden børn. Hvad siger du?' },
+  { id: 'rel2', category: 'relational', tier: 2, text: 'Nogen brokker sig til dig om noget helt banalt, mens du selv står med et rigtigt problem. Du brokker dig videre til din partner om det, bagefter, om hvor lidt folk forstår. Hvad siger du?' },
+  { id: 'rel3', category: 'relational', tier: 3, text: 'Du brokker dig ofte over folk der ikke lytter — men din partner peger på, at du selv gjorde præcis det i går. Du brokker dig til din bedste ven over at blive kaldt hyklerisk. Hvad siger du?' },
+  { id: 'rel4', category: 'relational', tier: 3, text: 'En du står tæt på ville blive chokeret, hvis de hørte hvad du siger om dem, når de ikke er der. Du brokker dig om netop den person til en fælles ven. Hvad siger du?' },
 ];
 
 // Vælger arketype + situation til hver spiller. Ikke vægtet/roterende som
