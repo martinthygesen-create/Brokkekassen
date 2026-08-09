@@ -6,6 +6,7 @@ const {
   advanceComplain,
   resolveSuspicionRound,
   resolveBet,
+  applyComplainerChallenge, // EXPERIMENTAL — se complainerFlow.js's kommentar ved funktionen
   submitGuess,
   resolveJudge,
   getPendingComplainerIds,
@@ -59,6 +60,9 @@ module.exports = async (req, res) => {
           active: true, wager, players, archetypes, situations, totalRounds,
           guiltyId, revealed: false, revealedAt: null,
           round: 0, scores, pendingGamble: null, lastGambleResult: null,
+          // challengeEnabled/challengeUsedBy: EXPERIMENTAL "Udfordring", se
+          // applyComplainerChallenge i complainerFlow.js — ét flag, ét sted.
+          challengeEnabled: true, challengeUsedBy: {},
           topSuspectHistory: [], history: [], usedPromptIds: {},
           current: null, startedAt: Date.now(),
         };
@@ -145,6 +149,26 @@ module.exports = async (req, res) => {
         }
         return;
       }
+
+      // ============================================================
+      // EXPERIMENTAL — "Udfordring". Se CLAUDE.md/commit-besked og
+      // complainerFlow.js's applyComplainerChallenge for kontekst/begrundelse.
+      // Ét flag (state.complainer.challengeEnabled), ét kaldested — fjern
+      // denne blok + dens ene kaldested i complainerFlow.js + UI-knappen i
+      // index.html's complainerBetHtml for at rippe hele featuren ud igen,
+      // hvis den ikke tester godt ved bordet.
+      if (action === 'challenge') {
+        if (c.challengeEnabled === false) throw new ApiError(400, 'Udfordring er slået fra i dette spil');
+        if (!cur || cur.type !== 'bet') throw new ApiError(400, 'kan kun udfordres under en bank/gamble-beslutning');
+        if (cur.choice) throw new ApiError(409, 'for sent — valget er allerede taget');
+        if (!c.players.includes(actorId)) throw new ApiError(403, 'du er ikke med i dette spil af Det Store Brokkeri');
+        if (actorId === cur.topId) throw new ApiError(403, 'du kan ikke udfordre dig selv');
+        if (c.challengeUsedBy && c.challengeUsedBy[actorId]) throw new ApiError(409, 'du har allerede brugt din udfordring i dette spil');
+        if (cur.challenged) throw new ApiError(409, 'der er allerede udfordret denne runde');
+        applyComplainerChallenge(state, actorId);
+        return;
+      }
+      // ============================================================
 
       // "complain" — samme filosofi som Brokspillet/MrBrok: en spiller der
       // selv allerede er færdig kan brokke sig over en langsom medspiller

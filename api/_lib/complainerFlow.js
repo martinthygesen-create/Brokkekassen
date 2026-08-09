@@ -100,7 +100,13 @@ function resolveSuspicionRound(state) {
   const leaders = maxVotes > 0 ? Object.keys(tally).filter(id => tally[id] === maxVotes) : c.players.slice();
   const topId = leaders[Math.floor(Math.random() * leaders.length)];
   const tie = leaders.length > 1;
-  c.topSuspectHistory.push({ round: cur.round, topId, tie, tally });
+  // BEVIDST ingen tally her — c.topSuspectHistory er ALDRIG redigeret væk
+  // (se redactComplainerFor), så en fuld stemmefordeling gemt her ville
+  // lække til alle med det samme og gøre "Udfordring"s hele pointe
+  // (at tallyen NORMALT er skjult, og kun afsløres hvis nogen udfordrer)
+  // meningsløs. Selve tallyen lever kun transient på cur.tally nedenfor,
+  // som ER redigeret betinget af cur.challenged.
+  c.topSuspectHistory.push({ round: cur.round, topId, tie });
 
   // Afregn en evt. ventende satsning FRA FORRIGE runde: vandt kun hvis
   // SAMME spiller også topper mistanken denne runde.
@@ -120,9 +126,35 @@ function resolveSuspicionRound(state) {
   }
   c.lastGambleResult = lastGambleResult;
 
-  c.current = { type: 'bet', round: cur.round, topId, tie, choice: null };
+  // tally gemmes altid på selve bet-fasen (ikke kun i topSuspectHistory
+  // bagefter) så en "Udfordring" (se applyComplainerChallenge nedenfor,
+  // EXPERIMENTEL) kan afsløre den for alle MENS runden stadig er aktiv —
+  // men den er redigeret væk for almindelige klienter indtil den evt.
+  // udfordres, se redactComplainerFor i _lib/complainer.js.
+  c.current = { type: 'bet', round: cur.round, topId, tie, choice: null, tally, stakeMultiplier: 1, challenged: false, challengedBy: null };
   stampPhaseComplainer(c.current);
 }
+
+// ============================================================
+// EXPERIMENTAL — "Udfordring" (Coup/Blood on the Clocktower-inspireret
+// engangs-mekanik). Se CLAUDE.md/commit-besked for produktejer-kontekst.
+// Bevidst holdt i sit eget lille, letgenkendelige blok med ét
+// call-site-flag (state.complainer.challengeEnabled) — hvis dette IKKE
+// tester godt ved bordet, kan hele blokken (denne funktion + dens ene
+// kaldested i api/complainer.js's 'challenge'-handler + UI-knappen i
+// index.html's complainerBetHtml) fjernes i ét hug uden at røre resten af
+// runde-flowet. Rører BEVIDST ALDRIG beginReveal/afsløringstidspunktet,
+// rundeantallet, eller noget andet uden for selve DENNE bet-runde.
+function applyComplainerChallenge(state, actorId) {
+  const c = state.complainer;
+  const cur = c.current; // type: bet
+  cur.challenged = true;
+  cur.challengedBy = actorId;
+  cur.stakeMultiplier = 2;
+  if (!c.challengeUsedBy) c.challengeUsedBy = {};
+  c.challengeUsedBy[actorId] = true;
+}
+// ============================================================
 
 // Den topmest mistænkte har valgt hvordan de vil "banke" rundens point —
 // eller nødbremsen har valgt 'safe' for dem. Går videre til enten næste
@@ -142,10 +174,14 @@ function resolveSuspicionRound(state) {
 function resolveBet(state) {
   const c = state.complainer;
   const cur = c.current; // type: bet
+  // stakeMultiplier er normalt 1 — kun EXPERIMENTAL "Udfordring" sætter den
+  // til 2 (se applyComplainerChallenge ovenfor). Rører intet andet ved
+  // point-mekanikken.
+  const stake = SUSPECT_POINTS * (cur.stakeMultiplier || 1);
   if (cur.choice === 'gamble') {
-    c.pendingGamble = { playerId: cur.topId, amount: SUSPECT_POINTS, round: cur.round };
+    c.pendingGamble = { playerId: cur.topId, amount: stake, round: cur.round };
   } else {
-    c.scores[cur.topId] = (c.scores[cur.topId] || 0) + SUSPECT_POINTS;
+    c.scores[cur.topId] = (c.scores[cur.topId] || 0) + stake;
   }
   if (cur.round >= c.totalRounds) {
     beginReveal(state);
@@ -293,6 +329,7 @@ module.exports = {
   beginVoteRound,
   resolveSuspicionRound,
   resolveBet,
+  applyComplainerChallenge, // EXPERIMENTAL — se kommentaren ved funktionen
   beginReveal,
   submitGuess,
   resolveJudge,

@@ -227,6 +227,12 @@ function redactComplainerFor(state, viewerId) {
       const mine = viewerId && Object.prototype.hasOwnProperty.call(cur.votes || {}, viewerId);
       cur.voteCount = Object.keys(cur.votes || {}).length;
       cur.votes = mine ? { [viewerId]: cur.votes[viewerId] } : {};
+    } else if (cur.type === 'bet') {
+      // EXPERIMENTAL "Udfordring" (se applyComplainerChallenge i
+      // complainerFlow.js): den fulde stemmefordeling er normalt skjult
+      // (kun cur.topId — vinderen — er offentlig), og afsløres kun for alle
+      // hvis nogen bruger deres udfordring denne runde.
+      if (!cur.challenged) cur.tally = undefined;
     }
     safe.current = cur;
   }

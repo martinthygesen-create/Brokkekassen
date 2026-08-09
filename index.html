@@ -4595,10 +4595,37 @@ function complainerVoteHtml(c, cur){
   `;
 }
 
+// EXPERIMENTAL "Udfordring"-blok (se api/_lib/complainerFlow.js's
+// applyComplainerChallenge og api/complainer.js's 'challenge'-handler for
+// baggrund/fjernelses-instruktion). Kun denne funktion + dens ene
+// kaldested i complainerBetHtml + de to server-side steder skal fjernes
+// for at rippe featuren ud igen, hvis den ikke tester godt ved bordet.
+function complainerChallengeBlockHtml(c, cur){
+  if(c.challengeEnabled === false) return '';
+  if(cur.challenged){
+    const byMember = state.members.find(mm=>mm.id===cur.challengedBy);
+    const tallyRows = Object.entries(cur.tally||{}).map(([id,n])=>{
+      const mm = state.members.find(x=>x.id===id);
+      return `<span style="display:inline-block; margin:2px 6px 2px 0; padding:3px 9px; border-radius:100px; font-size:11.5px; background:rgba(255,122,61,0.18);">${escapeHtml(mm?mm.name:'?')}: ${n}</span>`;
+    }).join('');
+    return `
+      <div class="game-card" style="text-align:left; margin-bottom:12px;">
+        <p class="hint" style="margin:0 0 6px; color:rgba(255,201,60,0.9); font-weight:700;">⚡ ${escapeHtml(byMember?byMember.name:'Nogen')} udfordrede! Point er fordoblet denne runde, og hele stemmefordelingen er nu åben:</p>
+        <div>${tallyRows}</div>
+      </div>
+    `;
+  }
+  const isTop = profile && profile.memberId === cur.topId;
+  const alreadyUsed = profile && c.challengeUsedBy && c.challengeUsedBy[profile.memberId];
+  if(isTop || alreadyUsed || cur.choice) return '';
+  return `<button class="game-btn ghost" id="complainerChallengeBtn" style="margin-top:10px;">⚡ Udfordring! (fordobler indsatsen, afslører alle stemmer — kan kun bruges én gang pr. spil)</button>`;
+}
+
 function complainerBetHtml(c, cur){
   const badge = `<div class="game-badge">Runde ${c.round}/${c.totalRounds} · 🎰 Rundens mest mistænkte</div>`;
   const topMember = state.members.find(mm=>mm.id===cur.topId);
   const isTop = profile && profile.memberId === cur.topId;
+  const stakePoints = SUSPECT_POINTS_CLIENT * (cur.stakeMultiplier || 1);
   const gambleNote = c.lastGambleResult ? (()=>{
     const gm = state.members.find(mm=>mm.id===c.lastGambleResult.playerId);
     return c.lastGambleResult.won
@@ -4606,17 +4633,18 @@ function complainerBetHtml(c, cur){
       : `<p class="hint" style="color:rgba(255,247,232,0.7); text-align:center;">😬 ${escapeHtml(gm?gm.name:'?')} var IKKE topmest mistænkt denne gang — satsningen gik tabt.</p>`;
   })() : '';
   if(!isTop){
-    return `${badge}${gambleNote}<div class="empty-state"><span class="emoji">😳</span><b>${escapeHtml(topMember?topMember.name:'?')} er rundens mest mistænkte</b>De vælger nu om de vil banke et sikkert point, eller satse dobbelt op.</div>`;
+    return `${badge}${gambleNote}<div class="empty-state"><span class="emoji">😳</span><b>${escapeHtml(topMember?topMember.name:'?')} er rundens mest mistænkte</b>De vælger nu om de vil banke et sikkert point, eller satse dobbelt op.</div>${complainerChallengeBlockHtml(c, cur)}`;
   }
   return `
     ${badge}
     ${gambleNote}
+    ${complainerChallengeBlockHtml(c, cur)}
     <div class="game-card" id="complainerCard" style="text-align:center;">
       <div style="font-size:26px;">😳</div>
       <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:4px 0 6px;">Du er rundens mest mistænkte!</p>
-      <p class="hint" style="color:rgba(255,247,232,0.7); margin:0 0 16px;">Bank ${SUSPECT_POINTS_CLIENT} sikkert point nu, eller sats dem — bliver du topmest mistænkt IGEN næste runde, får du det dobbelte. Ellers er de tabt.</p>
+      <p class="hint" style="color:rgba(255,247,232,0.7); margin:0 0 16px;">Bank ${stakePoints} sikkert point nu, eller sats dem — bliver du topmest mistænkt IGEN næste runde, får du det dobbelte. Ellers er de tabt.</p>
       <div style="display:flex; gap:10px;">
-        <button class="game-btn" data-complainer-bet="safe" style="margin-top:0; background:linear-gradient(160deg, var(--sea), var(--sea-deep)); box-shadow:0 8px 18px rgba(11,58,63,0.4);">🏦 Bank ${SUSPECT_POINTS_CLIENT} sikkert</button>
+        <button class="game-btn" data-complainer-bet="safe" style="margin-top:0; background:linear-gradient(160deg, var(--sea), var(--sea-deep)); box-shadow:0 8px 18px rgba(11,58,63,0.4);">🏦 Bank ${stakePoints} sikkert</button>
         <button class="game-btn" data-complainer-bet="gamble" style="margin-top:0;">🎰 Sats dobbelt op</button>
       </div>
     </div>
@@ -4834,6 +4862,14 @@ function bindComplainerHandlers(c){
     document.querySelectorAll('[data-complainer-bet]').forEach(el=>{
       el.onclick = ()=> complainerApi('submit', { payload: { choice: el.dataset.complainerBet } });
     });
+  }
+  if(cur.type === 'bet'){
+    // EXPERIMENTAL "Udfordring" — se complainerChallengeBlockHtml.
+    const challengeBtn = document.getElementById('complainerChallengeBtn');
+    if(challengeBtn) challengeBtn.onclick = ()=>{
+      lockSubmitBtn(challengeBtn, 'Udfordrer...');
+      complainerApi('challenge', {});
+    };
   }
   if(cur.type === 'guess' && c.youAreGuilty && !cur.targetId){
     document.querySelectorAll('[data-complainer-guess-target]').forEach(el=>{
