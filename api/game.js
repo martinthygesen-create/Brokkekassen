@@ -40,6 +40,7 @@ module.exports = async (req, res) => {
       if (action === 'start') {
         if (state.game.active) throw new ApiError(409, 'spillet er allerede i gang');
         if (state.mrbrok && state.mrbrok.active) throw new ApiError(409, 'MrBrok er i gang — afslut det først');
+        if (state.complainer && state.complainer.active) throw new ApiError(409, 'Det Store Brokkeri er i gang — afslut det først');
         const requested = Array.isArray(req.body.playerIds) ? req.body.playerIds : state.members.map(m => m.id);
         const players = state.members.map(m => m.id).filter(id => requested.includes(id));
         if (players.length < 2) throw new ApiError(400, 'vælg mindst 2 spillere');
