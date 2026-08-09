@@ -50,3 +50,17 @@ forgrener sig i tre retninger.
 Koncept-noter (arketyper, opbygningsrunder, mistankeafstemning, organisk
 afsløring, gættefinale) er ikke skrevet ned et fast sted endnu — spørg
 Martin om det fulde koncept-notat før implementering påbegyndes.
+
+## Én branch, ingen preview
+
+Der køres bevidst med ÉN branch (`claude/brokkekassen-famille-setup-ixh41o`)
+som også er prod-branchen — intet preview-setup i Vercel. Nyt arbejde
+(inklusive The Big Complainer) skal derfor også committes direkte til denne
+branch, IKKE en ny feature-branch — det er en bevidst simplicitets-
+beslutning, ikke en forglemmelse.
+
+Da flere Claude Code-sessioner kan arbejde på repoet samtidig på præcis
+denne ene branch, er disciplinen omkring `git fetch`/fast-forward FØR hver
+push ekstra vigtig — se den gentagne "stale lokal checkout"-problematik i
+commit-historikken. Altid: `git fetch origin <branch>` og sammenlign mod
+`origin/<branch>` før en push, aldrig antag at lokal HEAD er ajour.
