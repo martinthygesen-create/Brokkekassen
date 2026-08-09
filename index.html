@@ -690,6 +690,8 @@ let complainerRoleHideTimer = null;
 let complainerGuessTargetId = null; // lokalt valg under gættefinalen, indtil det sendes
 let complainerHistoryOpenRounds = new Set(); // hvilke tidligere runder i "Sådan gik det hidtil" der er foldet ud
 let complainerRevealSplashShownFor = null; // c.startedAt for det spil den PRIVATE afsløringssplash sidst blev vist til — se maybeShowComplainerRevealSplash
+let complainerRoleSplashShownFor = null; // c.startedAt — rolle-afsløringssplashen ved spilstart, se maybeShowComplainerRoleSplash
+let complainerSuspenseShownKeys = new Set(); // generiske "spændings"-splashes (runde-start, stemmeresultat, dom) — se showComplainerSuspenseSplash
 
 // Bot-testspil — se startBotTestGame/driveBotsIfNeeded. botAutoplay er kun
 // sat i DENNE browser-fane (ikke gemt/delt), og styrer om vi overhovedet
@@ -4231,7 +4233,90 @@ function renderComplainerScreen(){
     lastComplaintKeyComplainer = complaintKey;
     startComplaintCountdown(cur, false);
   }
+  maybeShowComplainerRoleSplash(c);
+  maybeShowComplainerSuspenseSplashes(c);
   maybeShowComplainerRevealSplash(c);
+}
+
+// Generisk, letvægts "spændings-beat" — et par sekunders fuldskærms-pause
+// med et par ord, ingen handling krævet, lukker selv. Bruges til flere
+// forskellige overgange (runde-start, stemmeresultat, dom), samme
+// ember-udseende (.complainer-splash) som de øvrige Det Store
+// Brokkeri-splashes, men uden deres egen dedikerede tilstand pr. type —
+// nøglen (fx "round:<startedAt>:<round>") sikrer den kun vises ÉN gang pr.
+// overgang, ikke ved hvert almindeligt poll/gen-render.
+function showComplainerSuspenseSplash(key, emoji, title, subtitle, autoCloseMs){
+  if(complainerSuspenseShownKeys.has(key)) return;
+  complainerSuspenseShownKeys.add(key);
+  const backdropHtml = `<div class="complainer-splash-backdrop" id="complainerSuspenseBackdrop"><div class="complainer-splash" id="complainerSuspenseInner"></div></div>`;
+  document.body.insertAdjacentHTML('beforeend', backdropHtml);
+  const backdrop = document.getElementById('complainerSuspenseBackdrop');
+  const inner = document.getElementById('complainerSuspenseInner');
+  requestAnimationFrame(()=>backdrop.classList.add('show'));
+  const close = ()=>{ backdrop.classList.remove('show'); setTimeout(()=>backdrop.remove(), 250); };
+  backdrop.addEventListener('click', e=>{ if(e.target === backdrop) close(); });
+  inner.innerHTML = `
+    <div style="font-size:52px;">${emoji}</div>
+    <h3>${escapeHtml(title)}</h3>
+    ${subtitle ? `<p>${escapeHtml(subtitle)}</p>` : ''}
+  `;
+  if(typeof gsap !== 'undefined') gsap.fromTo(inner, {opacity:0, scale:.95}, {opacity:1, scale:1, duration:.35, ease:'back.out(1.6)'});
+  setTimeout(close, autoCloseMs || 1800);
+}
+
+// Suspense-beats ved tre naturlige overgange: en ny rundes start (efter
+// runde 1, som i stedet får den fyldigere rolle-splash lige nedenfor), lige
+// før rundens mistanke-resultat vises (bet-fasen afslører hvem der topper),
+// og lige før det endelige udfald (gameover). Samme "vises kun én gang pr.
+// overgang"-filosofi som resten af splashene i appen.
+function maybeShowComplainerSuspenseSplashes(c){
+  if(!c || !c.active || !c.current) return;
+  const cur = c.current;
+  if(cur.type === 'complain' && cur.turnIndex === 0 && cur.round > 1){
+    showComplainerSuspenseSplash('cxround:'+c.startedAt+':'+cur.round, '🪤', `Runde ${cur.round} starter...`, 'Nye, skarpere spørgsmål venter.', 1800);
+  }
+  if(cur.type === 'bet'){
+    showComplainerSuspenseSplash('cxresults:'+c.startedAt+':'+cur.round, '🗳️', 'Stemmerne er talt op...', 'Hvem topper mistanken?', 1600);
+  }
+  if(cur.type === 'gameover'){
+    showComplainerSuspenseSplash('cxoutcome:'+c.startedAt, '⚖️', 'Dommen er faldet...', null, 1600);
+  }
+}
+
+// Rolle-splash ved spilstart — fuldskærm, kræver et tryk for at lukke (i
+// modsætning til suspense-beatsne ovenfor, som lukker selv), fordi det er
+// den vigtigste information i hele spillet og skal kunne læses i ro. Vises
+// kun ved allerførste tur af spillet (runde 1, tur 0), samme trigger-mønster
+// som MrBrok's maybeShowMrbrokRoleSplash.
+function maybeShowComplainerRoleSplash(c){
+  if(!c || !c.active || !c.current) return;
+  const cur = c.current;
+  if(cur.type !== 'complain' || cur.round !== 1 || cur.turnIndex !== 0) return;
+  if(complainerRoleSplashShownFor === c.startedAt) return;
+  complainerRoleSplashShownFor = c.startedAt;
+  if(!profile) return;
+  const archetypeId = c.archetypes && c.archetypes[profile.memberId];
+  const situation = c.situations && c.situations[profile.memberId];
+  const info = COMPLAINER_ARCHETYPE_INFO[archetypeId] || { name:'?', instructions:[] };
+
+  const backdropHtml = `<div class="complainer-splash-backdrop" id="complainerRoleSplashBackdrop"><div class="complainer-splash" id="complainerRoleSplashInner"></div></div>`;
+  document.body.insertAdjacentHTML('beforeend', backdropHtml);
+  const backdrop = document.getElementById('complainerRoleSplashBackdrop');
+  const inner = document.getElementById('complainerRoleSplashInner');
+  requestAnimationFrame(()=>backdrop.classList.add('show'));
+  const close = ()=>{ backdrop.classList.remove('show'); setTimeout(()=>backdrop.remove(), 250); };
+  backdrop.addEventListener('click', e=>{ if(e.target === backdrop) close(); });
+
+  const instructionsHtml = (info.instructions||[]).map(text=>`<li><span>🎭</span><span>${escapeHtml(text)}</span></li>`).join('');
+  inner.innerHTML = `
+    <div style="font-size:52px;">🪤</div>
+    <h3>${escapeHtml(info.name)}</h3>
+    <p>Din situation: brok dig over ${escapeHtml(COMPLAINER_SITUATION_LABELS[situation]||situation||'?')}</p>
+    <ul>${instructionsHtml}</ul>
+    <button class="game-btn" id="complainerRoleSplashCloseBtn">Forstået, lad os brokke os</button>
+  `;
+  if(typeof gsap !== 'undefined') gsap.fromTo(inner, {opacity:0, scale:.95}, {opacity:1, scale:1, duration:.35, ease:'back.out(1.6)'});
+  document.getElementById('complainerRoleSplashCloseBtn').onclick = close;
 }
 
 // Den PRIVATE afsløring (se beginReveal i complainerFlow.js) — men BÅDE
@@ -4275,14 +4360,21 @@ function maybeShowComplainerRevealSplash(c){
   // Neutral, in-theme "der sker noget"-skærm — bevidst UDEN reelt indhold
   // (afslører hverken ja eller nej om noget), skal bare se ud som om DENNE
   // telefon også lige fik en besked, akkurat som den skyldiges. Lukker
-  // automatisk efter kort tid, ingen handling krævet.
+  // automatisk efter kort tid, ingen handling krævet. VIGTIGT for selve
+  // anti-afslørings-pointen: klienterne poller hvert 3. sekund (se
+  // startPolling), så to telefoner kan i værste fald opdage afsløringen op
+  // til ~3s forskudt af hinanden — luk-forsinkelsen skal derfor være
+  // TYDELIGT længere end ét fuldt poll-interval, ellers kan en tidlig
+  // telefons splash nå at lukke igen FØR en sen telefons splash overhovedet
+  // åbner, hvilket ville ødelægge selve pointen (at alle skærme lyser op
+  // SAMTIDIG, set fra bordet).
   inner.innerHTML = `
     <div style="font-size:52px;">🪤</div>
     <h3>Der sker noget...</h3>
     <p>Nogen har lige fundet ud af noget. Hold øje med bordet.</p>
   `;
   if(typeof gsap !== 'undefined') gsap.fromTo(inner, {opacity:0, scale:.95}, {opacity:1, scale:1, duration:.35, ease:'back.out(1.6)'});
-  setTimeout(close, 2600);
+  setTimeout(close, 4200);
 }
 
 function complainerBodyHtml(c){
