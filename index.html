@@ -600,7 +600,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-09-81';
+const BUILD_TAG = 'build-2026-08-09-82';
 // Skal matche api/_lib/gameFlow.js's CASINOBROK_BET_*-konstanter — kun brugt
 // til visning her (server afgør altid den reelle udbetaling).
 const CASINOBROK_BET_SAFE_POINTS = 1;
@@ -1246,13 +1246,13 @@ function renderWhoAmI(justCreated){
 function totalPool(){ return state.events.filter(e=>!e.free && !e.voided).length; }
 // Alle nuværende (endnu ikke afregnede) brok — kan sagtens strække sig over flere dage.
 function balances(){
-  const map = {}; state.members.forEach(m=>map[m.id]=0);
+  const map = {}; state.members.filter(m=>!m.isBot).forEach(m=>map[m.id]=0);
   state.events.forEach(e=>{ if(!e.free && !e.voided && map[e.memberId]!==undefined) map[e.memberId]++; });
   return map;
 }
 // Kun dagens brok (siden kl. 04), til "Dagens BigSpender".
 function todayBalances(){
-  const map = {}; state.members.forEach(m=>map[m.id]=0);
+  const map = {}; state.members.filter(m=>!m.isBot).forEach(m=>map[m.id]=0);
   state.events.forEach(e=>{ if(!e.free && !e.voided && e.ts >= state.dayBoundary && map[e.memberId]!==undefined) map[e.memberId]++; });
   return map;
 }
@@ -5095,7 +5095,7 @@ function renderFeed(main){
 }
 function allTimeTotals(){
   const totals = {};
-  state.members.forEach(m=>totals[m.id]=0);
+  state.members.filter(m=>!m.isBot).forEach(m=>totals[m.id]=0);
   state.history.forEach(round=>{
     Object.entries(round.totals||{}).forEach(([id,amt])=>{ if(totals[id]!==undefined) totals[id]+=amt; });
   });
@@ -5105,7 +5105,7 @@ function allTimeTotals(){
 }
 
 function spotlightCards(vals){
-  const members = state.members;
+  const members = state.members.filter(m=>!m.isBot);
   const maxV = Math.max(0, ...Object.values(vals));
   if(maxV <= 0) return '';
   const minV = Math.min(...members.map(m=>vals[m.id]||0));
@@ -5144,7 +5144,7 @@ function renderBalanceToday(main){
   const maxAmt = Math.max(0, ...balValues);
   const minAmt = balValues.length ? Math.min(...balValues) : 0;
   const streaks = state.streaks || {};
-  const rows = [...state.members].sort((a,b)=>bal[b.id]-bal[a.id]).map(m=>{
+  const rows = state.members.filter(m=>!m.isBot).sort((a,b)=>bal[b.id]-bal[a.id]).map(m=>{
     const amt = bal[m.id]||0;
     const isTop = amt > 0 && amt === maxAmt;
     const isLeast = maxAmt > minAmt && amt === minAmt;
@@ -5171,7 +5171,7 @@ function renderAllTimeHistory(main){
   const chart = anyTotal ? (
     spotlightCards(totals) +
     `<div class="section-label">Alle medlemmer — alle tider</div>` +
-    [...state.members].sort((a,b)=>totals[b.id]-totals[a.id]).map(m=>{
+    state.members.filter(m=>!m.isBot).sort((a,b)=>totals[b.id]-totals[a.id]).map(m=>{
       const amt = totals[m.id]||0;
       const isTop = amt > 0 && amt === maxTotal;
       const isLeast = maxTotal > minTotal && amt === minTotal;
