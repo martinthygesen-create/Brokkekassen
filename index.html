@@ -600,7 +600,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-09-84';
+const BUILD_TAG = 'build-2026-08-09-85';
 // Skal matche api/_lib/gameFlow.js's CASINOBROK_BET_*-konstanter — kun brugt
 // til visning her (server afgør altid den reelle udbetaling).
 const CASINOBROK_BET_SAFE_POINTS = 1;
@@ -4826,6 +4826,27 @@ function complainerBrokScoresHtml(c){
   return `<div class="section-label">🔥 Bedste brok-performance</div>${rows}`;
 }
 
+// "Til sidst skal man se hvad folk var" (produktejer-ønske) — den fulde
+// afmaskering af ALLE spilleres arketyper ved gameover, ikke kun den
+// skyldiges identitet. c.archetypes har aldrig været hemmeligt for staten
+// selv (kun for hinanden undervejs, via den enkelte spillers egen
+// rolle-splash/-banner) — ved gameover er hele c allerede uredigeret (se
+// redactComplainerFor's tidlige return for type==='gameover'), så det er
+// bare et spørgsmål om at vise det frem her.
+function complainerArchetypeRevealHtml(c){
+  const rows = c.players.map(id=>{
+    const mm = state.members.find(x=>x.id===id);
+    const info = COMPLAINER_ARCHETYPE_INFO[c.archetypes && c.archetypes[id]] || { name:'?' };
+    return `
+      <div class="bal-row">
+        <div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${initials(mm?mm.name:'?')}</div>
+        <div class="feed-body"><div class="bal-name">${escapeHtml(mm?mm.name:'?')}</div><div style="font-size:12px; color:rgba(255,247,232,0.6);">${escapeHtml(info.name)}</div></div>
+      </div>
+    `;
+  }).join('');
+  return `<div class="section-label">🎭 Hvem var hvem</div>${rows}`;
+}
+
 function complainerOverHtml(c, cur){
   const guiltyMember = state.members.find(mm=>mm.id===cur.guiltyId);
   const targetMember = state.members.find(mm=>mm.id===cur.targetId);
@@ -4849,6 +4870,7 @@ function complainerOverHtml(c, cur){
     <div class="section-label">🎯 Mistanke-regnskab</div>
     ${scoreRows}
     ${complainerBrokScoresHtml(c)}
+    ${complainerArchetypeRevealHtml(c)}
     ${complainerHistoryHtml(c)}
     ${complainerHighscoreHtml()}
     <button class="game-btn" id="complainerPlayAgainBtn" style="margin-top:16px;">🪤 Spil igen</button>
