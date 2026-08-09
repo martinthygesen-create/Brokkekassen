@@ -156,6 +156,24 @@
   .mrbrok-splash li b{ color:rgba(255,247,232,0.98); font-weight:800; }
   .mrbrok-splash li span:first-child{ flex:0 0 auto; font-size:22px; line-height:1.2; }
   .mrbrok-splash li span:last-child{ flex:1 1 auto; min-width:0; }
+  /* Samme struktur som .mrbrok-splash ovenfor, men i Det Store Brokkeris egen
+     ember-farvevej i stedet for MrBroks noir/guld — se theme-complainer.
+     Bruges bl.a. til den PRIVATE afsløringssplash: uden en tydelig,
+     umulig-at-overse skærm her risikerer den skyldige spiller reelt at
+     overse at deres tur er kommet (fx pga. push der ikke er sat op/blev
+     afvist), og resten af bordet oplever spillet som "gået i stå" — se
+     maybeShowComplainerRevealSplash. */
+  .complainer-splash-backdrop{ position:fixed; inset:0; background:var(--ember-noir-deep); z-index:92; display:flex; align-items:stretch; justify-content:center; opacity:0; pointer-events:none; transition:opacity .25s ease; }
+  .complainer-splash-backdrop.show{ opacity:1; pointer-events:auto; }
+  .complainer-splash{ background:linear-gradient(160deg, #3a1608, var(--ember-noir-deep)); width:100%; max-width:520px; height:100%; overflow-y:auto; padding:calc(32px + env(safe-area-inset-top)) 26px calc(28px + env(safe-area-inset-bottom)); box-shadow:0 0 60px rgba(255,122,61,.16) inset; text-align:center; display:flex; flex-direction:column; justify-content:center; transform:translateY(10px) scale(.98); transition:transform .25s cubic-bezier(.2,.9,.3,1.2); }
+  .complainer-splash-backdrop.show .complainer-splash{ transform:translateY(0) scale(1); }
+  .complainer-splash h3{ font-family:'Baloo 2',sans-serif; font-weight:800; font-size:30px; line-height:1.25; color:var(--ember); margin:8px 0 20px; }
+  .complainer-splash p{ font-size:17px; line-height:1.5; color:rgba(255,247,232,0.85); font-weight:600; margin:0 0 22px; }
+  .complainer-splash ul{ text-align:left; margin:0 0 22px; padding:0; list-style:none; }
+  .complainer-splash li{ display:flex; gap:14px; align-items:flex-start; margin-bottom:16px; font-size:14.5px; line-height:1.4; font-weight:600; color:rgba(255,247,232,0.65); }
+  .complainer-splash li b{ color:rgba(255,247,232,0.98); font-weight:800; }
+  .complainer-splash li span:first-child{ flex:0 0 auto; font-size:22px; line-height:1.2; }
+  .complainer-splash li span:last-child{ flex:1 1 auto; min-width:0; }
   /* Skal kunne skimmes — den vigtigste handling pr. linje er fremhævet med
      <b>, resten er kun understøttende kontekst. Rammer kun ren-tekst <b>
      uden egen inline-farve, så alle de andre stedspecifikke <b style="...">
@@ -582,7 +600,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-09-79';
+const BUILD_TAG = 'build-2026-08-09-80';
 // Skal matche api/_lib/gameFlow.js's CASINOBROK_BET_*-konstanter — kun brugt
 // til visning her (server afgør altid den reelle udbetaling).
 const CASINOBROK_BET_SAFE_POINTS = 1;
@@ -671,6 +689,7 @@ let complainerRoleRevealedRound = null;
 let complainerRoleHideTimer = null;
 let complainerGuessTargetId = null; // lokalt valg under gættefinalen, indtil det sendes
 let complainerHistoryOpenRounds = new Set(); // hvilke tidligere runder i "Sådan gik det hidtil" der er foldet ud
+let complainerRevealSplashShownFor = null; // c.startedAt for det spil den PRIVATE afsløringssplash sidst blev vist til — se maybeShowComplainerRevealSplash
 
 // Bot-testspil — se startBotTestGame/driveBotsIfNeeded. botAutoplay er kun
 // sat i DENNE browser-fane (ikke gemt/delt), og styrer om vi overhovedet
@@ -4197,6 +4216,39 @@ function renderComplainerScreen(){
     lastComplaintKeyComplainer = complaintKey;
     startComplaintCountdown(cur, false);
   }
+  maybeShowComplainerRevealSplash(c);
+}
+
+// Den PRIVATE afsløring (se beginReveal i complainerFlow.js) sender en push
+// til den skyldige — men push kan fejle stille (VAPID ikke sat op, browseren
+// afviste tilladelsen, telefonen lå i lommen...), og uden ANDEN tydelig,
+// umulig-at-overse markering ville den skyldige spiller nemt overse at det
+// nu er deres tur, mens resten af bordet oplever spillet som gået i stå på
+// "Nogen tænker..."-skærmen. Denne splash er derfor det egentlige,
+// robuste signal — den virker uanset om pushen kom frem, ved næste
+// almindelige poll/gen-render, ikke kun i det øjeblik afsløringen sker.
+// Vises højst én gang pr. spil (keyed på c.startedAt, samme mønster som
+// MrBrok's rolle-splash keyet på m.startedAt).
+function maybeShowComplainerRevealSplash(c){
+  if(!c || !c.active || !c.youAreGuilty || !c.current || c.current.type !== 'guess') return;
+  if(complainerRevealSplashShownFor === c.startedAt) return;
+  complainerRevealSplashShownFor = c.startedAt;
+
+  const backdropHtml = `<div class="complainer-splash-backdrop" id="complainerRevealBackdrop"><div class="complainer-splash" id="complainerRevealInner"></div></div>`;
+  document.body.insertAdjacentHTML('beforeend', backdropHtml);
+  const backdrop = document.getElementById('complainerRevealBackdrop');
+  const inner = document.getElementById('complainerRevealInner');
+  requestAnimationFrame(()=>backdrop.classList.add('show'));
+  const close = ()=>{ backdrop.classList.remove('show'); setTimeout(()=>backdrop.remove(), 250); };
+  backdrop.addEventListener('click', e=>{ if(e.target === backdrop) close(); });
+  inner.innerHTML = `
+    <div style="font-size:52px;">🪤</div>
+    <h3>Du er Den Store Brokker!</h3>
+    <p>Bliv i karakter — og gæt en konkret detalje om en af de andre, ud fra det de har sagt undervejs. Ingen andre ved det er dig endnu.</p>
+    <button class="game-btn" id="complainerRevealCloseBtn">Forstået, lad os gætte</button>
+  `;
+  if(typeof gsap !== 'undefined') gsap.fromTo(inner, {opacity:0, scale:.95}, {opacity:1, scale:1, duration:.35, ease:'back.out(1.6)'});
+  document.getElementById('complainerRevealCloseBtn').onclick = close;
 }
 
 function complainerBodyHtml(c){
