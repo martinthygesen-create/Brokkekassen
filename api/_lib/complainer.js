@@ -27,9 +27,20 @@ const { pickRandom, shuffle } = require('./game');
 // nemt at gå i gang uden yderligere forberedelse. ~10 stykker, med bredt
 // forskellige erhverv/personaer OG forskellig underliggende brok-stil på
 // tværs af puljen — ikke bare 10 gensyn med samme 4 stilarter.
+//
+// `promptHook`: kort (≤12 ord) persona-indramning der sættes FORAN selve den
+// situationelle prompt (se composePromptText nedenfor), så prompten reelt
+// ekkoer HVEM man er, ikke kun HVORDAN man skal levere den. Bevidst IKKE en
+// fuld arketype×situation×tier-indholdsmatrix (10×5×3 er for meget nyt
+// indhold at skrive/vedligeholde) — samme underliggende COMPLAINER_PROMPTS
+// genbruges uændret, kun sammensætningen ved levering er ny. Hver hook
+// slutter med en tankestreg, så den situationelle prompt (med sit første
+// bogstav sænket til småt, se composePromptText) kan hægtes rimeligt
+// grammatisk videre på som ÉN sammenhængende sætning.
 const COMPLAINER_ARCHETYPES = [
   {
     id: 'pilot', name: 'Den passiv-aggressive pilot',
+    promptHook: 'Som en der er vant til at have styringen i luften —',
     instructions: [
       'Det er altid andres skyld — aldrig dit eget ansvar.',
       'Du er højrøstet og overdriver gerne.',
@@ -38,6 +49,7 @@ const COMPLAINER_ARCHETYPES = [
   },
   {
     id: 'kok', name: 'Den udadvendte kok',
+    promptHook: 'Med hele køkkenets fulde opmærksomhed som vane —',
     instructions: [
       'Du råber det ud med det samme — helt uden filter.',
       'Overdriv følelserne teatralsk, gerne med håndbevægelser.',
@@ -46,6 +58,7 @@ const COMPLAINER_ARCHETYPES = [
   },
   {
     id: 'nabo', name: 'Den indre-brokkende nabo',
+    promptHook: 'Som en der helst holder tingene for sig selv —',
     instructions: [
       'Sig "det er helt fint" — men lad stilheden bagefter tale.',
       'Brug stikpiller og hentydninger i stedet for at sige det ligeud.',
@@ -54,6 +67,7 @@ const COMPLAINER_ARCHETYPES = [
   },
   {
     id: 'foraelder', name: 'Den martyr-agtige forælder',
+    promptHook: 'Som en der altid stiller sig selv sidst —',
     instructions: [
       'Det er altid dig der ofrer dig — nævn det, ubedt.',
       'Sammenlign med alt det du "kunne" have gjort i stedet.',
@@ -62,6 +76,7 @@ const COMPLAINER_ARCHETYPES = [
   },
   {
     id: 'projektleder', name: 'Den passiv-aggressive projektleder',
+    promptHook: 'Med et skema der aldrig helt går op —',
     instructions: [
       'Send indirekte hip via "bare lige en tanke..." — aldrig direkte kritik.',
       'Ros først, stik så kniven ind med et "men".',
@@ -70,6 +85,7 @@ const COMPLAINER_ARCHETYPES = [
   },
   {
     id: 'laerer', name: 'Den udadvendte lærer',
+    promptHook: 'Som en der er vant til at få hele lokalets opmærksomhed —',
     instructions: [
       'Du taler højt og bruger hele kroppen når du brokker dig.',
       'Inddrag "os alle sammen" i din vrede, som en fælles sag.',
@@ -78,6 +94,7 @@ const COMPLAINER_ARCHETYPES = [
   },
   {
     id: 'fitness', name: 'Den martyr-agtige fitnessinstruktør',
+    promptHook: 'Som en der altid er der klokken seks for andre —',
     instructions: [
       'Du giver ALT for andre, og ingen forstår hvor hårdt det er.',
       'Nævn hvor tidligt du står op, for andres skyld.',
@@ -86,6 +103,7 @@ const COMPLAINER_ARCHETYPES = [
   },
   {
     id: 'taxachauffoer', name: 'Den indre-brokkende taxachauffør',
+    promptHook: 'Som en der ser alt fra bagsædet, men sjældent siger det —',
     instructions: [
       'Mumle det halvt for dig selv i stedet for at sige det direkte.',
       'Brug en tør, underspillet tone — aldrig råb.',
@@ -94,6 +112,7 @@ const COMPLAINER_ARCHETYPES = [
   },
   {
     id: 'influencer', name: 'Den passiv-aggressive influencer',
+    promptHook: 'Med et smil klar til kameraet, uanset hvad —',
     instructions: [
       'Pak alt ind i positivitet — "helt fint, bare synd at...".',
       'Vær sødt giftig — "haha nej men altså" mens du sviner.',
@@ -102,6 +121,7 @@ const COMPLAINER_ARCHETYPES = [
   },
   {
     id: 'haandvaerker', name: 'Den udadvendte håndværker',
+    promptHook: 'Som en der siger tingene ligeud, håndværker-stil —',
     instructions: [
       'Du brokker dig højt og direkte, uden omsvøb.',
       'Brug konkrete, fysiske eksempler — "det tog MIG tre timer at rette".',
@@ -147,7 +167,7 @@ const COMPLAINER_PROMPTS = [
   // --- relational (bruges af alle, uanset situation) ---
   { id: 'rel1', category: 'relational', tier: 1, text: 'Hvem brokker sig mest til DIG, og hvad siger de?' },
   { id: 'rel2', category: 'relational', tier: 2, text: 'Hvad er det værste nogen har sagt til dig, som du stadig ikke forstår hvorfor du skal høre på?' },
-  { id: 'rel3', category: 'relational', tier: 3, text: 'Hvad brokker du dig over til din chef, som du aldrig ville sige højt derhjemme?' },
+  { id: 'rel3', category: 'relational', tier: 3, text: 'Hvad brokker du dig over hos andre, som du selv er mindst lige så slem til?' },
   { id: 'rel4', category: 'relational', tier: 3, text: 'Hvem i dit liv ville blive mest overrasket over at høre, at du brokker dig over dem — og hvad ville de høre?' },
 ];
 
@@ -193,6 +213,24 @@ function pickPromptFor(playerId, situation, round, totalRounds, usedIds) {
   if (!pool.length) pool = COMPLAINER_PROMPTS.filter(p => !used.has(p.id));
   if (!pool.length) pool = COMPLAINER_PROMPTS; // hele puljen brugt — så må noget gå igen
   return pickRandom(pool);
+}
+
+// Sammensætter den FAKTISKE prompt-tekst en spiller ser: arketypens
+// promptHook (persona-linse) + den situationelle prompt valgt af
+// pickPromptFor ovenfor. Ren PRÆSENTATIONS-sammensætning ved levering —
+// selve COMPLAINER_PROMPTS-puljen og dens id/category/tier-udvælgelse
+// rører vi ALDRIG, kun hvordan den valgte prompt vises frem. Sænker den
+// situationelle prompts første bogstav, så de to dele hægter sammen som ÉN
+// sætning efter hookens tankestreg, i stedet for to bolted-on stumper (fx
+// "Som en der er vant til at have styringen i luften — hvad er det
+// seneste din chef har bedt dig om..."). Kaldes fra complainerFlow.js's
+// beginComplainRound, som har både arketype-id'et og selve prompten ved
+// hånden.
+function composePromptText(archetypeId, promptText) {
+  const archetype = COMPLAINER_ARCHETYPES.find(a => a.id === archetypeId);
+  if (!archetype || !archetype.promptHook || !promptText) return promptText;
+  const lowered = promptText.charAt(0).toLowerCase() + promptText.slice(1);
+  return `${archetype.promptHook} ${lowered}`;
 }
 
 // Det Store Brokkeri gemmer en hemmelighed i state.complainer (hvem der er "Den
@@ -245,6 +283,7 @@ module.exports = {
   COMPLAINER_PROMPTS,
   assignArchetypesAndSituations,
   pickPromptFor,
+  composePromptText,
   tierForRound,
   redactComplainerFor,
 };

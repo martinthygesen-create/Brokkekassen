@@ -11,7 +11,7 @@
 
 const { uid } = require('./store');
 const { pickRandom, shuffle } = require('./game');
-const { assignArchetypesAndSituations, pickPromptFor } = require('./complainer');
+const { assignArchetypesAndSituations, pickPromptFor, composePromptText } = require('./complainer');
 // Genbruger de delte tids-konstanter og "phase stamp"-hjælperen fra
 // Brokspillets gameFlow.js (samme mønster MrBrok allerede gør) — importerer
 // kun herfra, rører ALDRIG selve filen eller dens spil-specifikke logik.
@@ -50,7 +50,15 @@ function beginComplainRound(state, roundNumber) {
   const prompts = {};
   c.players.forEach(id => {
     const prompt = pickPromptFor(id, c.situations[id], roundNumber, c.totalRounds, c.usedPromptIds[id] || []);
-    prompts[id] = { id: prompt.id, text: prompt.text, category: prompt.category, tier: prompt.tier };
+    // Prompten der reelt VISES kombinerer arketypens promptHook med den
+    // valgte situationelle prompt (se composePromptText i _lib/complainer.js)
+    // — så en "passiv-aggressiv pilot" og en "udadvendt lærer" ikke længere
+    // får byte-for-byte identisk tekst for samme situation/tier. id/category/
+    // tier gemmes stadig ud fra den RÅ situationelle prompt (til
+    // udvælgelses-/gentagelses-logikken i pickPromptFor), kun `text` er
+    // sammensat.
+    const composedText = composePromptText(c.archetypes[id], prompt.text);
+    prompts[id] = { id: prompt.id, text: composedText, category: prompt.category, tier: prompt.tier };
     if (!c.usedPromptIds[id]) c.usedPromptIds[id] = [];
     c.usedPromptIds[id].push(prompt.id);
   });
