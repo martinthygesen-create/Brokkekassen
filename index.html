@@ -600,7 +600,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-09-86';
+const BUILD_TAG = 'build-2026-08-09-87';
 // Skal matche api/_lib/gameFlow.js's CASINOBROK_BET_*-konstanter — kun brugt
 // til visning her (server afgør altid den reelle udbetaling).
 const CASINOBROK_BET_SAFE_POINTS = 1;
@@ -1424,6 +1424,7 @@ async function runMrbrokBotAction(m, cur, botId){
 function getPendingComplainerIdsClient(c, cur){
   if(!cur || !c.players) return [];
   if(cur.type === 'complain') return [cur.speakerId];
+  if(cur.type === 'interrogation') return [cur.speakerId];
   if(cur.type === 'vote') return c.players.filter(id=>!(cur.votes && cur.votes[id] !== undefined));
   if(cur.type === 'bet') return cur.choice ? [] : [cur.topId];
   if(cur.type === 'guess') return cur.targetId ? [] : (c.youAreGuilty && profile ? [profile.memberId] : c.players.slice());
@@ -1446,6 +1447,9 @@ async function runComplainerBotAction(c, cur, botId){
   // bekræfte sin tur er ovre, samme mønster som MrBrok's clue-fase
   // (runMrbrokBotAction's cur.type === 'clue' gren).
   if(cur.type === 'complain') return botSubmit('complainer', botId, {});
+  // Spørgerunden efter afsløringen — bottens "svar" er, ligesom brok-fasen,
+  // bare en bekræftelse af at turen er ovre, intet reelt indhold at generere.
+  if(cur.type === 'interrogation') return botSubmit('complainer', botId, {});
   if(cur.type === 'vote'){
     const options = (c.players||[]).filter(id=>id!==botId);
     if(!options.length) return;
@@ -4398,7 +4402,11 @@ function maybeShowComplainerRoleSplash(c){
 // øjeblikket. Vises højst én gang pr. spil (keyed på c.startedAt, samme
 // mønster som MrBrok's rolle-splash keyet på m.startedAt).
 function maybeShowComplainerRevealSplash(c){
-  if(!c || !c.active || !c.current || c.current.type !== 'guess') return;
+  // Trigges nu på 'interrogation' (den ENE spørgerunde der ligger LIGE efter
+  // afsløringen, se beginReveal/beginInterrogationRound i complainerFlow.js)
+  // i stedet for 'guess' — reveal-tidspunktet er stadig det samme, kun den
+  // fase der starter umiddelbart bagefter er ny.
+  if(!c || !c.active || !c.current || c.current.type !== 'interrogation') return;
   if(complainerRevealSplashShownFor === c.startedAt) return;
   complainerRevealSplashShownFor = c.startedAt;
 
@@ -4414,8 +4422,8 @@ function maybeShowComplainerRevealSplash(c){
     inner.innerHTML = `
       <div style="font-size:52px;">🪤</div>
       <h3>Du er Den Store Brokker!</h3>
-      <p>Bliv i karakter — og gæt en konkret detalje om en af de andre, ud fra det de har sagt undervejs. Ingen andre ved det er dig endnu.</p>
-      <button class="game-btn" id="complainerRevealCloseBtn">Forstået, lad os gætte</button>
+      <p>Bliv i karakter gennem den sidste spørgerunde — så skal du gætte en konkret detalje om en af de andre, ud fra det de har sagt undervejs. Ingen andre ved det er dig endnu.</p>
+      <button class="game-btn" id="complainerRevealCloseBtn">Forstået, jeg er klar</button>
     `;
     if(typeof gsap !== 'undefined') gsap.fromTo(inner, {opacity:0, scale:.95}, {opacity:1, scale:1, duration:.35, ease:'back.out(1.6)'});
     document.getElementById('complainerRevealCloseBtn').onclick = close;
@@ -4452,6 +4460,7 @@ function complainerBodyHtml(c){
   }
   if(cur.type === 'gameover') return complainerOverHtml(c, cur);
   if(cur.type === 'complain') return complainerComplainHtml(c, cur);
+  if(cur.type === 'interrogation') return complainerInterrogationHtml(c, cur);
   if(cur.type === 'vote') return complainerVoteHtml(c, cur);
   if(cur.type === 'bet') return complainerBetHtml(c, cur);
   if(cur.type === 'guess') return complainerGuessHtml(c, cur);
@@ -4649,6 +4658,51 @@ function complainerComplainHtml(c, cur){
       ${speakerPrompt ? `<p class="hint" style="text-align:center; margin:-14px 0 0; color:rgba(255,247,232,0.5);">💬 Svarer på: "${escapeHtml(speakerPrompt.text)}"</p>` : ''}
     </div>
     ${complainerBrokApproveHtml(c, cur)}
+    ${complainerComplaintBlockHtml(c, cur)}
+  `;
+}
+
+// Den ENE spørgerunde mellem den private afsløring og gættefinalen (se
+// beginInterrogationRound/beginReveal i complainerFlow.js) — nøjagtig samme
+// tur-baserede skærmopbygning som complainerComplainHtml ovenfor
+// (rollebanner, tur-rækkefølge, kun taleren har en handling), men uden
+// prompt-teksten (der ER intet nyt spørgsmål gemt i appen — bordet stiller
+// det højt) og uden "Godt brok!"-knappen (den hører til brok-fasens
+// performance-anerkendelse, ikke spørgerunden). Gælder ALLE spillere, ikke
+// kun Den Store Brokker — copyen gør det eksplicit, så ingen (inklusive den
+// skyldige selv) stikker ud ved bare at sammenligne hvem der får hvilken
+// skærm.
+function complainerInterrogationHtml(c, cur){
+  const speaker = state.members.find(mm=>mm.id===cur.speakerId);
+  const isSpeaker = profile && profile.memberId === cur.speakerId;
+  const turnNo = cur.turnIndex + 1, totalTurns = cur.order.length;
+  const badge = `<div class="game-badge">🕵️ Sidste spørgerunde · Spørgsmål ${turnNo}/${totalTurns}</div>`;
+
+  if(isSpeaker){
+    return `
+      ${badge}
+      ${complainerRoleBanner(c)}
+      ${complainerTurnOrderHtml(c, cur)}
+      <div class="game-card" id="complainerCard" style="text-align:center; border-color:rgba(255,122,61,0.5); background:rgba(255,122,61,0.08);">
+        <div style="font-size:26px;">❓</div>
+        <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:4px 0 6px;">Du bliver spurgt ud!</p>
+        <p class="hint" style="color:rgba(255,247,232,0.6); margin:0 0 16px;">Bordet stiller dig et spørgsmål højt lige nu — svar STADIG i karakter, uanset hvad du nu ved.</p>
+        <button class="game-btn" id="complainerInterrogationDoneBtn">✅ Færdig, min tur er ovre</button>
+      </div>
+    `;
+  }
+  return `
+    ${badge}
+    <div class="mrbrok-dim">
+      ${complainerRoleBanner(c)}
+      ${complainerTurnOrderHtml(c, cur)}
+      <div class="empty-state" style="padding:30px 20px;">
+        <span class="emoji">❓</span>
+        <b style="font-size:26px;">${escapeHtml(speaker?speaker.name:'?')}</b>
+        bliver spurgt ud
+      </div>
+      <p class="hint" style="text-align:center; margin:-14px 0 0; color:rgba(255,247,232,0.5);">Alle svarer stadig i karakter, ikke kun den der er mest mistænkt — ellers stikker man ud ved bare at sammenligne.</p>
+    </div>
     ${complainerComplaintBlockHtml(c, cur)}
   `;
 }
@@ -4980,6 +5034,13 @@ function bindComplainerHandlers(c){
 
   if(cur.type === 'complain' && profile && profile.memberId === cur.speakerId){
     const doneBtn = document.getElementById('complainerDoneBtn');
+    if(doneBtn) doneBtn.onclick = ()=>{
+      lockSubmitBtn(doneBtn, 'Går videre...');
+      complainerApi('submit', { payload: {} });
+    };
+  }
+  if(cur.type === 'interrogation' && profile && profile.memberId === cur.speakerId){
+    const doneBtn = document.getElementById('complainerInterrogationDoneBtn');
     if(doneBtn) doneBtn.onclick = ()=>{
       lockSubmitBtn(doneBtn, 'Går videre...');
       complainerApi('submit', { payload: {} });

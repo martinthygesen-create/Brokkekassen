@@ -4,6 +4,7 @@ const {
   MIN_COMPLAIN_AGE_MS,
   beginComplainRound,
   advanceComplain,
+  advanceInterrogation,
   resolveSuspicionRound,
   resolveBet,
   applyComplainerChallenge, // EXPERIMENTAL — se complainerFlow.js's kommentar ved funktionen
@@ -95,6 +96,13 @@ module.exports = async (req, res) => {
           // cur.type === 'clue').
           if (actorId !== cur.speakerId) throw new ApiError(403, 'det er ikke din tur lige nu');
           advanceComplain(state);
+        } else if (cur.type === 'interrogation') {
+          // Sidste spørgerunde efter den private afsløring — samme
+          // "sagt/svaret højt, intet tekstfelt, kun en bekræftelse"-mønster
+          // som brok-fasen ovenfor (se advanceInterrogation i
+          // complainerFlow.js).
+          if (actorId !== cur.speakerId) throw new ApiError(403, 'det er ikke din tur lige nu');
+          advanceInterrogation(state);
         } else if (cur.type === 'vote') {
           if (!c.players.includes(actorId)) throw new ApiError(403, 'du er ikke med i dette spil af Det Store Brokkeri');
           const votedForId = payload.votedForId;
@@ -143,21 +151,28 @@ module.exports = async (req, res) => {
         // står i notifikationen (produktejer-rettelse — samme fejltype som
         // MrBrok-sessionen i CLAUDE.md, bare flyttet fra runde 1 til dette
         // øjeblik). Derfor sender vi til ALLE spillere samtidig når faserne
-        // netop skiftede til 'guess' — kun ordlyden er forskellig pr.
-        // modtager (pushToMembers har ikke pr.-modtager-indhold, se
-        // _lib/push.js, så vi kalder den to gange i parallel: én batch til
-        // kun den skyldige med det rigtige indhold, én batch til alle andre
-        // med en neutral, "der sker noget"-besked). Selve skærmbilledet de
-        // ser når de tjekker er stadig korrekt kildet fra den eksisterende
-        // per-viewer-redaktion (youAreGuilty/current.type), denne push
-        // ændrer kun TIMINGEN af hvornår folk kigger, ikke hvad de ser.
-        if (state.complainer.current && state.complainer.current.type === 'guess'
-            && state.complainer.revealed && !state.complainer.current.targetId
+        // netop skiftede til 'interrogation' (den nye spørgerunde der nu
+        // ligger LIGE efter afsløringen, se beginReveal i complainerFlow.js
+        // — ikke længere 'guess', som nu først kommer efter spørgerunden) —
+        // kun ordlyden er forskellig pr. modtager (pushToMembers har ikke
+        // pr.-modtager-indhold, se _lib/push.js, så vi kalder den to gange i
+        // parallel: én batch til kun den skyldige med det rigtige indhold,
+        // én batch til alle andre med en neutral, "der sker noget"-besked).
+        // turnIndex === 0-tjekket sikrer pushen kun sendes ÉN gang (ved
+        // selve overgangen ind i spørgerunden), ikke ved hvert efterfølgende
+        // 'submit' der bare rykker turen videre INDE i spørgerunden. Selve
+        // skærmbilledet de ser når de tjekker er stadig korrekt kildet fra
+        // den eksisterende per-viewer-redaktion (youAreGuilty/current.type),
+        // denne push ændrer kun TIMINGEN af hvornår folk kigger, ikke hvad
+        // de ser.
+        if (state.complainer.current && state.complainer.current.type === 'interrogation'
+            && state.complainer.current.turnIndex === 0
+            && state.complainer.revealed
             && cur.type === 'bet') {
           const guiltyId = state.complainer.guiltyId;
           const others = state.members.map(mm => mm.id).filter(id => id !== guiltyId);
           pushInfo = [
-            { excludeIds: others, title: '🪤 Du er Den Store Brokker!', body: 'Bliv i karakter — og gæt en detalje om en af de andre.', url: '/?r=' + roomId },
+            { excludeIds: others, title: '🪤 Du er Den Store Brokker!', body: 'Bliv i karakter gennem sidste spørgerunde — så skal du gætte en detalje om en af de andre.', url: '/?r=' + roomId },
             { excludeIds: [guiltyId], title: '🪤 Det Store Brokkeri', body: 'Der sker noget lige nu — tjek appen.', url: '/?r=' + roomId },
           ];
         }

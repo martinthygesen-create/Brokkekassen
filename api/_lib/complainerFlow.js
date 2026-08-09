@@ -233,10 +233,66 @@ function beginFinalVoteRound(state) {
 // ved spilstart, men holdes ude af klienten (se redactComplainerFor i
 // api/complainer.js) indtil netop dette øjeblik. api/complainer.js sender en
 // PRIVAT push til kun c.guiltyId når denne fase starter — ingen broadcast.
+//
+// DOMMEBESLUTNING (produktejer-rettelse efter en rigtig spilaften): med
+// gættefinalen lige efter afsløringen gav afsløringen ingen mening ("med
+// finale lige efter giver spillet afsløring ingen mening", Martins egne
+// ord) — hele pointen ved en PRIVAT afsløring er at Den Store Brokker nu
+// skal performe under ægte pres (de VED det nu, så enhver adfærdsændring er
+// et reelt signal, ikke bare cheap talk som resten af spillet), men der var
+// ingen runde hvor den spænding fik lov at udspille sig. Løsningen er ÉN
+// (ikke konfigurerbar, ikke gentagende — bevidst holdt stram, se
+// beginInterrogationRound) spørgerunde mellem afsløringen og gættefinalen,
+// før vi går til den nu udskilte beginGuessPhase.
 function beginReveal(state) {
   const c = state.complainer;
   c.revealed = true;
   c.revealedAt = Date.now();
+  beginInterrogationRound(state);
+}
+
+// Den ENE spørgerunde mellem afsløring og gættefinale (se dommebeslutningen
+// ved beginReveal ovenfor) — nøjagtig samme tur-baserede verbale mekanik som
+// opbygningsrundernes brok-fase (beginComplainRound/advanceComplain): en
+// delt, shufflet rækkefølge over c.players, kun HVEM der har turen
+// (speakerId/turnIndex), aldrig noget om HVAD der bliver spurgt/svaret —
+// spørgsmålet stilles og besvares HØJT ved bordet, appen genererer og gemmer
+// intet af selve indholdet, samme "sagt højt, ikke skrevet"-filosofi som
+// resten af spillet. Gælder ALLE spillere, ikke kun den skyldige — de skal
+// stadig alle svare i karakter, ellers ville den skyldige stikke ud af ren
+// process-of-elimination selvom ingen sagde noget direkte. c.revealed er
+// allerede true her, men INTET i selve denne runde-state afslører hvem der
+// er skyldig (ingen guiltyId, ingen speciel markering af DEN spiller) — kun
+// c.youAreGuilty (sat i redactComplainerFor) fortæller den enkelte klient om
+// det er dem, akkurat som resten af spillet efter afsløringstidspunktet.
+function beginInterrogationRound(state) {
+  const c = state.complainer;
+  const order = shuffle(c.players);
+  c.current = { type: 'interrogation', order, turnIndex: 0, speakerId: order[0] };
+  stampPhaseComplainer(c.current);
+}
+
+// Den aktuelle spiller har svaret færdig på deres spørgsmål — gå til næste i
+// rækkefølgen, eller (når alle har svaret) videre til gættefinalen. Samme
+// struktur som advanceComplain, men uden nogen efterfølgende
+// stemme-/bank-fase — der er kun denne ENE runde, ikke en ny pr. spiller.
+function advanceInterrogation(state) {
+  const c = state.complainer;
+  const cur = c.current;
+  const next = cur.turnIndex + 1;
+  if (next < cur.order.length) {
+    c.current = { type: 'interrogation', order: cur.order, turnIndex: next, speakerId: cur.order[next] };
+    stampPhaseComplainer(c.current);
+  } else {
+    beginGuessPhase(state);
+  }
+}
+
+// Udskilt fra det tidligere beginReveal, så både beginReveal (vejen ind i
+// spørgerunden) og advanceInterrogation (vejen ud af den) kan dele PRÆCIS
+// samme opsætning af selve gættefasen.
+function beginGuessPhase(state) {
+  const c = state.complainer;
   c.current = { type: 'guess', targetId: null, detail: null };
   stampPhaseComplainer(c.current);
 }
@@ -303,6 +359,7 @@ function getPendingComplainerIds(c) {
   const cur = c.current;
   if (!cur) return [];
   if (cur.type === 'complain') return [cur.speakerId];
+  if (cur.type === 'interrogation') return [cur.speakerId];
   if (cur.type === 'vote') return c.players.filter(id => cur.votes[id] === undefined);
   if (cur.type === 'bet') return cur.choice ? [] : [cur.topId];
   if (cur.type === 'guess') return cur.targetId ? [] : [c.guiltyId];
@@ -320,6 +377,8 @@ function forceResolveComplainerPhase(state) {
   const pending = getPendingComplainerIds(c);
   if (cur.type === 'complain') {
     advanceComplain(state);
+  } else if (cur.type === 'interrogation') {
+    advanceInterrogation(state);
   } else if (cur.type === 'vote') {
     pending.forEach(id => {
       const others = c.players.filter(p => p !== id);
@@ -370,9 +429,13 @@ module.exports = {
   resolveBet,
   applyComplainerChallenge, // EXPERIMENTAL — se kommentaren ved funktionen
   beginReveal,
+  beginInterrogationRound,
+  advanceInterrogation,
+  beginGuessPhase,
   submitGuess,
   resolveJudge,
   endComplainerGame,
   getPendingComplainerIds,
   expireComplainerPhaseIfDue,
+  forceResolveComplainerPhase,
 };
