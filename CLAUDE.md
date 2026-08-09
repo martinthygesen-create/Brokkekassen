@@ -24,6 +24,11 @@ Der er under overvejelse et **helt nyt, tredje standalone spil** (arbejdstitel
 variant af MrBrok — selvom det oprindeligt blev diskuteret som "et omvendt
 MrBrok".
 
+**Det er IKKE en erstatning for MrBrok.** MrBrok skal blive ved med at
+eksistere og fungere uændret som sit eget spil. The Big Complainer er et
+TREDJE valg ved siden af Brokspillet og MrBrok — ikke en afløser for nogen
+af dem.
+
 **Når/hvis dette bygges, skal det:**
 - Være sit eget spil med egen `state`-gren (fx `state.bigComplainer`), egen
   `api/bigcomplainer.js` + `api/_lib/bigComplainerFlow.js`, egen
