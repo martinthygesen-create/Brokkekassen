@@ -166,19 +166,32 @@ function applyComplainerChallenge(state, actorId) {
 
 // Den topmest mistænkte har valgt hvordan de vil "banke" rundens point —
 // eller nødbremsen har valgt 'safe' for dem. Går videre til enten næste
-// opbygningsrunde eller (efter den sidste konfigurerede runde) den private
-// afsløring + gættefinalen.
+// opbygningsrunde, ÉN ekstra sidste afstemningsrunde (se
+// beginFinalVoteRound nedenfor), eller (efter DEN sidste afstemning) den
+// private afsløring + gættefinalen.
 //
-// DOMMEBESLUTNING (dokumenteret her fordi det er et judgment call, se
-// opgavebeskrivelsen): den organiske afsløring udløses simpelt og konkret —
-// lige efter DEN SIDSTE konfigurerede opbygningsrundes bank/gamble-valg er
-// afgjort. Ingen skjult ekstra-runde eller "nok distinkte prompts"-tæller —
-// runde-antallet ER allerede host-konfigureret til at ramme den rigtige
-// mængde opbygget materiale (3-6 runder), så det er det simpleste, mest
-// forudsigelige konkrete udløser-punkt: værten ved præcis hvornår
-// afsløringen kommer, uden at det er et fast rundetal spilleren selv kan
-// tælle sig frem til fra spillets START (som var problemet i MrBrok-sessionen
-// der motiverede dette spil, jf. CLAUDE.md).
+// DOMMEBESLUTNING (revideret — produktejer-rettelse efter en rigtig
+// spilaften, se commit-historikken): den organiske afsløring udløstes
+// tidligere DIREKTE efter den sidste konfigurerede opbygningsrundes
+// bank/gamble-valg — men det gav to reelle problemer i praksis. (1) Ingen
+// tid til at reagere: mistanken var lige nået at flytte sig i den sidste
+// runde, og så var det slut med det samme — "der mangler
+// afstemningsrunder" (Martins egne ord). (2) En gamble placeret på selve
+// den sidste opbygningsrunde blev ALDRIG afregnet — pendingGamble afregnes
+// kun inde i resolveSuspicionRound, som kun kører når der ER en NÆSTE
+// afstemning, og der var ingen. Spilleren fandt aldrig ud af om de vandt.
+//
+// Løsningen er IKKE et særtilfælde/plaster på (2) — det er én ekstra,
+// rigtig afstemningsrunde EFTER den sidste opbygningsrunde, før
+// afsløringen: ingen ny brok-/prompt-fase (spillerne har allerede alt det
+// materiale de nogensinde får), kun endnu en hemmelig mistankeafstemning +
+// bank/gamble-beslutning, kørt igennem PRÆCIS samme mekanik som alle de
+// andre runder. Det giver ét ekstra, reelt strategisk øjeblik (kan mistanken
+// nå at flytte sig igen, lige før det er for sent?), OG det løser (2) helt
+// naturligt, fordi der nu ALTID er en efterfølgende afstemning at afregne
+// en ventende satsning imod — ingen særlig kode for "sidste runde" nogen
+// steder. round-tælleren for denne ekstra runde er c.totalRounds + 1 — der
+// er ingen ny beginComplainRound for den, kun beginFinalVoteRound.
 function resolveBet(state) {
   const c = state.complainer;
   const cur = c.current; // type: bet
@@ -191,11 +204,28 @@ function resolveBet(state) {
   } else {
     c.scores[cur.topId] = (c.scores[cur.topId] || 0) + stake;
   }
-  if (cur.round >= c.totalRounds) {
-    beginReveal(state);
-  } else {
+  if (cur.round < c.totalRounds) {
     beginComplainRound(state, cur.round + 1);
+  } else if (cur.round === c.totalRounds) {
+    beginFinalVoteRound(state);
+  } else {
+    beginReveal(state);
   }
+}
+
+// Den ENE ekstra afstemningsrunde efter den sidste konfigurerede
+// opbygningsrunde (se dommebeslutningen ved resolveBet ovenfor) — ren
+// mistankeafstemning, INGEN ny brok-/prompt-fase, ingen ny c.history-post
+// (der er ingen prompts at arkivere for en runde uden en brok-fase).
+// Nummereret c.totalRounds + 1, så resolveBet's egen round-sammenligning
+// entydigt kan se at DENNE afstemnings bet-fase er den allersidste, og gå
+// til beginReveal bagefter i stedet for endnu en runde.
+function beginFinalVoteRound(state) {
+  const c = state.complainer;
+  const finalRound = c.totalRounds + 1;
+  c.round = finalRound;
+  c.current = { type: 'vote', round: finalRound, votes: {}, final: true };
+  stampPhaseComplainer(c.current);
 }
 
 // Den private afsløring: Den Store Brokker får FØRST HER at vide hvem de er

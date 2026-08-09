@@ -600,7 +600,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-09-82';
+const BUILD_TAG = 'build-2026-08-09-83';
 // Skal matche api/_lib/gameFlow.js's CASINOBROK_BET_*-konstanter — kun brugt
 // til visning her (server afgør altid den reelle udbetaling).
 const CASINOBROK_BET_SAFE_POINTS = 1;
@@ -4275,12 +4275,30 @@ function maybeShowComplainerSuspenseSplashes(c){
   if(cur.type === 'complain' && cur.turnIndex === 0 && cur.round > 1){
     showComplainerSuspenseSplash('cxround:'+c.startedAt+':'+cur.round, '🪤', `Runde ${cur.round} starter...`, 'Nye, skarpere spørgsmål venter.', 1800);
   }
+  // Den ekstra, sidste afstemningsrunde (se beginFinalVoteRound i
+  // complainerFlow.js) — ingen ny brok-fase, kun ét sidste strategisk
+  // øjeblik lige før afsløringen låser fast. Egen splash, adskilt fra den
+  // almindelige runde-start-splash ovenfor, fordi den IKKE varsler nye
+  // spørgsmål (der kommer ingen), kun en sidste chance for at flytte mistanken.
+  if(cur.type === 'vote' && cur.round > c.totalRounds){
+    showComplainerSuspenseSplash('cxfinalvote:'+c.startedAt, '🚨', 'Sidste afstemning!', 'Ingen nye spørgsmål — men mistanken kan stadig nå at flytte sig.', 2200);
+  }
   if(cur.type === 'bet'){
     showComplainerSuspenseSplash('cxresults:'+c.startedAt+':'+cur.round, '🗳️', 'Stemmerne er talt op...', 'Hvem topper mistanken?', 1600);
   }
   if(cur.type === 'gameover'){
     showComplainerSuspenseSplash('cxoutcome:'+c.startedAt, '⚖️', 'Dommen er faldet...', null, 1600);
   }
+}
+
+// Fælles "Runde X/Y"-badge-tekst for vote/bet-skærmene — men den EKSTRA,
+// sidste afstemningsrunde (se beginFinalVoteRound i complainerFlow.js) har
+// intet meningsfuldt "X/Y" at vise (den ligger UDENFOR de konfigurerede
+// opbygningsrunder), så den får sin egen tydelige label i stedet for det
+// forvirrende "Runde 5/4".
+function complainerRoundLabel(c, cur){
+  if(cur.round > c.totalRounds) return 'Sidste afstemning';
+  return `Runde ${c.round}/${c.totalRounds}`;
 }
 
 // Rolle-splash ved spilstart — fuldskærm, kræver et tryk for at lukke (i
@@ -4382,7 +4400,7 @@ function complainerBodyHtml(c){
   const cur = c.current;
   if(cur.type !== 'gameover' && profile && c.players && !c.players.includes(profile.memberId)){
     return `
-      <div class="game-badge">Runde ${c.round}/${c.totalRounds} · 👀 Du kigger med</div>
+      <div class="game-badge">${complainerRoundLabel(c, cur)} · 👀 Du kigger med</div>
       <div class="empty-state"><span class="emoji">🍿</span><b>Du er ikke med i denne omgang</b>De andre spiller videre — du er velkommen næste spil.</div>
     `;
   }
@@ -4600,7 +4618,7 @@ function complainerVoteOptionsHtml(c, cur){
 }
 
 function complainerVoteHtml(c, cur){
-  const badge = `<div class="game-badge">Runde ${c.round}/${c.totalRounds} · 🤔 Hvem virker mest skyldig?</div>`;
+  const badge = `<div class="game-badge">${complainerRoundLabel(c, cur)} · 🤔 Hvem virker mest skyldig?</div>`;
   const eligible = c.players.length;
   const already = profile && cur.votes && cur.votes[profile.memberId] !== undefined;
   if(already){
@@ -4642,10 +4660,17 @@ function complainerChallengeBlockHtml(c, cur){
 }
 
 function complainerBetHtml(c, cur){
-  const badge = `<div class="game-badge">Runde ${c.round}/${c.totalRounds} · 🎰 Rundens mest mistænkte</div>`;
+  const badge = `<div class="game-badge">${complainerRoundLabel(c, cur)} · 🎰 Rundens mest mistænkte</div>`;
   const topMember = state.members.find(mm=>mm.id===cur.topId);
   const isTop = profile && profile.memberId === cur.topId;
   const stakePoints = SUSPECT_POINTS_CLIENT * (cur.stakeMultiplier || 1);
+  // Den EKSTRA, sidste afstemningsrunde (se beginFinalVoteRound i
+  // complainerFlow.js) har ingen runde EFTER sig til at gamble ind i — der
+  // er intet "topmest mistænkt IGEN næste runde" at satse på. Gamble-valget
+  // skjules derfor helt her (serveren har samme værn, se api/complainer.js's
+  // 'bet'-håndtering), i stedet for at tilbyde et valg der reelt aldrig kan
+  // udbetale sig.
+  const isFinalRound = cur.round > c.totalRounds;
   const gambleNote = c.lastGambleResult ? (()=>{
     const gm = state.members.find(mm=>mm.id===c.lastGambleResult.playerId);
     return c.lastGambleResult.won
@@ -4653,7 +4678,7 @@ function complainerBetHtml(c, cur){
       : `<p class="hint" style="color:rgba(255,247,232,0.7); text-align:center;">😬 ${escapeHtml(gm?gm.name:'?')} var IKKE topmest mistænkt denne gang — satsningen gik tabt.</p>`;
   })() : '';
   if(!isTop){
-    return `${badge}${gambleNote}<div class="empty-state"><span class="emoji">😳</span><b>${escapeHtml(topMember?topMember.name:'?')} er rundens mest mistænkte</b>De vælger nu om de vil banke et sikkert point, eller satse dobbelt op.</div>${complainerChallengeBlockHtml(c, cur)}`;
+    return `${badge}${gambleNote}<div class="empty-state"><span class="emoji">😳</span><b>${escapeHtml(topMember?topMember.name:'?')} er rundens mest mistænkte</b>${isFinalRound ? 'De banker nu deres sidste point, lige inden afsløringen.' : 'De vælger nu om de vil banke et sikkert point, eller satse dobbelt op.'}</div>${complainerChallengeBlockHtml(c, cur)}`;
   }
   return `
     ${badge}
@@ -4662,11 +4687,15 @@ function complainerBetHtml(c, cur){
     <div class="game-card" id="complainerCard" style="text-align:center;">
       <div style="font-size:26px;">😳</div>
       <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:4px 0 6px;">Du er rundens mest mistænkte!</p>
-      <p class="hint" style="color:rgba(255,247,232,0.7); margin:0 0 16px;">Bank ${stakePoints} sikkert point nu, eller sats dem — bliver du topmest mistænkt IGEN næste runde, får du det dobbelte. Ellers er de tabt.</p>
-      <div style="display:flex; gap:10px;">
-        <button class="game-btn" data-complainer-bet="safe" style="margin-top:0; background:linear-gradient(160deg, var(--sea), var(--sea-deep)); box-shadow:0 8px 18px rgba(11,58,63,0.4);">🏦 Bank ${stakePoints} sikkert</button>
-        <button class="game-btn" data-complainer-bet="gamble" style="margin-top:0;">🎰 Sats dobbelt op</button>
-      </div>
+      ${isFinalRound
+        ? `<p class="hint" style="color:rgba(255,247,232,0.7); margin:0 0 16px;">Sidste afstemning — ingen flere runder at satse videre i. Bank dine ${stakePoints} point.</p>
+           <button class="game-btn" data-complainer-bet="safe" style="margin-top:0;">🏦 Bank ${stakePoints} sikkert</button>`
+        : `<p class="hint" style="color:rgba(255,247,232,0.7); margin:0 0 16px;">Bank ${stakePoints} sikkert point nu, eller sats dem — bliver du topmest mistænkt IGEN næste runde, får du det dobbelte. Ellers er de tabt.</p>
+           <div style="display:flex; gap:10px;">
+             <button class="game-btn" data-complainer-bet="safe" style="margin-top:0; background:linear-gradient(160deg, var(--sea), var(--sea-deep)); box-shadow:0 8px 18px rgba(11,58,63,0.4);">🏦 Bank ${stakePoints} sikkert</button>
+             <button class="game-btn" data-complainer-bet="gamble" style="margin-top:0;">🎰 Sats dobbelt op</button>
+           </div>`
+      }
     </div>
   `;
 }

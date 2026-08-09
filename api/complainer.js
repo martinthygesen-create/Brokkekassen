@@ -106,7 +106,16 @@ module.exports = async (req, res) => {
         } else if (cur.type === 'bet') {
           if (actorId !== cur.topId) throw new ApiError(403, 'det er ikke dig der er rundens topmest mistænkte');
           if (cur.choice) throw new ApiError(409, 'du har allerede valgt');
-          const choice = payload.choice === 'gamble' ? 'gamble' : 'safe';
+          // Den EKSTRA, sidste afstemningsrunde (cur.round > c.totalRounds,
+          // se beginFinalVoteRound i complainerFlow.js) har INGEN runde
+          // efter sig til at afgøre "topmest mistænkt IGEN" imod — en
+          // gamble her ville derfor selv blive et nyt orphaned pendingGamble,
+          // præcis den fejl denne ekstra runde ellers fjerner. Tvinges
+          // derfor stille til 'safe' (samme forsvar findes i UI'en, som ikke
+          // viser gamble-knappen for denne runde — dette er defense-in-depth
+          // mod en klient der alligevel skulle sende 'gamble').
+          const isFinalRound = cur.round > c.totalRounds;
+          const choice = (!isFinalRound && payload.choice === 'gamble') ? 'gamble' : 'safe';
           cur.choice = choice;
           resolveBet(state);
         } else if (cur.type === 'guess') {
