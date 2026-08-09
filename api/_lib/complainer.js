@@ -13,13 +13,101 @@ const { pickRandom, shuffle } = require('./game');
 
 // Arketyper — hver spiller får hemmeligt tildelt én, som styrer TONEN i
 // deres brok (ikke selve emnet, det kommer fra situationen+prompten).
-// Kodet som et simpelt data-array, så flere nemt kan tilføjes senere uden at
-// røre selve flow-logikken.
+//
+// VIGTIGT designvalg (produktejer-feedback, se commit-historikken): en bar
+// personligheds-etiket alene ("den udadvendte") er for bredt og abstrakt til
+// reelt at kunne spilles eller genkendes — "hvordan skal nogen nogensinde
+// gætte det?". Hver arketype er derfor et KONKRET, fusioneret persona
+// (erhverv/rolle + en brok-stil), ikke to løse akser — fx "Den
+// passiv-aggressive pilot", ikke "pilot" og "passiv-aggressiv" hver for sig.
+// Hver arketype bærer desuden 2-3 EKSPLICITTE, konkrete spille-instruktioner
+// (ikke bare ét vagt trait-ord) — det er dem der reelt sænker barren for at
+// spille rollen sjovt med det samme, jf. produktejerens egen begrundelse:
+// alt skal hinte mod rollen, men instruktioner om SELVE BROK-STILEN gør det
+// nemt at gå i gang uden yderligere forberedelse. ~10 stykker, med bredt
+// forskellige erhverv/personaer OG forskellig underliggende brok-stil på
+// tværs af puljen — ikke bare 10 gensyn med samme 4 stilarter.
 const COMPLAINER_ARCHETYPES = [
-  { id: 'indre', name: 'Den indre brokker', hint: 'Du holder det inde — men det siver ud via stikpiller og små hentydninger, ikke rå udbrud.' },
-  { id: 'udadvendt', name: 'Den udadvendte', hint: 'Du brøler det ud uden filter — jo mere du overdriver, jo bedre.' },
-  { id: 'passivaggressiv', name: 'Den passiv-aggressive', hint: '"Det er helt fint" — men tonen, pauserne og suk\'et siger noget helt andet.' },
-  { id: 'martyr', name: 'Den martyr-agtige', hint: 'Du brokker dig ved at gøre dig selv til det evige offer — "det er jo altid mig der...".' },
+  {
+    id: 'pilot', name: 'Den passiv-aggressive pilot',
+    instructions: [
+      'Det er altid andres skyld — aldrig dit eget ansvar.',
+      'Du er højrøstet og overdriver gerne.',
+      'Smil stift mens du siger det værste.',
+    ],
+  },
+  {
+    id: 'kok', name: 'Den udadvendte kok',
+    instructions: [
+      'Du råber det ud med det samme — helt uden filter.',
+      'Overdriv følelserne teatralsk, gerne med håndbevægelser.',
+      'Du er dybt fornærmet hvis nogen tvivler på din smag.',
+    ],
+  },
+  {
+    id: 'nabo', name: 'Den indre-brokkende nabo',
+    instructions: [
+      'Sig "det er helt fint" — men lad stilheden bagefter tale.',
+      'Brug stikpiller og hentydninger i stedet for at sige det ligeud.',
+      'Skift emne brat hvis nogen spørger direkte ind til det.',
+    ],
+  },
+  {
+    id: 'foraelder', name: 'Den martyr-agtige forælder',
+    instructions: [
+      'Det er altid dig der ofrer dig — nævn det, ubedt.',
+      'Sammenlign med alt det du "kunne" have gjort i stedet.',
+      'Afslut med et dybt suk og "det er jo helt fint, jeg klarer det".',
+    ],
+  },
+  {
+    id: 'projektleder', name: 'Den passiv-aggressive projektleder',
+    instructions: [
+      'Send indirekte hip via "bare lige en tanke..." — aldrig direkte kritik.',
+      'Ros først, stik så kniven ind med et "men".',
+      'Brug ordet "interessant" som skjult kritik.',
+    ],
+  },
+  {
+    id: 'laerer', name: 'Den udadvendte lærer',
+    instructions: [
+      'Du taler højt og bruger hele kroppen når du brokker dig.',
+      'Inddrag "os alle sammen" i din vrede, som en fælles sag.',
+      'Du elsker en god pointe og gentager den gerne tre gange.',
+    ],
+  },
+  {
+    id: 'fitness', name: 'Den martyr-agtige fitnessinstruktør',
+    instructions: [
+      'Du giver ALT for andre, og ingen forstår hvor hårdt det er.',
+      'Nævn hvor tidligt du står op, for andres skyld.',
+      'Antyd at ingen ville klare sig uden dig.',
+    ],
+  },
+  {
+    id: 'taxachauffoer', name: 'Den indre-brokkende taxachauffør',
+    instructions: [
+      'Mumle det halvt for dig selv i stedet for at sige det direkte.',
+      'Brug en tør, underspillet tone — aldrig råb.',
+      'Lad en lang pause tale for dig efter en stikpille.',
+    ],
+  },
+  {
+    id: 'influencer', name: 'Den passiv-aggressive influencer',
+    instructions: [
+      'Pak alt ind i positivitet — "helt fint, bare synd at...".',
+      'Vær sødt giftig — "haha nej men altså" mens du sviner.',
+      'Understreg at "jeg siger det jo bare i kærlighed".',
+    ],
+  },
+  {
+    id: 'haandvaerker', name: 'Den udadvendte håndværker',
+    instructions: [
+      'Du brokker dig højt og direkte, uden omsvøb.',
+      'Brug konkrete, fysiske eksempler — "det tog MIG tre timer at rette".',
+      'Du er stolt af at sige tingene ligeud — "nogen må jo sige det".',
+    ],
+  },
 ];
 
 // De "everyday"-situationer alle spillere trækkes tilfældigt mellem — styrer

@@ -4131,11 +4131,23 @@ function bindMrbrokHandlers(m){
    flow (api/complainer.js + api/_lib/complainerFlow.js). Rører aldrig
    state.mrbrok/state.game. */
 const SUSPECT_POINTS_CLIENT = 2; // skal matche SUSPECT_POINTS i api/_lib/complainerFlow.js — kun til visningstekst, selve pointtallet afgøres altid server-side
+// Speiler api/_lib/complainer.js's COMPLAINER_ARCHETYPES 1:1 — se den fils
+// kommentar for HVORFOR arketyperne er konkrete fusionerede personaer med
+// eksplicitte spille-instruktioner (ikke bare bare trait-etiketter). Egen
+// kopi client-side, samme mønster som fx MRBROK_CLUE_TIPS er duplikeret —
+// intet af dette er hemmeligt indhold, kun servérens tildeling (hvem der
+// får hvilken) er det.
 const COMPLAINER_ARCHETYPE_INFO = {
-  indre: { name:'Den indre brokker', hint:'Du holder det inde — men det siver ud via stikpiller og små hentydninger, ikke rå udbrud.' },
-  udadvendt: { name:'Den udadvendte', hint:'Du brøler det ud uden filter — jo mere du overdriver, jo bedre.' },
-  passivaggressiv: { name:'Den passiv-aggressive', hint:'"Det er helt fint" — men tonen, pauserne og suk\'et siger noget helt andet.' },
-  martyr: { name:'Den martyr-agtige', hint:'Du brokker dig ved at gøre dig selv til det evige offer — "det er jo altid mig der...".' },
+  pilot: { name:'Den passiv-aggressive pilot', instructions:['Det er altid andres skyld — aldrig dit eget ansvar.', 'Du er højrøstet og overdriver gerne.', 'Smil stift mens du siger det værste.'] },
+  kok: { name:'Den udadvendte kok', instructions:['Du råber det ud med det samme — helt uden filter.', 'Overdriv følelserne teatralsk, gerne med håndbevægelser.', 'Du er dybt fornærmet hvis nogen tvivler på din smag.'] },
+  nabo: { name:'Den indre-brokkende nabo', instructions:['Sig "det er helt fint" — men lad stilheden bagefter tale.', 'Brug stikpiller og hentydninger i stedet for at sige det ligeud.', 'Skift emne brat hvis nogen spørger direkte ind til det.'] },
+  foraelder: { name:'Den martyr-agtige forælder', instructions:['Det er altid dig der ofrer dig — nævn det, ubedt.', 'Sammenlign med alt det du "kunne" have gjort i stedet.', 'Afslut med et dybt suk og "det er jo helt fint, jeg klarer det".'] },
+  projektleder: { name:'Den passiv-aggressive projektleder', instructions:['Send indirekte hip via "bare lige en tanke..." — aldrig direkte kritik.', 'Ros først, stik så kniven ind med et "men".', 'Brug ordet "interessant" som skjult kritik.'] },
+  laerer: { name:'Den udadvendte lærer', instructions:['Du taler højt og bruger hele kroppen når du brokker dig.', 'Inddrag "os alle sammen" i din vrede, som en fælles sag.', 'Du elsker en god pointe og gentager den gerne tre gange.'] },
+  fitness: { name:'Den martyr-agtige fitnessinstruktør', instructions:['Du giver ALT for andre, og ingen forstår hvor hårdt det er.', 'Nævn hvor tidligt du står op, for andres skyld.', 'Antyd at ingen ville klare sig uden dig.'] },
+  taxachauffoer: { name:'Den indre-brokkende taxachauffør', instructions:['Mumle det halvt for dig selv i stedet for at sige det direkte.', 'Brug en tør, underspillet tone — aldrig råb.', 'Lad en lang pause tale for dig efter en stikpille.'] },
+  influencer: { name:'Den passiv-aggressive influencer', instructions:['Pak alt ind i positivitet — "helt fint, bare synd at...".', 'Vær sødt giftig — "haha nej men altså" mens du sviner.', 'Understreg at "jeg siger det jo bare i kærlighed".'] },
+  haandvaerker: { name:'Den udadvendte håndværker', instructions:['Du brokker dig højt og direkte, uden omsvøb.', 'Brug konkrete, fysiske eksempler — "det tog MIG tre timer at rette".', 'Du er stolt af at sige tingene ligeud — "nogen må jo sige det".'] },
 };
 const COMPLAINER_SITUATION_LABELS = { chef:'chefen', nabo:'naboen', familie:'familien', kollega:'en kollega', ven:'en ven' };
 
@@ -4360,7 +4372,7 @@ function complainerRoleBanner(c){
   if(!profile) return '';
   const archetypeId = c.archetypes && c.archetypes[profile.memberId];
   const situation = c.situations && c.situations[profile.memberId];
-  const info = COMPLAINER_ARCHETYPE_INFO[archetypeId] || { name:'?', hint:'' };
+  const info = COMPLAINER_ARCHETYPE_INFO[archetypeId] || { name:'?', instructions:[] };
   if(!complainerRoleRevealed){
     return `<div class="game-card mrbrok-role-hidden" id="complainerRoleToggle" style="text-align:center; cursor:pointer; margin-bottom:14px;">
       <div style="font-size:26px;">🔒</div>
@@ -4368,12 +4380,17 @@ function complainerRoleBanner(c){
       <p class="hint" style="color:rgba(255,247,232,0.55);">Skjult som standard — nogen kunne jo kigge med på telefonen</p>
     </div>`;
   }
-  return `<div class="game-card" id="complainerRoleToggle" style="text-align:center; cursor:pointer; margin-bottom:14px;">
-    <p class="hint" style="margin:0 0 4px; color:rgba(255,247,232,0.6);">Du er:</p>
-    <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:0;">${escapeHtml(info.name)}</p>
-    <p class="hint" style="margin:6px 0 0; color:rgba(255,247,232,0.75);">${escapeHtml(info.hint)}</p>
-    <p class="hint" style="margin:6px 0 0; color:rgba(255,247,232,0.55);">Din situation lige nu: brok dig over ${escapeHtml(COMPLAINER_SITUATION_LABELS[situation]||situation||'?')}</p>
-    <p class="hint" style="margin-top:10px; color:rgba(255,247,232,0.4); font-size:11.5px;">Tryk for at skjule igen</p>
+  // Instruktionerne er BEVIDST konkrete "sådan spiller du det"-punkter (ikke
+  // ét vagt trait-ord) — se COMPLAINER_ARCHETYPE_INFO/api/_lib/complainer.js —
+  // vist som en liste, ikke en enkelt sætning, så de er lette at skimme lige
+  // inden man selv skal i gang.
+  const instructionsHtml = (info.instructions||[]).map(text=>`<li>${escapeHtml(text)}</li>`).join('');
+  return `<div class="game-card" id="complainerRoleToggle" style="text-align:left; cursor:pointer; margin-bottom:14px;">
+    <p class="hint" style="margin:0 0 4px; color:rgba(255,247,232,0.6); text-align:center;">Du er:</p>
+    <p style="font-family:'Baloo 2',sans-serif; font-weight:800; font-size:19px; margin:0; text-align:center;">${escapeHtml(info.name)}</p>
+    ${instructionsHtml ? `<ul style="margin:12px 0 0; padding:0 0 0 18px; color:rgba(255,247,232,0.85); font-size:13.5px; line-height:1.5;">${instructionsHtml}</ul>` : ''}
+    <p class="hint" style="margin:10px 0 0; color:rgba(255,247,232,0.55); text-align:center;">Din situation lige nu: brok dig over ${escapeHtml(COMPLAINER_SITUATION_LABELS[situation]||situation||'?')}</p>
+    <p class="hint" style="margin-top:10px; color:rgba(255,247,232,0.4); font-size:11.5px; text-align:center;">Tryk for at skjule igen</p>
   </div>`;
 }
 
