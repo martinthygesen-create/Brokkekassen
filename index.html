@@ -600,7 +600,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-09-83';
+const BUILD_TAG = 'build-2026-08-09-84';
 // Skal matche api/_lib/gameFlow.js's CASINOBROK_BET_*-konstanter — kun brugt
 // til visning her (server afgør altid den reelle udbetaling).
 const CASINOBROK_BET_SAFE_POINTS = 1;
@@ -4301,6 +4301,35 @@ function complainerRoundLabel(c, cur){
   return `Runde ${c.round}/${c.totalRounds}`;
 }
 
+// Kompakt live-scoreboard, vist øverst på complain/vote/bet-skærmene under
+// selve spillet (produktejer-ønske — der var ingen synlig fornemmelse af
+// stilling undervejs, kun ved gameover). To kolonner side om side, fordi
+// mistanke-point (c.scores) og "Godt brok!"-performance (c.brokScores) er
+// BEVIDST to adskilte regnskaber (se complainerBrokScoresHtml/gameover) —
+// samme adskillelse skal holde live, ikke kun i det endelige opgør. Viser
+// kun top 4 (sorteret efter mistanke-point) for at holde det til et par
+// linjer på en telefonskærm, ikke endnu en fuld liste.
+function complainerScoreboardHtml(c){
+  if(!c || !c.players || !c.players.length) return '';
+  const scores = c.scores || {};
+  const brokScores = c.brokScores || {};
+  const ranked = state.members
+    .filter(mm=>c.players.includes(mm.id))
+    .sort((a,b)=>(scores[b.id]||0)-(scores[a.id]||0))
+    .slice(0, 4);
+  if(!ranked.length) return '';
+  const rows = ranked.map(mm=>`
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:3px 0;">
+      <span style="font-size:12.5px; color:rgba(255,247,232,0.85); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(mm.name)}</span>
+      <span style="display:flex; gap:10px; flex:0 0 auto;">
+        <span style="font-size:12px; font-weight:700; color:var(--ember);">🎯 ${scores[mm.id]||0}</span>
+        <span style="font-size:12px; font-weight:700; color:rgba(255,201,60,0.9);">🔥 ${brokScores[mm.id]||0}</span>
+      </span>
+    </div>
+  `).join('');
+  return `<div class="game-card" style="padding:8px 14px; margin-bottom:12px;">${rows}</div>`;
+}
+
 // Rolle-splash ved spilstart — fuldskærm, kræver et tryk for at lukke (i
 // modsætning til suspense-beatsne ovenfor, som lukker selv), fordi det er
 // den vigtigste information i hele spillet og skal kunne læses i ro. Vises
@@ -4578,6 +4607,7 @@ function complainerComplainHtml(c, cur){
   if(isSpeaker){
     return `
       ${badge}
+      ${complainerScoreboardHtml(c)}
       ${complainerRoleBanner(c)}
       ${complainerTurnOrderHtml(c, cur)}
       <div class="game-card" id="complainerCard" style="text-align:center; border-color:rgba(255,122,61,0.5); background:rgba(255,122,61,0.08);">
@@ -4592,6 +4622,7 @@ function complainerComplainHtml(c, cur){
   }
   return `
     ${badge}
+    ${complainerScoreboardHtml(c)}
     <div class="mrbrok-dim">
       ${complainerRoleBanner(c)}
       ${complainerTurnOrderHtml(c, cur)}
@@ -4622,10 +4653,11 @@ function complainerVoteHtml(c, cur){
   const eligible = c.players.length;
   const already = profile && cur.votes && cur.votes[profile.memberId] !== undefined;
   if(already){
-    return `${badge}<div class="empty-state"><span class="emoji">🤫</span><b>Din stemme er registreret</b>Ingen facit endnu — det er ren mistanke, ikke et bevis.</div>${gameProgressHtml(cur.voteCount||0, eligible, 'har stemt')}${complainerComplaintBlockHtml(c, cur)}`;
+    return `${badge}${complainerScoreboardHtml(c)}<div class="empty-state"><span class="emoji">🤫</span><b>Din stemme er registreret</b>Ingen facit endnu — det er ren mistanke, ikke et bevis.</div>${gameProgressHtml(cur.voteCount||0, eligible, 'har stemt')}${complainerComplaintBlockHtml(c, cur)}`;
   }
   return `
     ${badge}
+    ${complainerScoreboardHtml(c)}
     <p class="hint" style="text-align:center; margin:0 0 8px; color:rgba(255,247,232,0.7);"><b style="color:rgba(255,247,232,0.92);">Hvem tror du er Den Store Brokker?</b> Ingen ved det endnu, heller ikke dem selv — ren mavefornemmelse. Din stemme er hemmelig indtil alle har stemt.</p>
     ${complainerVoteOptionsHtml(c, cur)}
     ${gameProgressHtml(cur.voteCount||0, eligible, 'har stemt')}
@@ -4678,10 +4710,11 @@ function complainerBetHtml(c, cur){
       : `<p class="hint" style="color:rgba(255,247,232,0.7); text-align:center;">😬 ${escapeHtml(gm?gm.name:'?')} var IKKE topmest mistænkt denne gang — satsningen gik tabt.</p>`;
   })() : '';
   if(!isTop){
-    return `${badge}${gambleNote}<div class="empty-state"><span class="emoji">😳</span><b>${escapeHtml(topMember?topMember.name:'?')} er rundens mest mistænkte</b>${isFinalRound ? 'De banker nu deres sidste point, lige inden afsløringen.' : 'De vælger nu om de vil banke et sikkert point, eller satse dobbelt op.'}</div>${complainerChallengeBlockHtml(c, cur)}`;
+    return `${badge}${complainerScoreboardHtml(c)}${gambleNote}<div class="empty-state"><span class="emoji">😳</span><b>${escapeHtml(topMember?topMember.name:'?')} er rundens mest mistænkte</b>${isFinalRound ? 'De banker nu deres sidste point, lige inden afsløringen.' : 'De vælger nu om de vil banke et sikkert point, eller satse dobbelt op.'}</div>${complainerChallengeBlockHtml(c, cur)}`;
   }
   return `
     ${badge}
+    ${complainerScoreboardHtml(c)}
     ${gambleNote}
     ${complainerChallengeBlockHtml(c, cur)}
     <div class="game-card" id="complainerCard" style="text-align:center;">
