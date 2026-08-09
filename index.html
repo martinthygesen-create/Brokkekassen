@@ -20,6 +20,7 @@
     --coin:#FFC93C; --coin-dark:#E8A317; --coral:#FF6B4A;
     --cream:#FFF7E8; --ink:#052024; --ink-soft:#0b3a3f;
     --noir:#0A1416; --noir-deep:#050B0C; /* MrBrok-nuance — mørkt "efterforskningslokale", stadig i teal-familien i stedet for en fremmed farve */
+    --ember:#FF7A3D; --ember-dark:#C4491B; --ember-noir:#2A0F08; --ember-noir-deep:#180804; /* Det Store Brokkeri-nuance — varm rust/ember, "kogende over" i stedet for MrBroks kølige efterforskningslokale */
   }
   *{box-sizing:border-box;}
   html,body{height:100%;}
@@ -70,6 +71,18 @@
     background-attachment:fixed; background-repeat:no-repeat;
     background-color: var(--noir);
   }
+  /* Det Store Brokkeri får sin egen varme rust/ember-baggrund i stedet for
+     at genbruge MrBroks kølige noir-tema — de to spil skal ikke se ud af
+     samme familie. Ember matcher stemningen bedre: brok der koger over,
+     ikke en efterforskning. Samme klasse-placering-mønster som theme-mrbrok. */
+  html.theme-complainer{
+    background:
+      radial-gradient(ellipse at 30% -10%, rgba(255,122,61,0.22) 0%, transparent 55%),
+      radial-gradient(ellipse at 100% 10%, rgba(255,90,54,0.14) 0%, transparent 60%),
+      linear-gradient(180deg, var(--ember-noir) 0%, var(--ember-noir-deep) 100%);
+    background-attachment:fixed; background-repeat:no-repeat;
+    background-color: var(--ember-noir);
+  }
   /* Rose-bonusrunden får sin egen tydeligt lyserøde/marmorerede baggrund
      mens den står på (skiftes tilbage til det fælles teal så snart runden
      er slut) — hele pointen er at det IKKE skal ligne resten af Brokspillet,
@@ -106,16 +119,18 @@
      Brokspillet får en varm guld-glød (matcher mønt-temaet), MrBrok en
      lidt mystisk lilla-glød (matcher detektiv-temaet). Kun headeren
      nuanceres — resten af skærmen holder sig til det fælles tema. */
-  header.theme-spil::before, header.theme-mrbrok::before, header.theme-rose::before{
+  header.theme-spil::before, header.theme-mrbrok::before, header.theme-rose::before, header.theme-complainer::before{
     content:''; position:absolute; inset:-10px -10px auto -10px; height:110px; pointer-events:none; z-index:-1;
     -webkit-mask-image:linear-gradient(180deg, #000 0%, transparent 100%); mask-image:linear-gradient(180deg, #000 0%, transparent 100%);
   }
   header.theme-spil::before{ background:radial-gradient(ellipse at 30% 0%, rgba(255,201,60,0.28), transparent 70%); }
   header.theme-mrbrok::before{ background:radial-gradient(ellipse at 30% 0%, rgba(255,201,60,0.2), transparent 70%); }
   header.theme-rose::before{ background:radial-gradient(ellipse at 30% 0%, rgba(255,143,179,0.4), transparent 70%); }
+  header.theme-complainer::before{ background:radial-gradient(ellipse at 30% 0%, rgba(255,122,61,0.3), transparent 70%); }
   header.theme-spil #btnAppMenu, header.theme-spil #btnGameAdminMenu{ border-color:rgba(255,201,60,0.4); }
   header.theme-rose #btnAppMenu, header.theme-rose #btnGameAdminMenu{ border-color:rgba(255,143,179,0.5); }
   header.theme-mrbrok #btnAppMenu, header.theme-mrbrok #btnGameAdminMenu, header.theme-mrbrok #btnMrbrokAdminMenu{ border-color:rgba(255,201,60,0.3); }
+  header.theme-complainer #btnAppMenu, header.theme-complainer #btnGameAdminMenu{ border-color:rgba(255,122,61,0.4); }
   /* Rolle-splash ved spilstart — egen mørk/guld visning (ligesom MrBroks
      "efterforskningslokale"), IKKE Brokspillets lyse sheet-stil, så den ikke
      et kort øjeblik ligner det forkerte spil. Vises kun ÉN gang pr. nyt spil. */
@@ -567,7 +582,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-09-78';
+const BUILD_TAG = 'build-2026-08-09-79';
 // Skal matche api/_lib/gameFlow.js's CASINOBROK_BET_*-konstanter — kun brugt
 // til visning her (server afgør altid den reelle udbetaling).
 const CASINOBROK_BET_SAFE_POINTS = 1;
@@ -1458,11 +1473,12 @@ function renderInner(){
   // Det mørke "efterforskningslokale" gælder nu HELE MrBrok — både lobby og
   // selve spillet, ikke kun før det starter. Skiftede tilbage til det
   // fælles teal midt i spillet gjorde det svært at se det som "sit eget"
-  // spil (matcher heller ikke rolle-splashens mørke/guld look). Det Store Brokkeri
-  // genbruger bevidst SAMME mørke tema — den deler samme "afsløring under
-  // overfladen"-følelse, og det sparer en hel ny farve-variant for et
-  // splinternyt tredje spil.
-  const isMrbrokTheme = activeApp === 'mrbrok' || activeApp === 'complainer';
+  // spil (matcher heller ikke rolle-splashens mørke/guld look). Det Store
+  // Brokkeri får sin EGEN varme ember-nuance (theme-complainer) i stedet
+  // for at genbruge MrBroks kølige noir — de to spil skal ikke se ud af
+  // samme familie, selvom begge er mørke temaer med en afsløring i sig.
+  const isMrbrokTheme = activeApp === 'mrbrok';
+  const isComplainerTheme = activeApp === 'complainer';
   // Rose-runden skal tydeligt IKKE ligne resten af Brokspillet mens den
   // står på — se CSS-kommentaren ved html.theme-rose. Kun aktiv præcis så
   // længe den aktuelle runde faktisk ER type 'rose', falder automatisk
@@ -1471,6 +1487,7 @@ function renderInner(){
   // Klassen sættes på <html>, ikke <body> — se CSS-kommentaren ved
   // html{background:...} for hvorfor det er html's baggrund der tæller.
   document.documentElement.classList.toggle('theme-mrbrok', isMrbrokTheme);
+  document.documentElement.classList.toggle('theme-complainer', isComplainerTheme);
   document.documentElement.classList.toggle('theme-rose', isRoseTheme);
   // OS-statusbaren (og browserens egen UI-chrome) males IKKE af sidens CSS —
   // den bruger kun den statiske <meta theme-color>-værdi, som ellers stod
@@ -1480,7 +1497,7 @@ function renderInner(){
   // faste farve var mørkere end selve gradientens top. Matcher den nu til
   // den farve der rent faktisk er øverst i den aktive baggrund.
   const themeColorMeta = document.querySelector('meta[name="theme-color"]');
-  if(themeColorMeta) themeColorMeta.setAttribute('content', isMrbrokTheme ? '#0A1416' : (isRoseTheme ? '#3a1530' : '#12666b'));
+  if(themeColorMeta) themeColorMeta.setAttribute('content', isMrbrokTheme ? '#0A1416' : (isComplainerTheme ? '#2A0F08' : (isRoseTheme ? '#3a1530' : '#12666b')));
   if(activeApp === 'spil') return renderGameScreen();
   if(activeApp === 'mrbrok') return renderMrbrokScreen();
   if(activeApp === 'complainer') return renderComplainerScreen();
@@ -4157,9 +4174,9 @@ function openComplainerAdminMenuSheet(){
 function renderComplainerScreen(){
   const c = state.complainer || { active:false };
   app.innerHTML = `
-    <header class="theme-mrbrok">
-      <div class="title" style="font-size:30px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
-        <span>Det Store <span>Brokkeri</span> 🪤</span>
+    <header class="theme-complainer">
+      <div class="title" style="font-size:22px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+        <span>Det Store <span>Brokkeri</span></span>
         <button id="btnAppMenu" title="Menu" style="width:32px; height:32px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; background:rgba(255,247,232,0.08); border:1px solid rgba(255,247,232,0.15); color:rgba(255,247,232,0.85); border-radius:100px; flex:0 0 auto;">☰</button>
       </div>
     </header>
