@@ -161,11 +161,14 @@ function updateStreaksAndDrawLottery(state) {
     state.streaks[m.id] = (anyCount[m.id] || 0) === 0 ? (state.streaks[m.id] || 0) + 1 : 0;
   });
 
-  // gratis brok trækkes ved rent lod blandt alle — ikke som en belønning for
-  // god opførsel, det ville modarbejde hele pointen i at brokke sig mindst
+  // gratis brok trækkes ved rent lod blandt alle RIGTIGE medlemmer — ikke
+  // som en belønning for god opførsel, det ville modarbejde hele pointen i
+  // at brokke sig mindst. Bots er kun til test-spil (se isBot i room.js) og
+  // må aldrig kunne vinde noget i en rigtig brokkekasse.
+  const realMembers = state.members.filter(m => !m.isBot);
   let nextFree = null;
-  if (state.members.length > 1) {
-    nextFree = state.members[Math.floor(Math.random() * state.members.length)].id;
+  if (realMembers.length > 1) {
+    nextFree = realMembers[Math.floor(Math.random() * realMembers.length)].id;
   }
   state.freeBrokMemberId = nextFree;
   state.freeBrokDrawnAt = Date.now();
