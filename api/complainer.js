@@ -54,12 +54,17 @@ module.exports = async (req, res) => {
         const { archetypes, situations } = assignArchetypesAndSituations(playerObjs);
         const guiltyId = players[Math.floor(Math.random() * players.length)];
         const scores = {};
-        players.forEach(id => { scores[id] = 0; });
+        const brokScores = {};
+        players.forEach(id => { scores[id] = 0; brokScores[id] = 0; });
 
         state.complainer = {
           active: true, wager, players, archetypes, situations, totalRounds,
           guiltyId, revealed: false, revealedAt: null,
           round: 0, scores, pendingGamble: null, lastGambleResult: null,
+          // brokScores/brokApprovals: separat "godt brok"-performance-regnskab
+          // (se 'approveBrok'-handleren nedenfor) — ALDRIG blandet med scores
+          // (mistankepoint), kun vist ved siden af ved gameover.
+          brokScores, brokApprovals: {},
           // challengeEnabled/challengeUsedBy: EXPERIMENTAL "Udfordring", se
           // applyComplainerChallenge i complainerFlow.js — ét flag, ét sted.
           challengeEnabled: true, challengeUsedBy: {},
@@ -169,6 +174,29 @@ module.exports = async (req, res) => {
         return;
       }
       // ============================================================
+
+      // "approveBrok" — "🔥 Godt brok!": de andre spillere kan give ÉN
+      // simpel tak/anerkendelse til en medspiller der lige har haft sin tur,
+      // for hvor godt de ramte deres arketypes instruerede stil. Helt
+      // separat point-kanal fra c.scores (mistankepoint) — se
+      // c.brokScores/c.brokApprovals ovenfor i 'start'.
+      if (action === 'approveBrok') {
+        if (!cur || cur.type !== 'complain') throw new ApiError(400, 'kan kun gives under en brok-runde');
+        if (!c.players.includes(actorId)) throw new ApiError(403, 'du er ikke med i dette spil af Det Store Brokkeri');
+        const targetId = req.body && req.body.payload && req.body.payload.targetId;
+        if (!c.players.includes(targetId)) throw new ApiError(400, 'ukendt spiller');
+        if (targetId === actorId) throw new ApiError(403, 'du kan ikke give dig selv ros');
+        const idx = cur.order.indexOf(targetId);
+        if (idx === -1 || idx >= cur.turnIndex) throw new ApiError(400, 'den spiller har ikke haft sin tur endnu i denne runde');
+        const key = cur.round + ':' + targetId;
+        if (!c.brokApprovals) c.brokApprovals = {};
+        if (!c.brokApprovals[key]) c.brokApprovals[key] = {};
+        if (c.brokApprovals[key][actorId]) throw new ApiError(409, 'du har allerede givet ros for det brok');
+        c.brokApprovals[key][actorId] = true;
+        if (!c.brokScores) c.brokScores = {};
+        c.brokScores[targetId] = (c.brokScores[targetId] || 0) + 1;
+        return;
+      }
 
       // "complain" — samme filosofi som Brokspillet/MrBrok: en spiller der
       // selv allerede er færdig kan brokke sig over en langsom medspiller

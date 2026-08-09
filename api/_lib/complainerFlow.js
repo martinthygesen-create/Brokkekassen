@@ -254,6 +254,7 @@ function endComplainerGame(state, guiltyWon) {
     detail: c.current.detail,
     votes: c.current.votes,
     scores: c.scores,
+    brokScores: c.brokScores, // separat "bedste brok"-regnskab, se Godt-brok!-mekanikken i api/complainer.js — ALDRIG sammenblandet med c.scores
     topSuspectHistory: c.topSuspectHistory,
   };
 }

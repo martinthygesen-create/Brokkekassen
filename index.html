@@ -4532,6 +4532,24 @@ function complainerTurnOrderHtml(c, cur){
 // tekstfelt), alle andre ser hvis tur det er og hvilken prompt de svarer på
 // (prompts er ikke hemmelige — alle må gerne følge med i hvad der bliver
 // spurgt om, se redactComplainerFor).
+// "🔥 Godt brok!" — én simpel anerkendelse fra de andre spillere til den der
+// LIGE har haft sin tur (cur.order[cur.turnIndex-1]), for hvor godt de ramte
+// deres arketypes instruerede stil. Helt separat point-kanal fra c.scores
+// (mistankepoint) — se c.brokScores/'approveBrok' i api/complainer.js. Kun
+// ét tryk, ingen formular, for ikke at bremse den verbale rytme.
+function complainerBrokApproveHtml(c, cur){
+  if(!profile || cur.turnIndex < 1) return '';
+  const prevId = cur.order[cur.turnIndex - 1];
+  if(prevId === profile.memberId) return '';
+  const prevMember = state.members.find(mm=>mm.id===prevId);
+  const key = cur.round + ':' + prevId;
+  const already = c.brokApprovals && c.brokApprovals[key] && c.brokApprovals[key][profile.memberId];
+  if(already){
+    return `<p class="hint" style="text-align:center; margin-top:10px; color:rgba(255,201,60,0.7);">🔥 Du gav ros for ${escapeHtml(prevMember?prevMember.name:'?')}s brok</p>`;
+  }
+  return `<button class="game-btn ghost" id="complainerApproveBrokBtn" data-target="${prevId}" style="margin-top:10px;">🔥 Godt brok, ${escapeHtml(prevMember?prevMember.name:'?')}!</button>`;
+}
+
 function complainerComplainHtml(c, cur){
   const speaker = state.members.find(mm=>mm.id===cur.speakerId);
   const isSpeaker = profile && profile.memberId === cur.speakerId;
@@ -4551,6 +4569,7 @@ function complainerComplainHtml(c, cur){
         <p style="font-family:'Baloo 2',sans-serif; font-weight:700; font-size:17px; margin:0 0 16px;">${speakerPrompt ? escapeHtml(speakerPrompt.text) : '...'}</p>
         <button class="game-btn" id="complainerDoneBtn">✅ Færdig, min tur er ovre</button>
       </div>
+      ${complainerBrokApproveHtml(c, cur)}
     `;
   }
   return `
@@ -4565,6 +4584,7 @@ function complainerComplainHtml(c, cur){
       </div>
       ${speakerPrompt ? `<p class="hint" style="text-align:center; margin:-14px 0 0; color:rgba(255,247,232,0.5);">💬 Svarer på: "${escapeHtml(speakerPrompt.text)}"</p>` : ''}
     </div>
+    ${complainerBrokApproveHtml(c, cur)}
     ${complainerComplaintBlockHtml(c, cur)}
   `;
 }
@@ -4726,6 +4746,24 @@ function complainerJudgeHtml(c, cur){
   `;
 }
 
+// Separat "hvem brokkede sig bedst"-regnskab, ALDRIG sammenblandet med
+// mistanke-regnskabet ovenfor — to forskellige spørgsmål besvares hver for
+// sig (hvem blev mest mistænkt vs. hvem performede bedst), se
+// c.brokScores/'approveBrok' i api/complainer.js.
+function complainerBrokScoresHtml(c){
+  const scores = c.brokScores || {};
+  const ranked = state.members.filter(mm=>c.players.includes(mm.id) && (scores[mm.id]||0) > 0).sort((a,b)=>(scores[b.id]||0)-(scores[a.id]||0));
+  if(!ranked.length) return '';
+  const rows = ranked.map((mm,i)=>`
+    <div class="bal-row">
+      <div class="avatar" style="width:34px;height:34px;font-size:12.5px;">${i===0?'🔥':(i+1)}</div>
+      <div class="feed-body"><div class="bal-name">${escapeHtml(mm.name)}</div></div>
+      <div class="bal-amt">${scores[mm.id]||0} × godt brok</div>
+    </div>
+  `).join('');
+  return `<div class="section-label">🔥 Bedste brok-performance</div>${rows}`;
+}
+
 function complainerOverHtml(c, cur){
   const guiltyMember = state.members.find(mm=>mm.id===cur.guiltyId);
   const targetMember = state.members.find(mm=>mm.id===cur.targetId);
@@ -4748,6 +4786,7 @@ function complainerOverHtml(c, cur){
     </div>
     <div class="section-label">🎯 Mistanke-regnskab</div>
     ${scoreRows}
+    ${complainerBrokScoresHtml(c)}
     ${complainerHistoryHtml(c)}
     ${complainerHighscoreHtml()}
     <button class="game-btn" id="complainerPlayAgainBtn" style="margin-top:16px;">🪤 Spil igen</button>
@@ -4847,6 +4886,13 @@ function bindComplainerHandlers(c){
     if(doneBtn) doneBtn.onclick = ()=>{
       lockSubmitBtn(doneBtn, 'Går videre...');
       complainerApi('submit', { payload: {} });
+    };
+  }
+  if(cur.type === 'complain'){
+    const approveBtn = document.getElementById('complainerApproveBrokBtn');
+    if(approveBtn) approveBtn.onclick = ()=>{
+      lockSubmitBtn(approveBtn, 'Sender...');
+      complainerApi('approveBrok', { payload: { targetId: approveBtn.dataset.target } });
     };
   }
   if(cur.type === 'vote'){
