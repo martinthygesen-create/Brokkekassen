@@ -567,7 +567,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-08-76';
+const BUILD_TAG = 'build-2026-08-09-77';
 // Skal matche api/_lib/gameFlow.js's CASINOBROK_BET_*-konstanter — kun brugt
 // til visning her (server afgør altid den reelle udbetaling).
 const CASINOBROK_BET_SAFE_POINTS = 1;
@@ -4136,7 +4136,10 @@ function feedItemHtml(e, old){
 
 function renderFeed(main){
   const pendingCards = (state.pendingList||[]).slice().sort((a,b)=>a.openedAt-b.openedAt).map(renderPendingCard).join('');
-  const winner = state.freeBrokMemberId ? state.members.find(m=>m.id===state.freeBrokMemberId) : null;
+  // Ekstra sikkerhedsnet: en bot skal ALDRIG vises som vinder her, uanset
+  // hvad der ligger i freeBrokMemberId (fx fra før bot-filtreringen i
+  // redrawFreeBrok/updateStreaksAndDrawLottery blev rettet, se store.js).
+  const winner = state.freeBrokMemberId ? state.members.find(m=>m.id===state.freeBrokMemberId && !m.isBot) : null;
   const winnerBanner = winner ? `<div class="feed-item" style="border-style:dashed; border-color:rgba(255,201,60,0.5); background:rgba(255,201,60,0.1); align-items:center;">
     <div class="avatar" style="background:linear-gradient(160deg,#ffc93c,#e8a317); color:var(--ink);">🍀</div>
     <div class="feed-body"><div class="feed-name">${escapeHtml(winner.name)} har vundet 1 gratis brok i dag</div><div class="feed-msg">Ét brok i dag er på husets regning</div></div>
@@ -4619,6 +4622,8 @@ function openAdminMenuSheet(){
     <div class="divider">test &amp; mindre ændringer</div>
     ${state.events.length ? `<button class="sheet-btn test" id="adminRemoveEventBtn">🫤 Markér mistænkt snyd</button>` : ''}
     <button class="sheet-btn test" id="adminTestDrawBtn">🎰 Test spillemaskinen</button>
+    <button class="sheet-btn test" id="adminRedrawFreeBrokBtn">🎲 Træk gratis brok om</button>
+    <p class="hint" style="${hintStyle}">Trækker dagens gratis brok om blandt de rigtige medlemmer — rører ikke streaks.</p>
     ${state.history.length ? `<button class="sheet-btn test" id="adminUndoBtn">↩️ Fortryd seneste opgørelse</button>` : ''}
     <button class="sheet-btn test" id="adminBackdateBtn">⏪ Ryk dagstæller én dag tilbage</button>
 
@@ -4643,6 +4648,15 @@ function openAdminMenuSheet(){
       const previewWinner = state.members[Math.floor(Math.random()*state.members.length)];
       closeSheet();
       setTimeout(()=>playFreeBrokDraw(previewWinner.id, true), 230);
+    };
+    document.getElementById('adminRedrawFreeBrokBtn').onclick = async ()=>{
+      try{
+        const r = await api('admin', { action: 'redrawFreeBrok', roomId, actorId: profile.memberId });
+        state = r.state;
+        closeSheet();
+        const winner = state.freeBrokMemberId ? state.members.find(m=>m.id===state.freeBrokMemberId) : null;
+        toast(winner ? `🎲 ${winner.name} har nu dagens gratis brok!` : '🎲 Trukket om');
+      }catch(e){ toast(e.message); }
     };
     const undoBtn = document.getElementById('adminUndoBtn');
     if(undoBtn) undoBtn.onclick = ()=>{ closeSheet(); setTimeout(openUndoArchiveSheet, 230); };

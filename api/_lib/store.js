@@ -175,6 +175,21 @@ function updateStreaksAndDrawLottery(state) {
   state.dayBoundary = Date.now();
 }
 
+// Admin-genvej til at trække dagens gratis brok om, UDEN at røre streaks
+// eller dayBoundary (i modsætning til updateStreaksAndDrawLottery ovenfor,
+// som kun skal køre ved en reel dags-skift/opgørelse). Bruges til at rette
+// en allerede-trukket vinder (fx en bot der blev trukket før bot-filtreret
+// blev rettet) uden at det tæller som en ny dag.
+function redrawFreeBrok(state) {
+  const realMembers = state.members.filter(m => !m.isBot);
+  let nextFree = null;
+  if (realMembers.length > 1) {
+    nextFree = realMembers[Math.floor(Math.random() * realMembers.length)].id;
+  }
+  state.freeBrokMemberId = nextFree;
+  state.freeBrokDrawnAt = Date.now();
+}
+
 // Ny dag starter automatisk kl. 04 lokal tid: streaks og lodtrækning
 // opdateres, men puljen (events) er urørt — den tømmes kun ved en bevidst
 // "Gør op". Så det ikke kræver at nogen husker noget manuelt hver dag.
@@ -392,4 +407,4 @@ function redactStateFor(state, viewerId) {
   return { ...state, mrbrok: safe };
 }
 
-module.exports = { getState, setState, mutateState, ApiError, deleteRoom, createRoom, genRoomId, uid, emptyState, neededVotes, healPendingVotes, isAdmin, settleRound, updateStreaksAndDrawLottery, processPendingExpiry, checkSilenceNudge, checkPoolMilestone, redactStateFor };
+module.exports = { getState, setState, mutateState, ApiError, deleteRoom, createRoom, genRoomId, uid, emptyState, neededVotes, healPendingVotes, isAdmin, settleRound, updateStreaksAndDrawLottery, redrawFreeBrok, processPendingExpiry, checkSilenceNudge, checkPoolMilestone, redactStateFor };

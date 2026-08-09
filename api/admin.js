@@ -1,4 +1,4 @@
-const { getState, setState, deleteRoom, emptyState, isAdmin, settleRound, redactStateFor } = require('./_lib/store');
+const { getState, setState, deleteRoom, emptyState, isAdmin, settleRound, redrawFreeBrok, redactStateFor } = require('./_lib/store');
 const { pushToMembers } = require('./_lib/push');
 
 // Samler admin-handlingerne (gør op, luk, nulstil, besked, mål) i én
@@ -36,6 +36,17 @@ module.exports = async (req, res) => {
       const last = state.history.pop();
       state.events = [...last.events, ...state.events];
       state.createdAt = last.startedAt;
+      await setState(roomId, state);
+      return res.status(200).json({ state: redactStateFor(state, actorId) });
+    }
+
+    if (action === 'redrawFreeBrok') {
+      // Trækker dagens gratis brok om blandt kun de rigtige medlemmer —
+      // rører hverken streaks eller dayBoundary (se redrawFreeBrok i
+      // store.js). Tænkt som en engangsrettelse hvis en tidligere trækning
+      // (fx før bot-filtreringen blev rettet) ramte en test-bot.
+      if (!isAdmin(state, actorId)) return res.status(403).json({ error: 'kun den der oprettede brokkekassen kan gøre dette' });
+      redrawFreeBrok(state);
       await setState(roomId, state);
       return res.status(200).json({ state: redactStateFor(state, actorId) });
     }
