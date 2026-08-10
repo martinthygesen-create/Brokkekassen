@@ -600,7 +600,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-09-88';
+const BUILD_TAG = 'build-2026-08-09-89';
 // Skal matche api/_lib/gameFlow.js's CASINOBROK_BET_*-konstanter — kun brugt
 // til visning her (server afgør altid den reelle udbetaling).
 const CASINOBROK_BET_SAFE_POINTS = 1;
@@ -5355,7 +5355,7 @@ function renderAllTimeHistory(main){
     const lines = Object.entries(r.totals).filter(([id])=>{
       const m = state.members.find(x=>x.id===id);
       return !m || !m.isBot;
-    }).map(([id,amt])=>{
+    }).sort((a,b)=>b[1]-a[1]).map(([id,amt])=>{
       const m = state.members.find(x=>x.id===id);
       return `<div class="hr-line"><span>${escapeHtml(m?m.name:'?')}</span><span>${amt}€</span></div>`;
     }).join('');
@@ -5862,7 +5862,7 @@ function openBroadcastSheet(){
 function openSettleSheet(){
   if(!state.events.length){ toast('Puljen er tom — intet at gøre op endnu 🙂'); return; }
   const bal = balances();
-  const rows = state.members.filter(m=>!m.isBot).map(m=>`<div class="hr-line"><span>${escapeHtml(m.name)}</span><span>${bal[m.id]||0}€</span></div>`).join('');
+  const rows = state.members.filter(m=>!m.isBot).sort((a,b)=>(bal[b.id]||0)-(bal[a.id]||0)).map(m=>`<div class="hr-line"><span>${escapeHtml(m.name)}</span><span>${bal[m.id]||0}€</span></div>`).join('');
   openSheet(`
     <h2>Gør op 💶</h2>
     <p class="hint">Total i puljen: <b>${totalPool()}€</b>. Dette arkiverer hele puljen i historikken og starter helt forfra. Streaks og gratis brok opdateres som normalt.</p>
