@@ -174,6 +174,21 @@
   .complainer-splash li b{ color:rgba(255,247,232,0.98); font-weight:800; }
   .complainer-splash li span:first-child{ flex:0 0 auto; font-size:22px; line-height:1.2; }
   .complainer-splash li span:last-child{ flex:1 1 auto; min-width:0; }
+  /* Samme struktur igen, men rummets EGEN farvevej (sea/coin) — vises kun én
+     gang, lige efter rummet er oprettet, for at forklare hvor mange "ting"
+     der bor i samme rum og hvordan man skifter mellem dem (☰-menuen). Se
+     showRoomIntroSplash. */
+  .room-splash-backdrop{ position:fixed; inset:0; background:var(--sea-deep); z-index:92; display:flex; align-items:stretch; justify-content:center; opacity:0; pointer-events:none; transition:opacity .25s ease; }
+  .room-splash-backdrop.show{ opacity:1; pointer-events:auto; }
+  .room-splash{ background:linear-gradient(160deg, var(--sea), var(--sea-deep)); width:100%; max-width:520px; height:100%; overflow-y:auto; padding:calc(32px + env(safe-area-inset-top)) 26px calc(28px + env(safe-area-inset-bottom)); box-shadow:0 0 60px rgba(255,201,60,.1) inset; text-align:center; display:flex; flex-direction:column; justify-content:center; transform:translateY(10px) scale(.98); transition:transform .25s cubic-bezier(.2,.9,.3,1.2); }
+  .room-splash-backdrop.show .room-splash{ transform:translateY(0) scale(1); }
+  .room-splash h3{ font-family:'Baloo 2',sans-serif; font-weight:800; font-size:28px; line-height:1.25; color:var(--coin); margin:8px 0 20px; }
+  .room-splash p{ font-size:16px; line-height:1.5; color:rgba(255,247,232,0.85); font-weight:600; margin:0 0 22px; }
+  .room-splash ul{ text-align:left; margin:0 0 22px; padding:0; list-style:none; }
+  .room-splash li{ display:flex; gap:14px; align-items:flex-start; margin-bottom:14px; font-size:14.5px; line-height:1.4; font-weight:600; color:rgba(255,247,232,0.65); }
+  .room-splash li b{ color:rgba(255,247,232,0.98); font-weight:800; }
+  .room-splash li span:first-child{ flex:0 0 auto; font-size:22px; line-height:1.2; }
+  .room-splash li span:last-child{ flex:1 1 auto; min-width:0; }
   /* Skal kunne skimmes — den vigtigste handling pr. linje er fremhævet med
      <b>, resten er kun understøttende kontekst. Rammer kun ren-tekst <b>
      uden egen inline-farve, så alle de andre stedspecifikke <b style="...">
@@ -600,7 +615,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-09-89';
+const BUILD_TAG = 'build-2026-08-09-90';
 // Skal matche api/_lib/gameFlow.js's CASINOBROK_BET_*-konstanter — kun brugt
 // til visning her (server afgør altid den reelle udbetaling).
 const CASINOBROK_BET_SAFE_POINTS = 1;
@@ -1230,6 +1245,7 @@ function renderWhoAmI(justCreated){
       else if(state.kasseEnabled) activeApp = 'kasse';
       render();
       startPolling();
+      if(justCreated) setTimeout(showRoomIntroSplash, 300);
     }catch(e){ toast('Kunne ikke fortsætte: ' + e.message); document.getElementById('joinBtn').textContent = 'Fortsæt'; }
   };
   document.getElementById('joinBtn').onclick = go;
@@ -1240,6 +1256,46 @@ function renderWhoAmI(justCreated){
       navigator.clipboard.writeText(roomId).then(()=>toast('Kode kopieret! 🔢')).catch(()=>prompt('Kopiér koden manuelt:', roomId));
     };
   }
+}
+
+// Vises PRÆCIS én gang pr. rum, lige efter rummets opretter selv er kommet
+// ind første gang (se justCreated i go()-handleren ovenfor) — forklarer kort
+// hvor mange ting der reelt bor i samme rum, og at man skifter mellem dem
+// via ☰-menuen, så det ikke skal opdages ved et tilfælde. Samme
+// splash-mønster som mrbrok/complainer's egne (se .room-splash-backdrop),
+// bare i rummets neutrale sea/coin-farvevej i stedet for et enkelt spils tema.
+function showRoomIntroSplash(){
+  if(!roomId) return;
+  const seenKey = 'bk_seen_room_intro_' + roomId;
+  if(localStorage.getItem(seenKey)) return;
+  localStorage.setItem(seenKey, '1');
+
+  const items = [];
+  if(state.kasseEnabled) items.push(['🫙','Brokkekassen','Fælles regnskab — brok dig, og det koster en krone i puljen']);
+  if(state.gameEnabled) items.push(['👉','Brokspillet','Hurtige quiz- og afstemningsrunder I spiller sammen']);
+  if(state.mrbrokEnabled) items.push(['🕵️','MrBrok','Find den skjulte MrBrok, før de andre bliver afsløret']);
+  if(state.complainerEnabled) items.push(['🪤','Det Store Brokkeri','Brok dig i karakter — men ingen ved endnu hvem der er skyldig']);
+  if(items.length < 2) return; // ingen grund til at forklare "skift mellem" hvis der kun er én ting valgt
+
+  const backdropHtml = `<div class="room-splash-backdrop" id="roomSplashBackdrop"><div class="room-splash" id="roomSplashInner"></div></div>`;
+  document.body.insertAdjacentHTML('beforeend', backdropHtml);
+  const backdrop = document.getElementById('roomSplashBackdrop');
+  const inner = document.getElementById('roomSplashInner');
+  requestAnimationFrame(()=>backdrop.classList.add('show'));
+  const close = ()=>{ backdrop.classList.remove('show'); setTimeout(()=>backdrop.remove(), 250); };
+  backdrop.addEventListener('click', e=>{ if(e.target === backdrop) close(); });
+
+  inner.innerHTML = `
+    <div style="font-size:52px;">🎉</div>
+    <h3>Jeres rum er klar!</h3>
+    <p>I har ${items.length} ting samlet i ét og samme rum:</p>
+    <ul>
+      ${items.map(([icon,name,desc])=>`<li><span>${icon}</span><span><b>${name}</b> — ${desc}</span></li>`).join('')}
+    </ul>
+    <p style="margin-bottom:14px;">Skift mellem dem når som helst via <b>☰</b>-menuen øverst til højre.</p>
+    <button class="sheet-btn primary" id="roomSplashCloseBtn" style="margin-top:0;">Forstået, lad os gå i gang!</button>
+  `;
+  document.getElementById('roomSplashCloseBtn').onclick = close;
 }
 
 /* ============ MAIN RENDER ============ */
