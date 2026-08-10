@@ -600,7 +600,7 @@
 // en given enhed rent faktisk har hentet den nyeste deployment eller
 // stadig viser en cachet version — nyttigt til at fejlsøge PWA/service-
 // worker-opdateringsproblemer uden browser-devtools.
-const BUILD_TAG = 'build-2026-08-09-87';
+const BUILD_TAG = 'build-2026-08-09-88';
 // Skal matche api/_lib/gameFlow.js's CASINOBROK_BET_*-konstanter — kun brugt
 // til visning her (server afgør altid den reelle udbetaling).
 const CASINOBROK_BET_SAFE_POINTS = 1;
@@ -5350,7 +5350,12 @@ function renderAllTimeHistory(main){
     return;
   }
   const days = `<div class="section-label" style="margin-top:${anyTotal?22:0}px;">🗓️ Dag for dag</div>` + [...state.history].reverse().map(r=>{
-    const lines = Object.entries(r.totals).map(([id,amt])=>{
+    // Filtreret her (ikke kun ved kilden i settleRound) så allerede
+    // arkiverede runder fra FØR dette fix også vises korrekt.
+    const lines = Object.entries(r.totals).filter(([id])=>{
+      const m = state.members.find(x=>x.id===id);
+      return !m || !m.isBot;
+    }).map(([id,amt])=>{
       const m = state.members.find(x=>x.id===id);
       return `<div class="hr-line"><span>${escapeHtml(m?m.name:'?')}</span><span>${amt}€</span></div>`;
     }).join('');

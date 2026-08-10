@@ -218,7 +218,9 @@ function settleRound(state) {
   updateStreaksAndDrawLottery(state);
 
   const totals = {};
-  state.members.forEach(m => (totals[m.id] = 0));
+  // Bots må aldrig blive stående i den arkiverede historik — de er kun til
+  // test-spil, se isBot i room.js.
+  state.members.filter(m => !m.isBot).forEach(m => (totals[m.id] = 0));
   state.events.forEach(e => { if (!e.free && !e.voided && totals[e.memberId] !== undefined) totals[e.memberId]++; });
 
   state.history.push({
