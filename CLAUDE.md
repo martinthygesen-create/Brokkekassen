@@ -51,6 +51,35 @@ Koncept-noter (arketyper, opbygningsrunder, mistankeafstemning, organisk
 afsløring, gættefinale) er ikke skrevet ned et fast sted endnu — spørg
 Martin om det fulde koncept-notat før implementering påbegyndes.
 
+## Langsigtet retning: "…Kassen" — generisk rundemotor
+
+Brokkekassen skal på sigt udvikle sig til en mere generisk platform
+("…Kassen"), hvor den nuværende runde-motor genbruges på tværs af flere
+spiltyper — ikke kun de spil der findes i dag. Dette er IKKE noget der skal
+bygges nu, men det er vigtig kontekst: hold genbrugbarhed for øje i alt nyt
+arbejde, og undgå at hardcode ting specifikt til ét spil, når det med lidt
+omtanke kan holdes generisk.
+
+De genbrugelige runde-elementer, der allerede findes i koden:
+
+- `roomId` — isolerer én gruppe/session, deles via link (ingen kode/login)
+- `members[]` — navngivne deltagere, identificeres på tværs af enheder
+- `pending` — ét "aktivt øjeblik" ad gangen (i dag: en påstand der afventer
+  stemmer); kan genbruges til aktivt spørgsmål, aktivt hjul-spin, aktiv
+  trækning
+- `votes[]` + `need` — tærskel-baseret bekræftelse (2/3 osv.); kan genbruges
+  til peer-godkendelse ELLER erstattes af vært-godkendelse (facit-mode)
+- `events[]` — løbende feed af bekræftede hændelser i runden; kan genbruges
+  til spørgsmål/svar-historik, hjul-resultater
+- `createdAt` — runde-start, bruges til "dag X"
+- `history[]` — arkiv af lukkede runder m. totals pr. medlem; kan genbruges
+  til quiz-score over flere dage, wheel-gevinster over tid
+- `settle()` — lukker runde, nulstiller, arkiverer; kan genbruges uændret
+  til enhver rundetype
+
+Mangler stadig (ikke bygget endnu): roller (admin/host), spørgsmålskø,
+randomizer-komponent, facit-godkendelse, hold-struktur.
+
 ## Én branch, ingen preview
 
 Der køres bevidst med ÉN branch (`claude/brokkekassen-famille-setup-ixh41o`)
