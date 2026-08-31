@@ -107,3 +107,53 @@ Martin vil prøve drikkekassen som en skin. Det er det rigtige første
 eksperiment: billigt, håndgribeligt, og tester direkte om "de andre kasser"
 faktisk er sjove, uden at kræve nogen af de to store, uprøvede satsninger
 (generativ arkitektur eller fuld generalisering) først.
+
+## Genbrugelige runde-elementer i koden i dag
+
+Konkret optælling af hvilke felter/funktioner i den nuværende runde-motor
+der allerede er generiske nok til at bære flere kasse-typer:
+
+- `roomId` — isolerer én gruppe/session, deles via link (ingen kode/login)
+- `members[]` — navngivne deltagere, identificeres på tværs af enheder
+- `pending` — ét "aktivt øjeblik" ad gangen (i dag: en påstand der afventer
+  stemmer); kan genbruges til aktivt spørgsmål, aktivt hjul-spin, aktiv
+  trækning
+- `votes[]` + `need` — tærskel-baseret bekræftelse (2/3 osv.); kan genbruges
+  til peer-godkendelse ELLER erstattes af vært-godkendelse (facit-mode)
+- `events[]` — løbende feed af bekræftede hændelser i runden; kan genbruges
+  til spørgsmål/svar-historik, hjul-resultater
+- `createdAt` — runde-start, bruges til "dag X"
+- `history[]` — arkiv af lukkede runder m. totals pr. medlem; kan genbruges
+  til quiz-score over flere dage, wheel-gevinster over tid
+- `settle()` — lukker runde, nulstiller, arkiverer; kan genbruges uændret
+  til enhver rundetype
+
+Mangler stadig (ikke bygget endnu): roller (admin/host), spørgsmålskø,
+randomizer-komponent som selvstændig genbrugelig del, facit-godkendelse,
+hold-struktur.
+
+## Yderligere bekræftede fremtidige "skins" på samme motor
+
+Ud over drikkekassen (ovenfor) er følgende også drøftet:
+
+- **Bødekassen / Løgnerkassen / Hjælperkassen / Roskassen** — 100% samme
+  motor, kun tekst/enhed/farve skifter.
+- **Løftekassen** (løfte + opfølgning senere) — kræver et tid/deadline-
+  begreb, findes ikke i dag.
+- **Dilemmakassen** (afstemning om en ting, ikke en person) — kræver
+  "mål = ting" i stedet for "mål = person".
+- **Konkurrencekassen** (løbende leaderboard/ranking) — kræver sortering/
+  ranking-visning + evt. "runde i runden" (daglig vinder).
+- **Skænderikassen** (to konkurrerende versioner af samme hændelse) —
+  kræver flere samtidige påstande om samme hændelse, ikke kun én.
+- **Quiz/trivia mellem hjælpere/ansatte/teams** — kræver roller (admin/
+  host/medhost), facit-godkendelse (vært alene, ikke gruppe-stemning),
+  spørgsmålskø, hold-struktur, evt. kobling til en ekstern AI-trivia-motor.
+- **Randomizer-runder** (hjul/lodtrækning) — hjul- og spillemaskine-
+  visningen findes allerede (Casinobrok i Brokspillet, se
+  `buildWheelChanceHtml`/`buildSlotCabinetHtml` i `index.html`); det der
+  mangler er at gøre den til en selvstændig, genbrugelig komponent løsrevet
+  fra Brokspillets egen rundetype — IKKE en helt ny komponent.
+
+Fælles kerne der IKKE ændres på tværs af nogen af disse:
+`members[]`, `pending`, `votes[]`+`need`, `events[]`, `history[]`, `settle()`.
