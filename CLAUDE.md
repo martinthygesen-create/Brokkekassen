@@ -95,8 +95,11 @@ randomizer-komponent, facit-godkendelse, hold-struktur.
 - **Quiz/trivia mellem hjælpere/ansatte/teams** — kræver roller (admin/
   host/medhost), facit-godkendelse (vært alene, ikke gruppe-stemning),
   spørgsmålskø, hold-struktur, evt. kobling til en ekstern AI-trivia-motor.
-- **Randomizer-runder** (hjul/lodtrækning/casino) — helt ny komponent,
-  findes slet ikke i dag.
+- **Randomizer-runder** (hjul/lodtrækning) — hjul- og spillemaskine-
+  visningen findes allerede (Casinobrok i Brokspillet, se
+  `buildWheelChanceHtml`/`buildSlotCabinetHtml` i `index.html`); det der
+  mangler er at gøre den til en selvstændig, genbrugelig komponent løsrevet
+  fra Brokspillets egen rundetype.
 
 Fælles kerne der IKKE ændres på tværs af nogen af disse:
 `members[]`, `pending`, `votes[]`+`need`, `events[]`, `history[]`, `settle()`.
