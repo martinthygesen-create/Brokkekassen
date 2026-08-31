@@ -80,6 +80,27 @@ De genbrugelige runde-elementer, der allerede findes i koden:
 Mangler stadig (ikke bygget endnu): roller (admin/host), spørgsmålskø,
 randomizer-komponent, facit-godkendelse, hold-struktur.
 
+### Bekræftede fremtidige "skins" på samme motor
+
+- **Bødekassen / Løgnerkassen / Hjælperkassen / Roskassen** — 100% samme
+  motor, kun tekst/enhed/farve skifter.
+- **Løftekassen** (løfte + opfølgning senere) — kræver et tid/deadline-
+  begreb, findes ikke i dag.
+- **Dilemmakassen** (afstemning om en ting, ikke en person) — kræver
+  "mål = ting" i stedet for "mål = person".
+- **Konkurrencekassen** (løbende leaderboard/ranking) — kræver sortering/
+  ranking-visning + evt. "runde i runden" (daglig vinder).
+- **Skænderikassen** (to konkurrerende versioner af samme hændelse) —
+  kræver flere samtidige påstande om samme hændelse, ikke kun én.
+- **Quiz/trivia mellem hjælpere/ansatte/teams** — kræver roller (admin/
+  host/medhost), facit-godkendelse (vært alene, ikke gruppe-stemning),
+  spørgsmålskø, hold-struktur, evt. kobling til en ekstern AI-trivia-motor.
+- **Randomizer-runder** (hjul/lodtrækning/casino) — helt ny komponent,
+  findes slet ikke i dag.
+
+Fælles kerne der IKKE ændres på tværs af nogen af disse:
+`members[]`, `pending`, `votes[]`+`need`, `events[]`, `history[]`, `settle()`.
+
 ## Én branch, ingen preview
 
 Der køres bevidst med ÉN branch (`claude/brokkekassen-famille-setup-ixh41o`)
