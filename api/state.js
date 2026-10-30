@@ -3,6 +3,7 @@ const { expireGamePhaseIfDue, BROKSPILLET_AUTO_MS, COMPLAINT_COUNTDOWN_MS } = re
 const { expireMrbrokPhaseIfDue } = require('./_lib/mrbrokFlow');
 const { expireComplainerPhaseIfDue } = require('./_lib/complainerFlow');
 const { pushToMembers } = require('./_lib/push');
+const { redis } = require('./_lib/redis');
 
 // Billig, ikke-muterende forhåndstjek: er der overhovedet en chance for at
 // spilfasen skal tvinges videre pga. tid? Bruges til at undgå en CAS-runde
@@ -56,6 +57,26 @@ const SILENCE_LINES = [
 ];
 
 module.exports = async (req, res) => {
+  // Keepalive-cron (se vercel.json) — genbruger dette GET-polling-endpoint i
+  // stedet for en ny fil under api/, da Vercel Hobby har et loft på 12
+  // serverless-funktioner og vi allerede er tæt på det. Et ugentligt skriv
+  // til Redis holder Upstash-databasen "aktiv" nok til at undgå dens
+  // inaktivitets-advarselsmails — ingen relation til nogen brokkekasses
+  // faktiske state, derfor tjekket FØR roomId overhovedet læses/valideres.
+  if (req.query.keepalive !== undefined) {
+    const secret = process.env.CRON_SECRET;
+    if (secret && req.headers.authorization !== `Bearer ${secret}`) {
+      return res.status(401).json({ error: 'unauthorized' });
+    }
+    try {
+      const at = Date.now();
+      await redis().set('brokkekassen:keepalive', at);
+      return res.status(200).json({ ok: true, at });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   const roomId = (req.query.room || '').toString().trim();
   const memberId = (req.query.member || '').toString().trim();
   if (!roomId) return res.status(400).json({ error: 'mangler room' });

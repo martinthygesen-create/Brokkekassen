@@ -18,5 +18,8 @@
         { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
       ]
     }
+  ],
+  "crons": [
+    { "path": "/api/state?keepalive=1", "schedule": "0 6 * * 1" }
   ]
 }
